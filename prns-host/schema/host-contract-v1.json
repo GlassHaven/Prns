@@ -255,7 +255,8 @@
         { "name": "AutomaticBluetoothLe", "value": 16 },
         { "name": "WebSocketClient", "value": 17 },
         { "name": "WebSocketServer", "value": 18 },
-        { "name": "BrowserRendezvous", "value": 19 }
+        { "name": "BrowserRendezvous", "value": 19 },
+        { "name": "SuppliedStream", "value": 20 }
       ]
     },
     {

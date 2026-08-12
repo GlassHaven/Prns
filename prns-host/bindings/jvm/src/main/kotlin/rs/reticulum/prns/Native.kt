@@ -22,6 +22,10 @@ internal fun interface NativeReadinessCallback : Callback {
     fun invoke(context: Pointer?)
 }
 
+internal fun interface NativeSuppliedStreamOpenCallback : Callback {
+    fun invoke(context: Pointer?): Long
+}
+
 @Structure.FieldOrder("data", "length")
 internal open class NativeByteView : Structure() {
     @JvmField
@@ -309,6 +313,16 @@ internal interface PrnsNative : Library {
     fun prns_host_attach_tcp_client(
         host: Pointer,
         target: NativeStringView.ByValue,
+        bitrateKind: Int,
+        bitrateBps: Long,
+        command: PointerByReference,
+    ): Int
+    fun prns_host_attach_supplied_stream(
+        host: Pointer,
+        open: NativeSuppliedStreamOpenCallback,
+        context: Pointer?,
+        name: NativeStringView.ByValue,
+        respawnDelayMillis: Long,
         bitrateKind: Int,
         bitrateBps: Long,
         command: PointerByReference,

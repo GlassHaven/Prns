@@ -78,6 +78,7 @@ end
     InterfaceKindWebSocketClient = 17
     InterfaceKindWebSocketServer = 18
     InterfaceKindBrowserRendezvous = 19
+    InterfaceKindSuppliedStream = 20
 end
 
 @enum InterfaceMode::UInt32 begin

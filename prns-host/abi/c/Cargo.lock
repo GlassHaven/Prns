@@ -1730,6 +1730,7 @@ dependencies = [
 name = "prns-host-c"
 version = "0.3.6"
 dependencies = [
+ "libc",
  "prns-host",
  "prns-host-native",
 ]

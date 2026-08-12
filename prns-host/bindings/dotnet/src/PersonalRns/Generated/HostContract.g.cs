@@ -91,6 +91,7 @@ public enum InterfaceKind : uint
     WebSocketClient = 17,
     WebSocketServer = 18,
     BrowserRendezvous = 19,
+    SuppliedStream = 20,
 }
 
 public enum InterfaceMode : uint

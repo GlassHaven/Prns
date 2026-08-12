@@ -68,6 +68,11 @@ use prns_host::{
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::{mpsc, oneshot, watch};
 
+#[cfg(unix)]
+mod supplied_stream;
+#[cfg(unix)]
+pub use supplied_stream::{SuppliedStreamAttach, SuppliedStreamDeclined, SuppliedStreamOpen};
+
 const START_TIMEOUT: Duration = Duration::from_secs(5);
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const AUTO_BITRATE_BPS: u64 = 65_000_000;
@@ -231,8 +236,14 @@ impl CommandHandle {
     }
 }
 
+enum NativeCommand {
+    Contract(HostCommand),
+    #[cfg(unix)]
+    AttachSuppliedStream(SuppliedStreamAttach),
+}
+
 struct CommandJob {
-    command: HostCommand,
+    command: NativeCommand,
     completion: Arc<CommandCompletion>,
 }
 
@@ -379,6 +390,27 @@ impl NativeHost {
     pub fn submit_with_readiness(
         &self,
         command: HostCommand,
+        readiness: Option<CommandReadiness>,
+    ) -> Result<CommandHandle, NativeSubmitError> {
+        self.submit_native(NativeCommand::Contract(command), readiness)
+    }
+
+    /// Attaches an interface whose transport the application supplies as a
+    /// connected descriptor, outside the contract's `HostCommand` union: the
+    /// opener cannot round-trip through configuration data, so it rides its
+    /// own submission path.
+    #[cfg(unix)]
+    pub fn submit_supplied_stream_attach(
+        &self,
+        attach: SuppliedStreamAttach,
+        readiness: Option<CommandReadiness>,
+    ) -> Result<CommandHandle, NativeSubmitError> {
+        self.submit_native(NativeCommand::AttachSuppliedStream(attach), readiness)
+    }
+
+    fn submit_native(
+        &self,
+        command: NativeCommand,
         readiness: Option<CommandReadiness>,
     ) -> Result<CommandHandle, NativeSubmitError> {
         if self.stopped.load(Ordering::Acquire) {
@@ -681,6 +713,8 @@ pub fn native_interface_kinds() -> &'static [InterfaceKind] {
         InterfaceKind::AutomaticBluetoothLe,
         InterfaceKind::WebSocketClient,
         InterfaceKind::WebSocketServer,
+        #[cfg(unix)]
+        InterfaceKind::SuppliedStream,
     ]
 }
 
@@ -1226,8 +1260,15 @@ async fn command_loop(handle: PrnsNodeHandle, inputs: CommandLoopInputs) {
         };
         match work {
             HostWork::Command(job) => {
-                let result =
-                    execute_command(&handle, &plan_context, &mut attachments, &job.command).await;
+                let result = match &job.command {
+                    NativeCommand::Contract(command) => {
+                        execute_command(&handle, &plan_context, &mut attachments, command).await
+                    }
+                    #[cfg(unix)]
+                    NativeCommand::AttachSuppliedStream(attach) => {
+                        attach_supplied_stream(&handle, &mut attachments, attach)
+                    }
+                };
                 job.completion.finish(result);
             }
             HostWork::Snapshot(job) => {
@@ -2024,6 +2065,35 @@ async fn attach_typed_interface(
         interfaces,
         kind: config.kind(),
     })
+}
+
+#[cfg(unix)]
+fn attach_supplied_stream(
+    handle: &PrnsNodeHandle,
+    attachments: &mut BTreeMap<InterfaceId, Attachment>,
+    attach: &SuppliedStreamAttach,
+) -> Result<CommandOutcome, CommandFailure> {
+    if attach.name.is_empty() {
+        return Err(CommandFailure::InvalidConfiguration {
+            detail: "a supplied stream needs a non-empty name".to_string(),
+        });
+    }
+    let stream = supplied_stream::supplied_stream_interface(attach, engine_bitrate(attach.bitrate)?);
+    let interface = host_interface(stream.id());
+    if attachments.contains_key(&interface) {
+        return Err(CommandFailure::InvalidConfiguration {
+            detail: format!("a supplied stream named {:?} is already attached", attach.name),
+        });
+    }
+    let attached = handle.add_interface(stream);
+    attachments.insert(
+        interface,
+        Attachment::Interface {
+            attachment: attached,
+            kind: InterfaceKind::SuppliedStream,
+        },
+    );
+    Ok(CommandOutcome::InterfaceAttached { interface })
 }
 
 async fn execute_command(
@@ -3072,7 +3142,10 @@ mod tests {
             assert!(backend.supports_interface(*kind));
         }
         assert!(!backend.supports_interface(InterfaceKind::BrowserRendezvous));
-        assert_eq!(native_interface_kinds().len(), 18);
+        assert_eq!(
+            native_interface_kinds().len(),
+            if cfg!(unix) { 19 } else { 18 }
+        );
     }
 
     #[test]
@@ -3359,6 +3432,161 @@ mod tests {
             return Err("reserved channel type did not settle as invalid".to_string());
         }
         host.stop();
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn single_destination_config(label: &str) -> Result<HostConfig, String> {
+        Ok(HostConfig {
+            destinations: vec![DestinationConfig::Single(
+                prns_host::SingleDestinationConfig {
+                    name: DestinationName::try_new("suppliedstream", vec![label.to_string()])
+                        .map_err(|error| format!("{error:?}"))?,
+                    identity: DestinationIdentityConfig::HostIdentity,
+                    announce_app_data: Vec::new(),
+                    maximum_request_bytes: None,
+                    proof: DestinationProofStrategy::ProveAll,
+                    link_requests: DestinationLinkRequestPolicy::AcceptAll,
+                    ratchet: DestinationRatchetPolicy::NoRatchets,
+                    resource_strategy: ResourceStrategy::Refuse,
+                    request_handlers: Vec::new(),
+                },
+            )],
+            ..config()
+        })
+    }
+
+    #[cfg(unix)]
+    fn attach_supplied_wire(
+        host: &NativeHost,
+        name: &str,
+        wire: std::os::unix::net::UnixStream,
+    ) -> Result<InterfaceId, String> {
+        wire.set_nonblocking(true)
+            .map_err(|error| error.to_string())?;
+        let wire = Mutex::new(Some(wire));
+        let command = host
+            .submit_supplied_stream_attach(
+                SuppliedStreamAttach {
+                    name: name.to_string(),
+                    open: Arc::new(move || {
+                        lock(&wire)
+                            .take()
+                            .map(std::os::fd::OwnedFd::from)
+                            .ok_or(SuppliedStreamDeclined { code: -1 })
+                    }),
+                    respawn_delay: Duration::from_millis(50),
+                    bitrate: Bitrate::Auto,
+                },
+                None,
+            )
+            .map_err(|error| format!("{error:?}"))?;
+        match command.wait(Some(Duration::from_secs(2))) {
+            CommandWait::Completed(Ok(CommandOutcome::InterfaceAttached { interface })) => {
+                Ok(interface)
+            }
+            other => Err(format!("{other:?}")),
+        }
+    }
+
+    #[cfg(unix)]
+    fn wait_until_connected(host: &NativeHost, interface: InterfaceId) -> Result<(), String> {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let snapshot = host
+                .snapshot(Some(Duration::from_secs(2)))
+                .map_err(|error| format!("{error:?}"))?;
+            let connected = snapshot.interfaces.iter().any(|snapshot| {
+                snapshot.interface_id == interface
+                    && snapshot.health == InterfaceHealth::Connected
+            });
+            if connected {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(format!("interface never connected: {snapshot:?}"));
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn supplied_streams_carry_announces_between_two_hosts() -> Result<(), String> {
+        let (first_wire, second_wire) =
+            std::os::unix::net::UnixStream::pair().map_err(|error| error.to_string())?;
+        let first_sink = Arc::new(RecordingSink::new());
+        let first = NativeHost::start(single_destination_config("first")?, first_sink.clone())
+            .map_err(|error| format!("{error:?}"))?;
+        let second_sink = Arc::new(RecordingSink::new());
+        let second = NativeHost::start(single_destination_config("second")?, second_sink.clone())
+            .map_err(|error| format!("{error:?}"))?;
+
+        let first_interface = attach_supplied_wire(&first, "to-second", first_wire)?;
+        let second_interface = attach_supplied_wire(&second, "to-first", second_wire)?;
+        wait_until_connected(&first, first_interface)?;
+        wait_until_connected(&second, second_interface)?;
+
+        let first_destination = *first
+            .destination_hashes()
+            .first()
+            .ok_or_else(|| "the first host has no destination".to_string())?;
+        let announced = first
+            .submit(HostCommand::Announce {
+                destination: first_destination,
+                interface: None,
+            })
+            .map_err(|error| format!("{error:?}"))?;
+        if !matches!(
+            announced.wait(Some(Duration::from_secs(2))),
+            CommandWait::Completed(Ok(CommandOutcome::Announced))
+        ) {
+            return Err("the first host did not announce".to_string());
+        }
+        if !second_sink.wait_for(|event| {
+            matches!(
+                event,
+                DiagnosticEvent::AnnounceHeard { destination, .. }
+                    if *destination == first_destination
+            )
+        }) {
+            return Err(format!(
+                "the second host never heard the announce: {:?}",
+                second_sink.diagnostics()
+            ));
+        }
+
+        let second_destination = *second
+            .destination_hashes()
+            .first()
+            .ok_or_else(|| "the second host has no destination".to_string())?;
+        let announced = second
+            .submit(HostCommand::Announce {
+                destination: second_destination,
+                interface: None,
+            })
+            .map_err(|error| format!("{error:?}"))?;
+        if !matches!(
+            announced.wait(Some(Duration::from_secs(2))),
+            CommandWait::Completed(Ok(CommandOutcome::Announced))
+        ) {
+            return Err("the second host did not announce".to_string());
+        }
+        if !first_sink.wait_for(|event| {
+            matches!(
+                event,
+                DiagnosticEvent::AnnounceHeard { destination, .. }
+                    if *destination == second_destination
+            )
+        }) {
+            return Err(format!(
+                "the first host never heard the announce back: {:?}",
+                first_sink.diagnostics()
+            ));
+        }
+
+        first.stop();
+        second.stop();
         Ok(())
     }
 

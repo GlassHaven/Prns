@@ -82,6 +82,7 @@ public enum InterfaceKind: UInt32, Sendable {
     case webSocketClient = 17
     case webSocketServer = 18
     case browserRendezvous = 19
+    case suppliedStream = 20
 }
 
 public enum InterfaceMode: UInt32, Sendable {

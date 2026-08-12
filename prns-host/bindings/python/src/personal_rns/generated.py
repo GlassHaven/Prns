@@ -81,6 +81,7 @@ class InterfaceKind(IntEnum):
     WEB_SOCKET_CLIENT = 17
     WEB_SOCKET_SERVER = 18
     BROWSER_RENDEZVOUS = 19
+    SUPPLIED_STREAM = 20
 
 class InterfaceMode(IntEnum):
     FULL = 1

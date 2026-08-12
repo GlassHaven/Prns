@@ -240,6 +240,7 @@
       "Pipe": 10,
       "RNode": 8,
       "Serial": 5,
+      "SuppliedStream": 20,
       "TcpClient": 2,
       "TcpServer": 3,
       "Udp": 4,

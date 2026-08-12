@@ -2,6 +2,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 mod readiness;
+mod supplied_stream;
 
 use std::collections::BTreeMap;
 use std::ffi::c_void;
@@ -1163,6 +1164,10 @@ unsafe fn parse_interface_config(value: &PrnsInterfaceConfig) -> Result<Interfac
         AbiInterfaceKind::BrowserRendezvous => Ok(InterfaceConfig::BrowserRendezvous {
             url: unsafe { read_string(value.url) }?.to_string(),
         }),
+        // A supplied stream is opened by application callback, which cannot
+        // ride in configuration data; it attaches through
+        // prns_host_attach_supplied_stream instead.
+        AbiInterfaceKind::SuppliedStream => Err(status(AbiStatus::Unsupported)),
     }
 }
 
@@ -1584,6 +1589,7 @@ fn interface_kind_value(kind: InterfaceKind) -> u32 {
         InterfaceKind::WebSocketClient => AbiInterfaceKind::WebSocketClient as u32,
         InterfaceKind::WebSocketServer => AbiInterfaceKind::WebSocketServer as u32,
         InterfaceKind::BrowserRendezvous => AbiInterfaceKind::BrowserRendezvous as u32,
+        InterfaceKind::SuppliedStream => AbiInterfaceKind::SuppliedStream as u32,
     }
 }
 
@@ -1721,6 +1727,21 @@ unsafe fn submit_host_command(
     command: HostCommand,
     out_command: *mut *mut PrnsIssuedCommand,
 ) -> u32 {
+    unsafe {
+        submit_command_with(host, out_command, |native, readiness| {
+            native.submit_with_readiness(command, Some(readiness))
+        })
+    }
+}
+
+unsafe fn submit_command_with(
+    host: *mut PrnsHost,
+    out_command: *mut *mut PrnsIssuedCommand,
+    submit: impl FnOnce(
+        &NativeHost,
+        prns_host_native::CommandReadiness,
+    ) -> Result<CommandHandle, NativeSubmitError>,
+) -> u32 {
     let host = match unsafe { required_ref(host) } {
         Ok(host) => host,
         Err(error) => return error,
@@ -1741,7 +1762,7 @@ unsafe fn submit_host_command(
             readiness.notify();
         }
     });
-    let handle = match native.submit_with_readiness(command, Some(command_readiness)) {
+    let handle = match submit(native, command_readiness) {
         Ok(handle) => handle,
         Err(NativeSubmitError::Busy) => return status(AbiStatus::QueueFull),
         Err(NativeSubmitError::Stopped) => return status(AbiStatus::Stopped),

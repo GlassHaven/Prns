@@ -205,7 +205,8 @@ export type InterfaceKind =
   | "AutomaticBluetoothLe"
   | "WebSocketClient"
   | "WebSocketServer"
-  | "BrowserRendezvous";
+  | "BrowserRendezvous"
+  | "SuppliedStream";
 
 export const INTERFACE_KIND_VALUES: readonly InterfaceKind[] = Object.freeze([
   "AutoLan",
@@ -227,6 +228,7 @@ export const INTERFACE_KIND_VALUES: readonly InterfaceKind[] = Object.freeze([
   "WebSocketClient",
   "WebSocketServer",
   "BrowserRendezvous",
+  "SuppliedStream",
 ]);
 
 export function isInterfaceKind(value: unknown): value is InterfaceKind {

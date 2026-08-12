@@ -95,7 +95,8 @@ enum class InterfaceKind(val rawValue: Int) {
     AUTOMATIC_BLUETOOTH_LE(16),
     WEB_SOCKET_CLIENT(17),
     WEB_SOCKET_SERVER(18),
-    BROWSER_RENDEZVOUS(19);
+    BROWSER_RENDEZVOUS(19),
+    SUPPLIED_STREAM(20);
 
     companion object {
         fun fromRawValue(value: Int): InterfaceKind? = entries.firstOrNull { it.rawValue == value }

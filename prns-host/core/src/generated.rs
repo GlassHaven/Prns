@@ -261,6 +261,7 @@ pub enum InterfaceKind {
     WebSocketClient = 17,
     WebSocketServer = 18,
     BrowserRendezvous = 19,
+    SuppliedStream = 20,
 }
 
 impl InterfaceKind {
@@ -286,6 +287,7 @@ impl InterfaceKind {
             Self::WebSocketClient => "WebSocketClient",
             Self::WebSocketServer => "WebSocketServer",
             Self::BrowserRendezvous => "BrowserRendezvous",
+            Self::SuppliedStream => "SuppliedStream",
         }
     }
 }
@@ -314,6 +316,7 @@ impl TryFrom<u32> for InterfaceKind {
             17 => Ok(Self::WebSocketClient),
             18 => Ok(Self::WebSocketServer),
             19 => Ok(Self::BrowserRendezvous),
+            20 => Ok(Self::SuppliedStream),
             _ => Err(()),
         }
     }
@@ -1635,6 +1638,7 @@ mod tests {
             (InterfaceKind::WebSocketClient, 17, "WebSocketClient"),
             (InterfaceKind::WebSocketServer, 18, "WebSocketServer"),
             (InterfaceKind::BrowserRendezvous, 19, "BrowserRendezvous"),
+            (InterfaceKind::SuppliedStream, 20, "SuppliedStream"),
         ]);
     }
 

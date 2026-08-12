@@ -438,6 +438,99 @@ class HostContractTest {
         }
     }
 
+    @Test
+    fun suppliedStreamCarriesAnnouncesBetweenHosts(): Unit = runBlocking {
+        // A connected stream pair made by this application, not by the engine.
+        val pair = IntArray(2)
+        assertEquals(
+            0,
+            TestLibC.INSTANCE.socketpair(AF_UNIX, SOCK_STREAM, 0, pair),
+            "socketpair(2) failed",
+        )
+        val firstWire = java.util.concurrent.atomic.AtomicLong(pair[0].toLong())
+        val secondWire = java.util.concurrent.atomic.AtomicLong(pair[1].toLong())
+        fun options(aspect: String) = HostOptions(
+            role = HostRole.ENDPOINT,
+            identity = IdentityConfigGenerateEphemeral,
+            destinations = listOf(
+                DestinationConfigSingle(
+                    name = DestinationName("suppliedstream", listOf(aspect)),
+                    identity = DestinationIdentityConfigHostIdentity,
+                    announceAppData = null,
+                    maximumRequestBytes = null,
+                    requestHandlers = emptyList(),
+                ),
+            ),
+            requiredCapabilities = emptySet(),
+        )
+        Host(options("first")).use { first ->
+            Host(options("second")).use { second ->
+                assertIs<CommandOutcomeInterfaceAttached>(
+                    successfulOutcome(
+                        withTimeout(5_000) {
+                            first.attachSuppliedStream(
+                                name = "to-second",
+                                respawnDelayMillis = 50,
+                                bitrate = BitrateAuto,
+                            ) { firstWire.getAndSet(SUPPLIED_STREAM_DECLINED) }
+                        },
+                    ),
+                )
+                assertIs<CommandOutcomeInterfaceAttached>(
+                    successfulOutcome(
+                        withTimeout(5_000) {
+                            second.attachSuppliedStream(
+                                name = "to-first",
+                                respawnDelayMillis = 50,
+                                bitrate = BitrateAuto,
+                            ) { secondWire.getAndSet(SUPPLIED_STREAM_DECLINED) }
+                        },
+                    ),
+                )
+
+                val firstDestination = first.destinationHashes.single()
+                var routed = false
+                repeat(50) {
+                    if (!routed) {
+                        routed = second.snapshot().routes.any {
+                            it.destination == firstDestination
+                        }
+                        if (!routed) {
+                            successfulOutcome(
+                                settled(first, HostCommandAnnounce(firstDestination, null)),
+                            )
+                            kotlinx.coroutines.delay(50)
+                        }
+                    }
+                }
+                assertTrue(
+                    routed,
+                    "the destination announced over the supplied stream did not become routable",
+                )
+
+                val secondDestination = second.destinationHashes.single()
+                var routedBack = false
+                repeat(50) {
+                    if (!routedBack) {
+                        routedBack = first.snapshot().routes.any {
+                            it.destination == secondDestination
+                        }
+                        if (!routedBack) {
+                            successfulOutcome(
+                                settled(second, HostCommandAnnounce(secondDestination, null)),
+                            )
+                            kotlinx.coroutines.delay(50)
+                        }
+                    }
+                }
+                assertTrue(
+                    routedBack,
+                    "the announce did not carry back over the supplied stream",
+                )
+            }
+        }
+    }
+
     private suspend fun settled(host: Host, command: HostCommand): CommandSettlement =
         host.execute(command).use {
             withTimeout(5_000) {
@@ -452,6 +545,17 @@ class HostContractTest {
         channel: Channel<ApplicationEvent>,
     ): Event = withTimeout(5_000) {
         channel.receiveAsFlow().filterIsInstance<Event>().first()
+    }
+}
+
+private const val AF_UNIX = 1
+private const val SOCK_STREAM = 1
+
+private interface TestLibC : com.sun.jna.Library {
+    fun socketpair(domain: Int, type: Int, protocol: Int, descriptors: IntArray): Int
+
+    companion object {
+        val INSTANCE: TestLibC = com.sun.jna.Native.load("c", TestLibC::class.java)
     }
 }
 

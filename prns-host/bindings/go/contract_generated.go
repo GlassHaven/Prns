@@ -96,6 +96,7 @@ const (
 	InterfaceKindWebSocketClient InterfaceKind = 17
 	InterfaceKindWebSocketServer InterfaceKind = 18
 	InterfaceKindBrowserRendezvous InterfaceKind = 19
+	InterfaceKindSuppliedStream InterfaceKind = 20
 )
 
 type InterfaceMode uint32

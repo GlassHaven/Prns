@@ -15,6 +15,10 @@ data object StreamAlreadyClaimed : StreamClaim<Nothing>
 
 class Host(options: HostOptions) : AutoCloseable {
     private val stateLock = ReentrantLock()
+    // Strong references keep JNA callback trampolines alive while native
+    // holds them; released only once the host itself is gone.
+    private val suppliedStreamOpeners =
+        java.util.concurrent.ConcurrentLinkedQueue<NativeSuppliedStreamOpenCallback>()
     private var pointer: Pointer?
     val identityHash: IdentityHash
     val destinationHashes: List<DestinationHash>
@@ -338,6 +342,70 @@ class Host(options: HostOptions) : AutoCloseable {
         bitrate: Bitrate,
     ): CompletionStage<CommandSettlement> = javaFuture {
         attachUdp(local, peer, bitrate)
+    }
+
+    /**
+     * Attaches an interface whose transport this application supplies as a
+     * connected file descriptor, instead of naming an address for the engine
+     * to dial. The name distinguishes concurrent supplied streams on this
+     * host and is part of the interface identity. Experimental surface,
+     * outside the generated contract until the shape settles.
+     */
+    suspend fun attachSuppliedStream(
+        name: String,
+        respawnDelayMillis: Long,
+        bitrate: Bitrate,
+        opener: SuppliedStreamOpener,
+    ): CommandSettlement =
+        executeSuppliedStreamAttach(name, respawnDelayMillis, bitrate, opener)
+            .use { it.await() }
+
+    fun attachSuppliedStreamAsync(
+        name: String,
+        respawnDelayMillis: Long,
+        bitrate: Bitrate,
+        opener: SuppliedStreamOpener,
+    ): CompletionStage<CommandSettlement> = javaFuture {
+        attachSuppliedStream(name, respawnDelayMillis, bitrate, opener)
+    }
+
+    private fun executeSuppliedStreamAttach(
+        name: String,
+        respawnDelayMillis: Long,
+        bitrate: Bitrate,
+        opener: SuppliedStreamOpener,
+    ): Command = withPointer { host ->
+        val callback = NativeSuppliedStreamOpenCallback {
+            try {
+                opener.open()
+            } catch (_: Throwable) {
+                SUPPLIED_STREAM_DECLINED
+            }
+        }
+        suppliedStreamOpeners.add(callback)
+        try {
+            NativeArena().use { arena ->
+                val output = PointerByReference()
+                val nativeBitrate = bitrate.native()
+                checkedStatus(
+                    NativeApi.library.prns_host_attach_supplied_stream(
+                        host,
+                        callback,
+                        null,
+                        arena.string(name),
+                        respawnDelayMillis,
+                        nativeBitrate.first,
+                        nativeBitrate.second,
+                        output,
+                    ),
+                    "attachSuppliedStream",
+                )
+                Command(requireNotNull(output.value))
+            }
+        } catch (failure: Throwable) {
+            suppliedStreamOpeners.remove(callback)
+            throw failure
+        }
     }
 
     suspend fun attachInterface(
@@ -670,6 +738,9 @@ class Host(options: HostOptions) : AutoCloseable {
             current
         }
         nativePointer?.let(NativeApi.library::prns_host_release)
+        // The release joins the native runtime, so no opener is in flight
+        // once it returns.
+        suppliedStreamOpeners.clear()
     }
 
     private fun readIdentityHash(host: Pointer): IdentityHash {
