@@ -23,7 +23,10 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(17)
+    // No jvmToolchain pin: it adds nothing over the 1.8 target below, and a
+    // hard toolchain requirement fails on single-JDK builders with no
+    // auto-provisioning (F-Droid's buildserver — fdroiddata!45740). Any JDK
+    // Gradle itself runs on can compile down to the 1.8 target.
     compilerOptions {
         jvmTarget = JvmTarget.JVM_1_8
         allWarningsAsErrors = true
