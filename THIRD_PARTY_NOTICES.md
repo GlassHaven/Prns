@@ -8523,7 +8523,7 @@ License: MIT License
 
 Used by: `micromath 2.1.0`
 
-Release graphs: Android, ESP32-S3 Heltec, ESP32-S3 Heltec E290, ESP32-S3 Heltec R8, ESP32-S3 T-Beam, desktop Linux, desktop Windows, desktop macOS, engine, iOS, nRF52840
+Release graphs: Android, ESP32-S3 Heltec, ESP32-S3 Heltec E290, ESP32-S3 Heltec R8, ESP32-S3 Heltec V3, ESP32-S3 T-Beam, desktop Linux, desktop Windows, desktop macOS, engine, iOS, nRF52840
 
 ```text
 MIT License
@@ -9611,7 +9611,7 @@ License: MIT License
 
 Used by: `embedded-graphics 0.8.2`, `embedded-graphics-simulator 0.8.0`
 
-Release graphs: Android, ESP32-S3 Heltec, ESP32-S3 Heltec E290, ESP32-S3 Heltec R8, ESP32-S3 T-Beam, desktop Linux, desktop Windows, desktop macOS, engine, iOS, nRF52840
+Release graphs: Android, ESP32-S3 Heltec, ESP32-S3 Heltec E290, ESP32-S3 Heltec R8, ESP32-S3 Heltec V3, ESP32-S3 T-Beam, desktop Linux, desktop Windows, desktop macOS, engine, iOS, nRF52840
 
 ```text
 Copyright (c) 2020 James Waples
@@ -10247,7 +10247,7 @@ License: MIT License
 
 Used by: `float-cmp 0.9.0`
 
-Release graphs: Android, ESP32-S3 Heltec, ESP32-S3 Heltec E290, ESP32-S3 Heltec R8, ESP32-S3 T-Beam, desktop Linux, desktop Windows, desktop macOS, engine, iOS, nRF52840
+Release graphs: Android, ESP32-S3 Heltec, ESP32-S3 Heltec E290, ESP32-S3 Heltec R8, ESP32-S3 Heltec V3, ESP32-S3 T-Beam, desktop Linux, desktop Windows, desktop macOS, engine, iOS, nRF52840
 
 ```text
 Copyright (c) 2014-2020 Optimal Computing (NZ) Ltd
