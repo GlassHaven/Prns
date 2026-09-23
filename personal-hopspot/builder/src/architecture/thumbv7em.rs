@@ -17,8 +17,6 @@ pub(super) static ADAPTER: Adapter = adapter(
         "link-arg=--icf=all",
         "-C",
         "llvm-args=-enable-machine-outliner",
-        "-C",
-        "llvm-args=-machine-outliner-reruns=2",
         "--cfg",
         "sha2_backend_soft=\"compact\"",
     ],
