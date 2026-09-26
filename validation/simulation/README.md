@@ -535,9 +535,30 @@ Normal request futures still use each production runtime's completion path; the
 observer does not replace delivery or reconstruct their returned values.
 
 No production behavior, capacities or wire formats change. This establishes
-successful segmentation, early refusal and reuse, not mid-transfer fault
-injection or cumulative response-value accounting. Inconsistent-peer cases
-remain core-engine reproductions. See [coverage and verification](measurements/segmented-resource-simulation.md).
+successful segmentation, early refusal and reuse. See
+[coverage and verification](measurements/segmented-resource-simulation.md).
+
+Two interruption scenarios use an explicit two-radio topology. After exactly
+the first verified response segment, an awaiting test actor isolates the radios
+before returning control. Each requester must receive exactly one `Timeout`
+settlement and no further segments or whole response. Restoring reachability
+allows rediscovery; both old Reticulum links expire, and fresh links must pass
+the complete refusal/raw/buffered sequence on the same node instances. Both
+directions run for both endpoint pairings. The Embassy responder's pending
+command must settle as `Respond(Resource(LinkClosed))` after link retirement.
+
+The outage wait has a 20-second controlled-time budget, long enough for the
+production inter-segment response grace; successful transfers retain their
+10-second budget. Only these longer outage scenarios increase their bounded BLE
+trace to 131,072 events, and still require zero discarded events. Discovery
+retains its existing 60-second budget. Observer ordering and notification wakeups
+have focused tests. See [interruption evidence](measurements/interrupted-segmented-resource-simulation.md).
+
+The interruption tests observe raw commands, not buffered-request failure paths.
+They establish reuse after old-link retirement, not assembly reclamation while
+an old link stays alive. Cumulative response-value accounting and inconsistent
+peer injection remain open; inconsistent-peer cases still have core-engine
+reproductions only.
 
 ```console
 cargo test --locked -p prns-simulation --features controlled-time --test embassy_ble segmented

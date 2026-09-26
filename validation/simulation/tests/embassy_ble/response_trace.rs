@@ -118,6 +118,16 @@ impl ResponseTrace {
         }
     }
 
+    pub(super) async fn next(&self) -> ResponseEvent {
+        loop {
+            let changed = self.0.changed.notified();
+            if !self.is_empty() {
+                return self.0.events.borrow_mut().remove(0);
+            }
+            changed.await;
+        }
+    }
+
     pub(super) fn is_empty(&self) -> bool {
         self.0.events.borrow().is_empty()
     }
@@ -129,6 +139,7 @@ mod tests {
 
     const LINK: LinkId = LinkId::new([0xA1; 16]);
     const REQUEST: RequestId = RequestId([0xB2; 16]);
+    const WAIT_BUDGET: std::time::Duration = std::time::Duration::from_secs(1);
 
     fn whole(data: &[u8]) -> PrnsEvent<'_> {
         PrnsEvent::Message(Message::Response {
@@ -151,6 +162,52 @@ mod tests {
                 bytes
             }]
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn next_preserves_order_and_consumes_only_one_event() {
+        let trace = ResponseTrace::new();
+        for bytes in [b"first".as_slice(), b"second"] {
+            trace.observe(&whole(bytes));
+        }
+        for bytes in [b"first".as_slice(), b"second"] {
+            assert_eq!(
+                tokio::time::timeout(WAIT_BUDGET, trace.next())
+                    .await
+                    .unwrap(),
+                ResponseEvent::Whole {
+                    link: LINK,
+                    request: REQUEST,
+                    bytes: bytes.to_vec()
+                }
+            );
+        }
+        assert!(trace.is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn next_wakes_when_an_event_arrives_after_it_is_polled() {
+        let trace = ResponseTrace::new();
+        let started = tokio::time::Instant::now();
+        let (observed, ()) = tokio::time::timeout(WAIT_BUDGET, async {
+            tokio::join!(
+                biased;
+                trace.next(),
+                async { trace.observe(&whole(b"later")); }
+            )
+        })
+        .await
+        .unwrap();
+        assert_eq!(started.elapsed(), std::time::Duration::ZERO);
+        assert_eq!(
+            observed,
+            ResponseEvent::Whole {
+                link: LINK,
+                request: REQUEST,
+                bytes: b"later".to_vec()
+            }
+        );
+        assert!(trace.is_empty());
     }
 
     #[test]

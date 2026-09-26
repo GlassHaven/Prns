@@ -162,8 +162,15 @@ The mixed-runtime simulator now exercises successful three-segment static-file
 responses, zero-budget refusal and reuse through both runtimes with a test-only
 512-byte transfer window. Raw journals and buffered request futures are checked
 separately. These scenarios do not yet enforce exact cumulative value budgets or
-inject inconsistent-peer/mid-transfer faults; see
+inject inconsistent peers; see
 [simulation evidence](../../validation/simulation/measurements/segmented-resource-simulation.md).
+
+The [interruption scenarios](../../validation/simulation/measurements/interrupted-segmented-resource-simulation.md)
+now isolate virtual BLE after the first verified segment in both directions.
+Raw requests settle once as `Timeout`, with no further response data, and the
+same nodes complete new transfers after rediscovery and old-link retirement.
+This does not prove buffered-request failure behavior or inter-segment assembly
+reclamation while the original Reticulum link remains alive.
 
 Extend the delivered-value byte-counting contract to segmented Resource forms.
 Separate early allocation protection from final delivered-payload validation;

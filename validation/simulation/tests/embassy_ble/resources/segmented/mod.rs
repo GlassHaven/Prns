@@ -3,11 +3,16 @@ use crate::response_trace::{ResponseEvent, ResponseTrace};
 use personal_rns::engine::{
     CommandId, DeliveryEvidence, PacketReceiptDelivered, PrnsCommand, SendRequest, SendRequestData,
 };
+use personal_rns::interfaces::bluetooth_auto::BleAddress;
+use prns_simulation::{Reachability, TopologyMutation};
 
+mod interrupted;
 mod storage;
 use storage::{SegmentedStorage, TRANSFER_WINDOW_BYTES};
 
 const _: () = assert!(TRANSFER_BYTES > 2 * TRANSFER_WINDOW_BYTES);
+const EMBASSY_RADIO: BleAddress = BleAddress::new([EMBASSY_ADDRESS; 6]);
+const TOKIO_RADIO: BleAddress = BleAddress::new([TOKIO_ADDRESS; 6]);
 
 enum AdmissionCase {
     RefusedAtOffer,
@@ -82,10 +87,30 @@ fn journaled_request(
     (command, Settlement::SendRequest(result))
 }
 
-fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
+fn scenario(
+    embedded_endpoint: Endpoint,
+    desktop_endpoint: Endpoint,
+    trace_capacity: usize,
+    run: impl FnOnce(
+        &mut EmbassyTasks<'_>,
+        &VirtualBleLab,
+        &ResourceNode,
+        &tokio_node::TokioNode,
+        [LinkId; 2],
+    ),
+) {
     let clock = ClockLease::acquire();
     let lab = VirtualBleLab::new(
-        BleMediumConfig::new(TopologyConfig::FullyConnected, 2, 4, 4, TRACE_CAPACITY).unwrap(),
+        BleMediumConfig::new(
+            TopologyConfig::Explicit {
+                max_neighbors: NonZeroUsize::MIN,
+            },
+            2,
+            4,
+            4,
+            trace_capacity,
+        )
+        .unwrap(),
     );
     let mut driver =
         ManualTimeDriver::new(ManualMedium::Ble(lab.clone()), Duration::from_millis(1)).unwrap();
@@ -110,13 +135,34 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
         personal_rns::request_endpoints![Echo, files::FileReply],
         SegmentedStorage,
     );
+    assert_eq!(
+        lab.set_reachability(EMBASSY_RADIO, TOKIO_RADIO, Reachability::Reachable),
+        Ok(TopologyMutation::Applied)
+    );
     assert!(tasks.settle() > 0);
     let desktop = desktop.try_recv().unwrap();
     converge(&mut tasks, &lab, &embedded, &desktop.handle);
     let links = establish_pair(&mut tasks, &embedded, &desktop.handle);
+    run(&mut tasks, &lab, &embedded, &desktop, links);
+    assert!(embedded.take_closed().is_empty());
+    assert!(desktop.take_closed().is_empty());
+    assert!(embedded.take_received().is_empty());
+    assert!(embedded.responses.is_empty());
+    assert!(desktop.responses.is_empty());
+    drop(tasks);
+    assert_radio_cleanup(&lab);
+}
+
+fn reassemble(
+    tasks: &mut EmbassyTasks<'_>,
+    _lab: &VirtualBleLab,
+    embedded: &ResourceNode,
+    desktop: &tokio_node::TokioNode,
+    links: [LinkId; 2],
+) {
     for case in [AdmissionCase::RefusedAtOffer, AdmissionCase::ThreeSegments] {
         journaled_request(
-            &mut tasks,
+            tasks,
             &desktop.handle,
             desktop.responses.clone(),
             links[1],
@@ -128,9 +174,9 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
             ))),
             AdmissionCase::ThreeSegments => Settlement::Respond(Ok(())),
         };
-        assert_eq!(response_settlements(&embedded), [responder]);
+        assert_eq!(response_settlements(embedded), [responder]);
         let expected = journaled_request(
-            &mut tasks,
+            tasks,
             &embedded.handle,
             embedded.responses.clone(),
             links[0],
@@ -140,7 +186,7 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
     }
     for _ in 0..2 {
         let handle = desktop.handle.clone();
-        let (result, elapsed) = complete(&mut tasks, async move {
+        let (result, elapsed) = complete(tasks, async move {
             measured(handle.request(
                 links[1],
                 RequestPathHash::of(files::FILE_PATH),
@@ -153,11 +199,11 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
             Ok((files::FILE_BYTES[..TRANSFER_BYTES].to_vec(), elapsed))
         );
         assert_eq!(
-            response_settlements(&embedded),
+            response_settlements(embedded),
             [Settlement::Respond(Ok(()))]
         );
         let handle = embedded.handle;
-        let (result, elapsed) = complete(&mut tasks, async move {
+        let (result, elapsed) = complete(tasks, async move {
             measured(handle.request(
                 links[0],
                 RequestPathHash::of(files::FILE_PATH),
@@ -169,15 +215,8 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
             result.map(|(bytes, rtt)| (bytes.as_slice().to_vec(), rtt)),
             Ok((files::FILE_BYTES[..TRANSFER_BYTES].to_vec(), elapsed))
         );
-        assert!(response_settlements(&embedded).is_empty());
+        assert!(response_settlements(embedded).is_empty());
     }
-    assert!(embedded.take_closed().is_empty());
-    assert!(desktop.take_closed().is_empty());
-    assert!(embedded.take_received().is_empty());
-    assert!(embedded.responses.is_empty());
-    assert!(desktop.responses.is_empty());
-    drop(tasks);
-    assert_radio_cleanup(&lab);
 }
 
 #[test]
@@ -185,6 +224,8 @@ fn esp32_and_apple_nodes_reassemble_segmented_responses() {
     scenario(
         Endpoint::Esp32(Esp32Host::Esp32),
         Endpoint::CoreBluetooth(AppleHost::MacOs),
+        TRACE_CAPACITY,
+        reassemble,
     );
 }
 
@@ -193,5 +234,7 @@ fn nrf52_and_bluez_nodes_reassemble_segmented_responses() {
     scenario(
         Endpoint::Nrf52(Nrf52Host::Nrf52),
         Endpoint::BlueZ(BlueZHost::Linux),
+        TRACE_CAPACITY,
+        reassemble,
     );
 }
