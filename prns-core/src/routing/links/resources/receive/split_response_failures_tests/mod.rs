@@ -1,5 +1,6 @@
 use super::tests_support::*;
 mod stream_sizes;
+mod value_limits;
 use crate::engine::test_support::{filled_frame, TestStorageLayout};
 use crate::engine::{
     CommandId, DeliveryEvidence, Directive, EngineReaction, EngineState, InstantMillis, Journaled,

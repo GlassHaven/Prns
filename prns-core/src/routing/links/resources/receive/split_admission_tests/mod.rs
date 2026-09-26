@@ -1,4 +1,5 @@
 use super::tests_support::*;
+use crate::routing::links::resources::assembly::AssemblyBytes;
 mod refusal;
 use crate::engine::test_support::{filled_frame, TestStorageLayout};
 use crate::engine::{
@@ -359,7 +360,10 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                             total_segments: 2,
                             total_data_bytes: 256
                         },
-                        SEGMENT_BYTES as u64,
+                        AssemblyBytes {
+                            stream: SEGMENT_BYTES as u64,
+                            value: SEGMENT_BYTES as u64
+                        },
                         AssemblyCorrelation::Response(response.request)
                     ),
                     Some(AssemblyProgress::Complete {
@@ -394,7 +398,10 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                         total_segments: count,
                         total_data_bytes: size,
                     },
-                    SEGMENT_BYTES as u64,
+                    AssemblyBytes {
+                        stream: SEGMENT_BYTES as u64,
+                        value: SEGMENT_BYTES as u64,
+                    },
                     AssemblyCorrelation::Response(response.request),
                 );
                 Some(response.original)
@@ -417,7 +424,10 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                             total_segments: 2,
                             total_data_bytes: 256
                         },
-                        SEGMENT_BYTES as u64,
+                        AssemblyBytes {
+                            stream: SEGMENT_BYTES as u64,
+                            value: SEGMENT_BYTES as u64
+                        },
                         changed
                     ),
                     Some(AssemblyProgress::Assembling)

@@ -27,7 +27,10 @@ fn correlation_matrix<C: IncomingAssemblyTable + Default>(first: RequestId, seco
                     total_segments: 2,
                     total_data_bytes: 42
                 },
-                31,
+                AssemblyBytes {
+                    stream: 31,
+                    value: 31
+                },
                 expected
             ),
             Some(AssemblyProgress::Assembling)
@@ -71,7 +74,10 @@ fn correlation_matrix<C: IncomingAssemblyTable + Default>(first: RequestId, seco
                         total_segments: 2,
                         total_data_bytes: 42
                     },
-                    11,
+                    AssemblyBytes {
+                        stream: 11,
+                        value: 11
+                    },
                     offered
                 ),
                 None
@@ -93,7 +99,10 @@ fn correlation_matrix<C: IncomingAssemblyTable + Default>(first: RequestId, seco
                     total_segments: 2,
                     total_data_bytes: 42
                 },
-                11,
+                AssemblyBytes {
+                    stream: 11,
+                    value: 11
+                },
                 expected
             ),
             Some(AssemblyProgress::Complete {

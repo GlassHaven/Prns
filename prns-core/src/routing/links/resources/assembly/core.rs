@@ -3,6 +3,14 @@ use crate::engine::CommandId;
 use crate::routing::links::request::RequestId;
 use crate::routing::links::resources::{ResourceHash, ResourceSegment};
 use crate::routing::links::LinkId;
+use crate::units::ByteLimit;
+
+/// Verified stream bytes include framing; value bytes count only the delivered body.
+#[derive(Debug)]
+pub struct AssemblyBytes {
+    pub stream: u64,
+    pub value: u64,
+}
 
 pub trait IncomingAssemblyTable {
     fn capacity(&self) -> usize;
@@ -19,6 +27,7 @@ pub trait IncomingAssemblyTable {
     fn stream_sizes(&self) -> &[u64];
     fn segments_received(&self) -> &[u64];
     fn received_totals(&self) -> &[u64];
+    fn value_totals(&self) -> &[u64];
 
     fn push(
         &mut self,
@@ -28,7 +37,7 @@ pub trait IncomingAssemblyTable {
         stream_size: u64,
         correlation: AssemblyCorrelation,
     );
-    fn set_progress(&mut self, index: usize, segments_received: u64, received_total: u64);
+    fn set_progress(&mut self, index: usize, segments_received: u64, bytes: AssemblyBytes);
     fn swap_remove(&mut self, index: usize);
 }
 
@@ -105,7 +114,7 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
         link_id: &LinkId,
         original_hash: &ResourceHash,
         segment: ResourceSegment,
-        segment_bytes: u64,
+        segment_bytes: AssemblyBytes,
         correlation: AssemblyCorrelation,
     ) -> Option<AssemblyProgress> {
         if self.fit(link_id, original_hash, segment, correlation) == SegmentFit::Unexpected {
@@ -113,9 +122,19 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
         }
         let index = self.index_of(link_id)?;
         let segments_received = segment.index;
-        let received_total = self.next_stream_total(index, segment, segment_bytes)?;
-        self.table
-            .set_progress(index, segments_received, received_total);
+        let received_total = self.next_stream_total(index, segment, segment_bytes.stream)?;
+        if segment_bytes.value > segment_bytes.stream {
+            return None;
+        }
+        let value = self.table.value_totals()[index].checked_add(segment_bytes.value)?;
+        self.table.set_progress(
+            index,
+            segments_received,
+            AssemblyBytes {
+                stream: received_total,
+                value,
+            },
+        );
         if segments_received >= self.table.total_segments()[index] {
             Some(AssemblyProgress::Complete {
                 total_size_bytes: received_total,
@@ -128,6 +147,12 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
     pub fn original_hash(&self, link_id: &LinkId) -> Option<ResourceHash> {
         self.index_of(link_id)
             .map(|index| self.table.original_hashes()[index])
+    }
+
+    pub(crate) fn fits_value_limit(&self, link_id: &LinkId, bytes: u64, limit: ByteLimit) -> bool {
+        self.index_of(link_id)
+            .and_then(|index| self.table.value_totals()[index].checked_add(bytes))
+            .is_some_and(|total| limit.allows(total))
     }
 
     /// Stream bytes include metadata and response framing. Chain identity is
@@ -319,7 +344,10 @@ mod tests {
                     total_segments: 3,
                     total_data_bytes: 1_000
                 },
-                100,
+                AssemblyBytes {
+                    stream: 100,
+                    value: 100
+                },
                 AssemblyCorrelation::Unsolicited
             ),
             Some(AssemblyProgress::Assembling)
@@ -333,7 +361,10 @@ mod tests {
                     total_segments: 3,
                     total_data_bytes: 1_000
                 },
-                100,
+                AssemblyBytes {
+                    stream: 100,
+                    value: 100
+                },
                 AssemblyCorrelation::Unsolicited
             ),
             Some(AssemblyProgress::Assembling)
@@ -347,7 +378,10 @@ mod tests {
                     total_segments: 3,
                     total_data_bytes: 1_000
                 },
-                800,
+                AssemblyBytes {
+                    stream: 800,
+                    value: 800
+                },
                 AssemblyCorrelation::Unsolicited
             ),
             Some(AssemblyProgress::Complete {
@@ -374,7 +408,10 @@ mod tests {
                 total_segments: 3,
                 total_data_bytes: 1_000,
             },
-            100,
+            AssemblyBytes {
+                stream: 100,
+                value: 100,
+            },
             AssemblyCorrelation::Unsolicited,
         );
         assert_eq!(
@@ -449,7 +486,10 @@ mod tests {
                 total_segments: 3,
                 total_data_bytes: 1_000,
             },
-            100,
+            AssemblyBytes {
+                stream: 100,
+                value: 100,
+            },
             AssemblyCorrelation::Unsolicited,
         );
         for total in [0, 1, 2, 4, u64::MAX] {
@@ -475,7 +515,10 @@ mod tests {
                 total_segments: 3,
                 total_data_bytes: 1_000,
             },
-            100,
+            AssemblyBytes {
+                stream: 100,
+                value: 100,
+            },
             AssemblyCorrelation::Unsolicited,
         );
         assemblies.advance(
@@ -486,7 +529,10 @@ mod tests {
                 total_segments: 3,
                 total_data_bytes: 1_000,
             },
-            800,
+            AssemblyBytes {
+                stream: 800,
+                value: 800,
+            },
             AssemblyCorrelation::Unsolicited,
         );
         assert_eq!(
@@ -513,7 +559,7 @@ mod tests {
         ) {
             let mut assemblies = table();
             assemblies.begin(link(1), hash(0xA), total, 1_000, AssemblyCorrelation::Unsolicited);
-            assemblies.table.set_progress(0, received, 0);
+            assemblies.table.set_progress(0, received, AssemblyBytes { stream: 0, value: 0 });
             let next = received.wrapping_add(1);
             for offered in [total, offered_total] {
                 let expected = if offered == total && received < total {
@@ -539,7 +585,14 @@ mod tests {
             1_000,
             AssemblyCorrelation::Unsolicited,
         );
-        assemblies.table.set_progress(0, u64::MAX, 0);
+        assemblies.table.set_progress(
+            0,
+            u64::MAX,
+            AssemblyBytes {
+                stream: 0,
+                value: 0,
+            },
+        );
         assert_eq!(
             assemblies.fit(
                 &link(1),
@@ -571,7 +624,7 @@ mod tests {
             ] {
                 let mut assemblies = table();
                 assemblies.begin(link(1), hash(0xA), total, 1_000, AssemblyCorrelation::Unsolicited);
-                assemblies.table.set_progress(0, received, 37);
+                assemblies.table.set_progress(0, received, AssemblyBytes { stream: 37, value: 37 });
                 let received_total = 37u128 + u128::from(bytes);
                 let matches = offered_hash == hash(0xA) && offered_index == next
                     && offered_total == total && received < total
@@ -583,7 +636,7 @@ mod tests {
                         AssemblyProgress::Assembling
                     })
                 } else { None };
-                proptest::prop_assert_eq!(assemblies.advance(&link(1), &offered_hash, ResourceSegment { index: offered_index, total_segments: offered_total, total_data_bytes: 1_000 }, bytes, AssemblyCorrelation::Unsolicited), expected);
+                proptest::prop_assert_eq!(assemblies.advance(&link(1), &offered_hash, ResourceSegment { index: offered_index, total_segments: offered_total, total_data_bytes: 1_000 }, AssemblyBytes { stream: bytes, value: bytes }, AssemblyCorrelation::Unsolicited), expected);
                 proptest::prop_assert_eq!(
                     (assemblies.original_hash(&link(1)), assemblies.table.total_segments(),
                         assemblies.table.segments_received(), assemblies.table.received_totals()),
@@ -615,7 +668,10 @@ mod tests {
                     total_segments: 3,
                     total_data_bytes: 1_000
                 },
-                100,
+                AssemblyBytes {
+                    stream: 100,
+                    value: 100
+                },
                 AssemblyCorrelation::Unsolicited
             ),
             None
@@ -633,7 +689,7 @@ mod tests {
             for index in [2, 3] {
                 let mut assemblies = table();
                 assemblies.begin(link(1), hash(0xA), 3, advertised, AssemblyCorrelation::Unsolicited);
-                assemblies.table.set_progress(0, index - 1, received);
+                assemblies.table.set_progress(0, index - 1, AssemblyBytes { stream: received, value: received });
                 let segment = ResourceSegment { index, total_segments: 3, total_data_bytes: advertised };
                 let total = u128::from(received) + u128::from(bytes);
                 let expected = total <= u128::from(advertised) && (index < 3 || total == u128::from(advertised));
@@ -657,7 +713,14 @@ mod tests {
             u64::MAX,
             AssemblyCorrelation::Unsolicited,
         );
-        assemblies.table.set_progress(0, 1, u64::MAX);
+        assemblies.table.set_progress(
+            0,
+            1,
+            AssemblyBytes {
+                stream: u64::MAX,
+                value: u64::MAX,
+            },
+        );
         assert!(!assemblies.fits_stream_size(
             &link(1),
             ResourceSegment {

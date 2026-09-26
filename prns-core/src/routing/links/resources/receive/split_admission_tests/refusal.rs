@@ -1,5 +1,6 @@
 use super::*;
 use crate::engine::SendRequestFailure;
+use crate::routing::links::resources::assembly::AssemblyBytes;
 use crate::units::ByteLimit;
 use crate::wire::{WireContext, WirePacketHeader};
 
@@ -208,7 +209,10 @@ fn stale_queued_continuations_cannot_fail_a_replacement_at_the_wait_deadline() {
                             total_segments: count,
                             total_data_bytes: size
                         },
-                        SEGMENT_BYTES as u64,
+                        AssemblyBytes {
+                            stream: SEGMENT_BYTES as u64,
+                            value: SEGMENT_BYTES as u64
+                        },
                         correlation
                     ),
                     Some(AssemblyProgress::Assembling)
@@ -224,7 +228,10 @@ fn stale_queued_continuations_cannot_fail_a_replacement_at_the_wait_deadline() {
                             total_segments: 2,
                             total_data_bytes: 256
                         },
-                        SEGMENT_BYTES as u64,
+                        AssemblyBytes {
+                            stream: SEGMENT_BYTES as u64,
+                            value: SEGMENT_BYTES as u64
+                        },
                         AssemblyCorrelation::Response(response.request)
                     ),
                     Some(AssemblyProgress::Complete {

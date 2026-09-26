@@ -1,6 +1,8 @@
 use alloc::vec::Vec;
 
-use crate::routing::links::resources::assembly::{AssemblyCorrelation, IncomingAssemblyTable};
+use crate::routing::links::resources::assembly::{
+    AssemblyBytes, AssemblyCorrelation, IncomingAssemblyTable,
+};
 use crate::routing::links::resources::ResourceHash;
 use crate::routing::links::LinkId;
 
@@ -13,6 +15,7 @@ pub struct HeapIncomingAssemblyTable {
     stream_sizes: Vec<u64>,
     segments_received: Vec<u64>,
     received_totals: Vec<u64>,
+    value_totals: Vec<u64>,
 }
 
 impl IncomingAssemblyTable for HeapIncomingAssemblyTable {
@@ -45,6 +48,10 @@ impl IncomingAssemblyTable for HeapIncomingAssemblyTable {
         &self.received_totals
     }
 
+    fn value_totals(&self) -> &[u64] {
+        &self.value_totals
+    }
+
     fn push(
         &mut self,
         link_id: LinkId,
@@ -60,11 +67,13 @@ impl IncomingAssemblyTable for HeapIncomingAssemblyTable {
         self.stream_sizes.push(stream_size);
         self.segments_received.push(0);
         self.received_totals.push(0);
+        self.value_totals.push(0);
     }
 
-    fn set_progress(&mut self, index: usize, segments_received: u64, received_total: u64) {
+    fn set_progress(&mut self, index: usize, segments_received: u64, bytes: AssemblyBytes) {
         self.segments_received[index] = segments_received;
-        self.received_totals[index] = received_total;
+        self.received_totals[index] = bytes.stream;
+        self.value_totals[index] = bytes.value;
     }
 
     fn swap_remove(&mut self, index: usize) {
@@ -75,5 +84,6 @@ impl IncomingAssemblyTable for HeapIncomingAssemblyTable {
         self.stream_sizes.swap_remove(index);
         self.segments_received.swap_remove(index);
         self.received_totals.swap_remove(index);
+        self.value_totals.swap_remove(index);
     }
 }

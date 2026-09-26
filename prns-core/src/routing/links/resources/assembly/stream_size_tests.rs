@@ -14,7 +14,16 @@ fn check_size<C: IncomingAssemblyTable + Default>(original: u64, offered: u64) {
         total_data_bytes: original,
     };
     assert_eq!(
-        assemblies.advance(&link, &hash, first, 0, correlation),
+        assemblies.advance(
+            &link,
+            &hash,
+            first,
+            AssemblyBytes {
+                stream: 0,
+                value: 0
+            },
+            correlation
+        ),
         Some(AssemblyProgress::Assembling)
     );
     let next = ResourceSegment {
@@ -28,7 +37,16 @@ fn check_size<C: IncomingAssemblyTable + Default>(original: u64, offered: u64) {
         SegmentFit::Unexpected
     };
     assert_eq!(assemblies.fit(&link, &hash, next, correlation), expected);
-    let advanced = assemblies.advance(&link, &hash, next, original, correlation);
+    let advanced = assemblies.advance(
+        &link,
+        &hash,
+        next,
+        AssemblyBytes {
+            stream: original,
+            value: original,
+        },
+        correlation,
+    );
     assert_eq!(
         advanced,
         if original == offered {
@@ -138,7 +156,16 @@ fn check_atomic_progress<C: IncomingAssemblyTable + Default>(
     };
     assemblies.begin(link, hash, segments, declared, correlation);
     assert_eq!(
-        assemblies.advance(&link, &hash, segment, received, correlation),
+        assemblies.advance(
+            &link,
+            &hash,
+            segment,
+            AssemblyBytes {
+                stream: received,
+                value: received
+            },
+            correlation
+        ),
         Some(AssemblyProgress::Assembling)
     );
     let next = ResourceSegment {
@@ -160,7 +187,16 @@ fn check_atomic_progress<C: IncomingAssemblyTable + Default>(
     };
     assert_eq!(assemblies.fits_stream_size(&link, next, offered), valid);
     assert_eq!(
-        assemblies.advance(&link, &hash, next, offered, correlation),
+        assemblies.advance(
+            &link,
+            &hash,
+            next,
+            AssemblyBytes {
+                stream: offered,
+                value: offered
+            },
+            correlation
+        ),
         expected
     );
     if !valid {
@@ -171,7 +207,16 @@ fn check_atomic_progress<C: IncomingAssemblyTable + Default>(
         );
         assert!(assemblies.fits_stream_size(&link, next, declared - received));
         assert_eq!(
-            assemblies.advance(&link, &hash, next, declared - received, correlation),
+            assemblies.advance(
+                &link,
+                &hash,
+                next,
+                AssemblyBytes {
+                    stream: declared - received,
+                    value: declared - received
+                },
+                correlation
+            ),
             Some(if segments == 2 {
                 AssemblyProgress::Complete {
                     total_size_bytes: declared,

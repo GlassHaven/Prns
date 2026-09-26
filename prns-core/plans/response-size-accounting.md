@@ -200,6 +200,11 @@ stream counter. The [size-identity slice](../../validation/simulation/measuremen
 now retains the first size declaration and requires it at admission, queued
 promotion/expiry, completion, advancement and failure cleanup. The distinct
 delivered-value budget is still unfinished.
+The [value-accounting slice](../../validation/simulation/measurements/split-value-accounting.md)
+adds separate verified-value progress and cumulative checks before chunk delivery.
+Admission is still deliberately conservative: a trial relaxation exposed missing
+completion-time cancellation in the simulator's sender-reuse checks. Wire fresh
+entropy and cancellation through all completion paths before relaxing that guard.
 The [atomic progress follow-up](../../validation/simulation/measurements/atomic-stream-progress.md)
 also makes advancement enforce that same checked stream total before mutating
 the assembly, rather than trusting callers and using saturating addition.

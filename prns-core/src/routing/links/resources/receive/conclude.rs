@@ -1,5 +1,6 @@
 //! The conclusion: the sealed transfer opens, verifies against the advertised hash, proves back to the sender, and delivers, with failures surfaced by name. The host-side decompression seam parks here.
 
+use super::split_delivery::{deliver_split_segment, SplitDeliveryFailure, VerifiedSplitSegment};
 use crate::engine::Journaled;
 use crate::engine::{CommandId, SendRequestFailure};
 use crate::engine::{DeliveryEvidence, PacketReceiptDelivered, Settlement};
@@ -18,7 +19,7 @@ use crate::routing::links::request::{
 use crate::routing::links::resources::assemble_incoming::{
     open_transfer, verify_and_prove, OpenTransferError,
 };
-use crate::routing::links::resources::assembly::{AssemblyProgress, SegmentFit};
+use crate::routing::links::resources::assembly::{AssemblyBytes, AssemblyProgress, SegmentFit};
 use crate::routing::links::resources::control::{write_proof_plaintext, PROOF_PLAINTEXT_LEN};
 #[cfg(feature = "resource-work-offload")]
 use crate::routing::links::resources::streamed_open::ResourceOpenLane;
@@ -243,13 +244,14 @@ impl<S: StorageLayout> EngineState<S> {
                 }
             });
             match verified {
-                Err(cause) => Err(cause),
+                Err(cause) => Err(SplitDeliveryFailure::Resource(cause)),
                 Ok(verified) => {
                     emit_proof(verified.prove, fire_on, sink);
                     self.links.note_outbound(link_id, now);
                     let delivered = if multi_segment {
                         deliver_split_segment(
                             &self.receipts,
+                            &self.incoming_assemblies,
                             VerifiedSplitSegment {
                                 link_id,
                                 original_hash,
@@ -285,14 +287,24 @@ impl<S: StorageLayout> EngineState<S> {
                             now,
                             sink,
                         );
-                        Ok(())
+                        Ok(verified.data.len() as u64)
                     };
-                    delivered.map(|()| verified.stream_byte_len)
+                    delivered.map(|value| AssemblyBytes {
+                        stream: verified.stream_byte_len,
+                        value,
+                    })
                 }
             }
         };
         match delivery {
-            Err(cause) => self.fail_incoming_resource(link_id, hash, cause, sink),
+            Err(SplitDeliveryFailure::Resource(cause)) => {
+                self.fail_incoming_resource(link_id, hash, cause, sink)
+            }
+            Err(SplitDeliveryFailure::ResponseTooLarge) => {
+                self.retire_incoming_resource(link_id, hash);
+                self.refuse_split_response_value(link_id, &state, sink);
+                ConcludeResourceOutcome::ResponseTooLarge
+            }
             Ok(segment_bytes) => {
                 self.retire_incoming_resource(link_id, hash);
                 if multi_segment {
@@ -597,8 +609,9 @@ impl<S: StorageLayout> EngineState<S> {
 
         if is_split {
             let original_hash = state.original_hash;
-            if let Err(cause) = deliver_split_segment(
+            let value = match deliver_split_segment(
                 &self.receipts,
+                &self.incoming_assemblies,
                 VerifiedSplitSegment {
                     link_id: &link_id,
                     original_hash,
@@ -610,10 +623,19 @@ impl<S: StorageLayout> EngineState<S> {
                 },
                 sink,
             ) {
-                self.fail_retired_incoming_resource(&link_id, &hash, &state, cause, sink);
-                wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
-                return wake_schedule_changes;
-            }
+                Ok(value) => value,
+                Err(failure) => {
+                    match failure {
+                        SplitDeliveryFailure::Resource(cause) => self
+                            .fail_retired_incoming_resource(&link_id, &hash, &state, cause, sink),
+                        SplitDeliveryFailure::ResponseTooLarge => {
+                            self.refuse_split_response_value(&link_id, &state, sink)
+                        }
+                    }
+                    wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
+                    return wake_schedule_changes;
+                }
+            };
             self.advance_split_assembly(
                 &link_id,
                 ConcludedSegment {
@@ -622,7 +644,10 @@ impl<S: StorageLayout> EngineState<S> {
                     total_segments: state.total_segments,
                     total_data_bytes: state.uncompressed_data_bytes,
                     correlation: state.correlation,
-                    segment_bytes: plaintext.len() as u64,
+                    segment_bytes: AssemblyBytes {
+                        stream: plaintext.len() as u64,
+                        value,
+                    },
                 },
                 link_rtt,
                 now,
@@ -655,6 +680,20 @@ impl<S: StorageLayout> EngineState<S> {
         }
         wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
         wake_schedule_changes
+    }
+
+    fn refuse_split_response_value<Work>(
+        &mut self,
+        link_id: &LinkId,
+        state: &IncomingResourceState,
+        sink: &mut impl FnMut(EngineReaction<'_, Work>),
+    ) {
+        if let Some(id) = self.settle_failed_resource_claim(link_id, state) {
+            sink(EngineReaction::Journaled(Journaled::CommandSettled {
+                id,
+                settlement: Settlement::SendRequest(Err(SendRequestFailure::ResponseTooLarge)),
+            }));
+        }
     }
 
     /// [`Self::fail_incoming_resource`] for the inflate seam's already-retired
@@ -718,7 +757,7 @@ struct AssembledSingleSegment<'a> {
 /// Metadata-bearing RNS responses are literal file bytes, never envelopes.
 /// Other responses carry `[request_id, data]`, with the former Prns raw-body
 /// form accepted for wire continuity. Valid envelopes must name the advertised request.
-fn response_application_data<'a>(
+pub(super) fn response_application_data<'a>(
     request_id: RequestId,
     metadata: Option<&[u8]>,
     data: &'a [u8],
@@ -847,76 +886,7 @@ struct ConcludedSegment {
     total_segments: u64,
     total_data_bytes: u64,
     correlation: ResourceCorrelation,
-    segment_bytes: u64,
-}
-
-struct VerifiedSplitSegment<'a> {
-    link_id: &'a LinkId,
-    original_hash: ResourceHash,
-    correlation: ResourceCorrelation,
-    segment_index: u64,
-    total_segments: u64,
-    metadata: Option<&'a [u8]>,
-    data: &'a [u8],
-}
-
-/// The split mirror of [`deliver_single_segment`]: a response chain's segments answer their pending request, with the metadata lane stripped and dropped the same way; everything else journals a plain segment.
-fn deliver_split_segment<C: ReceiptTable, Work>(
-    receipts: &Receipts<C>,
-    segment: VerifiedSplitSegment<'_>,
-    sink: &mut impl FnMut(EngineReaction<'_, Work>),
-) -> Result<(), ResourceFailureCause> {
-    let VerifiedSplitSegment {
-        link_id,
-        original_hash,
-        correlation,
-        segment_index,
-        total_segments,
-        metadata,
-        data,
-    } = segment;
-
-    let answers = match correlation {
-        ResourceCorrelation::Response(id) => receipts
-            .pending_request_command(link_id, id)
-            .map(|command_id| (command_id, id)),
-        ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
-    };
-    match answers {
-        Some((command_id, request_id)) => {
-            let data = if segment_index == 1 {
-                let Some(data) = response_application_data(request_id, metadata, data) else {
-                    return Err(ResourceFailureCause::TransferCorrupt);
-                };
-                data
-            } else {
-                data
-            };
-            sink(EngineReaction::Journaled(
-                Journaled::ResponseSegmentReceived {
-                    command_id,
-                    link_id: *link_id,
-                    request_id,
-                    segment_index,
-                    total_segments,
-                    data,
-                },
-            ));
-        }
-        None => {
-            sink(EngineReaction::Journaled(
-                Journaled::ResourceSegmentReceived {
-                    link_id: *link_id,
-                    original_hash,
-                    segment_index,
-                    total_segments,
-                    metadata,
-                    data,
-                },
-            ));
-        }
-    }
-    Ok(())
+    segment_bytes: AssemblyBytes,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -928,6 +898,7 @@ pub enum ConcludeResourceOutcome {
     /// A pool worker still holds the streamed open; the span verdict re-concludes, under its own grace deadline.
     AwaitingOpenVerdict,
     Delivered,
+    ResponseTooLarge,
     Failed(ResourceFailureCause),
 }
 

@@ -1,4 +1,6 @@
-use crate::routing::links::resources::assembly::{AssemblyCorrelation, IncomingAssemblyTable};
+use crate::routing::links::resources::assembly::{
+    AssemblyBytes, AssemblyCorrelation, IncomingAssemblyTable,
+};
 use crate::routing::links::resources::{ResourceHash, RESOURCE_HASH_LEN};
 use crate::routing::links::LinkId;
 
@@ -12,6 +14,7 @@ pub struct FixedIncomingAssemblyTable<const MAX_INCOMING_ASSEMBLIES: usize> {
     stream_sizes: [u64; MAX_INCOMING_ASSEMBLIES],
     segments_received: [u64; MAX_INCOMING_ASSEMBLIES],
     received_totals: [u64; MAX_INCOMING_ASSEMBLIES],
+    value_totals: [u64; MAX_INCOMING_ASSEMBLIES],
 }
 
 impl<const MAX_INCOMING_ASSEMBLIES: usize> Default
@@ -27,6 +30,7 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> Default
             stream_sizes: [0; MAX_INCOMING_ASSEMBLIES],
             segments_received: [0; MAX_INCOMING_ASSEMBLIES],
             received_totals: [0; MAX_INCOMING_ASSEMBLIES],
+            value_totals: [0; MAX_INCOMING_ASSEMBLIES],
         }
     }
 }
@@ -63,6 +67,10 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> IncomingAssemblyTable
         &self.received_totals[..self.len]
     }
 
+    fn value_totals(&self) -> &[u64] {
+        &self.value_totals[..self.len]
+    }
+
     fn push(
         &mut self,
         link_id: LinkId,
@@ -82,12 +90,14 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> IncomingAssemblyTable
         self.stream_sizes[i] = stream_size;
         self.segments_received[i] = 0;
         self.received_totals[i] = 0;
+        self.value_totals[i] = 0;
         self.len += 1;
     }
 
-    fn set_progress(&mut self, index: usize, segments_received: u64, received_total: u64) {
+    fn set_progress(&mut self, index: usize, segments_received: u64, bytes: AssemblyBytes) {
         self.segments_received[index] = segments_received;
-        self.received_totals[index] = received_total;
+        self.received_totals[index] = bytes.stream;
+        self.value_totals[index] = bytes.value;
     }
 
     fn swap_remove(&mut self, index: usize) {
@@ -100,6 +110,7 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> IncomingAssemblyTable
             self.stream_sizes[index] = self.stream_sizes[last];
             self.segments_received[index] = self.segments_received[last];
             self.received_totals[index] = self.received_totals[last];
+            self.value_totals[index] = self.value_totals[last];
         }
         self.len = last;
     }

@@ -10,6 +10,7 @@ pub mod part_hash;
 pub mod rounds;
 #[cfg(test)]
 mod split_admission_tests;
+mod split_delivery;
 #[cfg(test)]
 mod split_ownership_tests;
 #[cfg(test)]

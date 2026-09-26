@@ -8,6 +8,7 @@ use crate::identity::IdentitySigningPublicKey;
 use crate::routing::dedup::PacketHash;
 use crate::routing::delivery::receipts::{OutstandingReceipt, ReceiptKind, RequestReceiptPolicy};
 use crate::routing::links::request::RequestId;
+use crate::routing::links::resources::assembly::AssemblyBytes;
 use crate::routing::links::resources::assembly::{AssemblyCorrelation, AssemblyProgress};
 use crate::routing::links::resources::ResourceHash;
 use crate::routing::links::resources::ResourceSegment;
@@ -50,7 +51,10 @@ fn receipt_expiry_reclaims_only_its_own_response_assembly() {
                         total_segments: 2,
                         total_data_bytes: 19
                     },
-                    17,
+                    AssemblyBytes {
+                        stream: 17,
+                        value: 17
+                    },
                     correlation
                 ),
                 Some(AssemblyProgress::Assembling)
@@ -68,7 +72,10 @@ fn receipt_expiry_reclaims_only_its_own_response_assembly() {
                     total_segments: 2,
                     total_data_bytes: 19
                 },
-                17,
+                AssemblyBytes {
+                    stream: 17,
+                    value: 17
+                },
                 AssemblyCorrelation::Response(request)
             ),
             Some(AssemblyProgress::Assembling)
@@ -138,7 +145,10 @@ fn receipt_expiry_reclaims_only_its_own_response_assembly() {
                             total_segments: 2,
                             total_data_bytes: 19
                         },
-                        2,
+                        AssemblyBytes {
+                            stream: 2,
+                            value: 2
+                        },
                         correlation
                     ),
                     Some(AssemblyProgress::Complete {
