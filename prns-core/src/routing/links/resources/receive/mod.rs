@@ -9,6 +9,8 @@ pub mod offload;
 pub mod part_hash;
 pub mod rounds;
 #[cfg(test)]
+mod split_response_failures_tests;
+#[cfg(test)]
 pub mod tests_support;
 pub mod watchdog;
 #[cfg(test)]

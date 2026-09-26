@@ -223,7 +223,7 @@ impl<S: StorageLayout> EngineState<S> {
                 Ok(verified) => {
                     emit_proof(verified.prove, fire_on, sink);
                     self.links.note_outbound(link_id, now);
-                    if multi_segment {
+                    let delivered = if multi_segment {
                         deliver_split_segment(
                             &self.receipts,
                             VerifiedSplitSegment {
@@ -236,7 +236,7 @@ impl<S: StorageLayout> EngineState<S> {
                                 data: verified.data,
                             },
                             sink,
-                        );
+                        )
                     } else {
                         let request_permitted = request_is_permitted(
                             &self.request_handlers,
@@ -261,8 +261,9 @@ impl<S: StorageLayout> EngineState<S> {
                             now,
                             sink,
                         );
-                    }
-                    Ok(verified.stream_byte_len)
+                        Ok(())
+                    };
+                    delivered.map(|()| verified.stream_byte_len)
                 }
             }
         };
@@ -336,7 +337,8 @@ impl<S: StorageLayout> EngineState<S> {
         }
     }
 
-    /// The one exit every dead incoming transfer leaves through: the slot retires (window and rate bequeathed to the link), the failure event carries the cause, and a response transfer's claimed request settles with it.
+    /// Retire a failed transfer and its assembly, report the Resource failure,
+    /// and fail any request claimed by that transfer.
     pub(crate) fn fail_incoming_resource<Work>(
         &mut self,
         link_id: &LinkId,
@@ -344,8 +346,7 @@ impl<S: StorageLayout> EngineState<S> {
         cause: ResourceFailureCause,
         sink: &mut impl FnMut(EngineReaction<'_, Work>),
     ) -> ConcludeResourceOutcome {
-        let settled_request = self.settle_response_claim(link_id, hash);
-        self.retire_incoming_resource(link_id, hash);
+        let settled_request = self.abandon_incoming_resource(link_id, hash);
         sink(EngineReaction::Journaled(Journaled::ResourceFailed {
             link_id: *link_id,
             hash: *hash,
@@ -360,21 +361,35 @@ impl<S: StorageLayout> EngineState<S> {
         ConcludeResourceOutcome::Failed(cause)
     }
 
-    /// The receipts half of a response transfer's death: RNS 1.4.2 concludes any non-`COMPLETE` response resource through `request_timed_out`, so the pending request settles with the transfer.
-    /// The caller journals the failure settlement for the returned command.
-    pub(super) fn settle_response_claim(
+    /// Release a failed transfer and its split assembly. The caller journals the
+    /// failure settlement for the returned request command, if one was claimed.
+    pub(super) fn abandon_incoming_resource(
         &mut self,
         link_id: &LinkId,
         hash: &ResourceHash,
     ) -> Option<CommandId> {
         let index = self.incoming_resources.lookup(link_id, hash)?;
-        let ResourceCorrelation::Response(request_id) =
-            self.incoming_resources.state(index).correlation
-        else {
-            return None;
-        };
-        let proven = self.receipts.settle_by_request_id(request_id)?;
-        Some(proven.command_id)
+        let state = *self.incoming_resources.state(index);
+        let settled_request = self.settle_failed_resource_claim(link_id, &state);
+        self.retire_incoming_resource(link_id, hash);
+        settled_request
+    }
+
+    fn settle_failed_resource_claim(
+        &mut self,
+        link_id: &LinkId,
+        state: &IncomingResourceState,
+    ) -> Option<CommandId> {
+        if state.total_segments > 1 {
+            self.incoming_assemblies.clear(link_id);
+        }
+        match state.correlation {
+            ResourceCorrelation::Response(id) => self
+                .receipts
+                .settle_by_request_id(id)
+                .map(|proven| proven.command_id),
+            ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
+        }
     }
 
     /// Verified exactly like an uncompressed assembly.
@@ -412,7 +427,7 @@ impl<S: StorageLayout> EngineState<S> {
             self.fail_retired_incoming_resource(
                 &link_id,
                 &hash,
-                state.correlation,
+                &state,
                 ResourceFailureCause::DecompressionFailed,
                 sink,
             );
@@ -431,7 +446,7 @@ impl<S: StorageLayout> EngineState<S> {
             self.fail_retired_incoming_resource(
                 &link_id,
                 &hash,
-                state.correlation,
+                &state,
                 ResourceFailureCause::LinkVanished,
                 sink,
             );
@@ -448,7 +463,7 @@ impl<S: StorageLayout> EngineState<S> {
             self.fail_retired_incoming_resource(
                 &link_id,
                 &hash,
-                state.correlation,
+                &state,
                 ResourceFailureCause::TransferCorrupt,
                 sink,
             );
@@ -459,7 +474,7 @@ impl<S: StorageLayout> EngineState<S> {
             self.fail_retired_incoming_resource(
                 &link_id,
                 &hash,
-                state.correlation,
+                &state,
                 ResourceFailureCause::MetadataOverrun,
                 sink,
             );
@@ -470,7 +485,7 @@ impl<S: StorageLayout> EngineState<S> {
             self.fail_retired_incoming_resource(
                 &link_id,
                 &hash,
-                state.correlation,
+                &state,
                 ResourceFailureCause::ProofUnsendable,
                 sink,
             );
@@ -487,7 +502,7 @@ impl<S: StorageLayout> EngineState<S> {
                 .incoming_assemblies
                 .original_hash(&link_id)
                 .unwrap_or(hash);
-            deliver_split_segment(
+            if let Err(cause) = deliver_split_segment(
                 &self.receipts,
                 VerifiedSplitSegment {
                     link_id: &link_id,
@@ -499,7 +514,11 @@ impl<S: StorageLayout> EngineState<S> {
                     data,
                 },
                 sink,
-            );
+            ) {
+                self.fail_retired_incoming_resource(&link_id, &hash, &state, cause, sink);
+                wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
+                return wake_schedule_changes;
+            }
             self.advance_split_assembly(
                 &link_id,
                 ConcludedSegment {
@@ -540,27 +559,27 @@ impl<S: StorageLayout> EngineState<S> {
         wake_schedule_changes
     }
 
-    /// [`Self::fail_incoming_resource`] for a slot already retired (the inflate seam retires before it judges), so the claim settles off the caller's copied correlation.
+    /// [`Self::fail_incoming_resource`] for the inflate seam's already-retired
+    /// slot. Its state still owns the claim and split-assembly cleanup.
     fn fail_retired_incoming_resource<Work>(
         &mut self,
         link_id: &LinkId,
         hash: &ResourceHash,
-        correlation: ResourceCorrelation,
+        state: &IncomingResourceState,
         cause: ResourceFailureCause,
         sink: &mut impl FnMut(EngineReaction<'_, Work>),
     ) {
+        let settled_request = self.settle_failed_resource_claim(link_id, state);
         sink(EngineReaction::Journaled(Journaled::ResourceFailed {
             link_id: *link_id,
             hash: *hash,
             cause,
         }));
-        if let ResourceCorrelation::Response(request_id) = correlation {
-            if let Some(proven) = self.receipts.settle_by_request_id(request_id) {
-                sink(EngineReaction::Journaled(Journaled::CommandSettled {
-                    id: proven.command_id,
-                    settlement: Settlement::SendRequest(Err(SendRequestFailure::from(cause))),
-                }));
-            }
+        if let Some(command_id) = settled_request {
+            sink(EngineReaction::Journaled(Journaled::CommandSettled {
+                id: command_id,
+                settlement: Settlement::SendRequest(Err(SendRequestFailure::from(cause))),
+            }));
         }
     }
 }
@@ -745,7 +764,7 @@ fn deliver_split_segment<C: ReceiptTable, Work>(
     receipts: &Receipts<C>,
     segment: VerifiedSplitSegment<'_>,
     sink: &mut impl FnMut(EngineReaction<'_, Work>),
-) {
+) -> Result<(), ResourceFailureCause> {
     let VerifiedSplitSegment {
         link_id,
         original_hash,
@@ -766,7 +785,7 @@ fn deliver_split_segment<C: ReceiptTable, Work>(
         Some((command_id, request_id)) => {
             let data = if segment_index == 1 {
                 let Some(data) = response_application_data(request_id, metadata, data) else {
-                    return;
+                    return Err(ResourceFailureCause::TransferCorrupt);
                 };
                 data
             } else {
@@ -796,6 +815,7 @@ fn deliver_split_segment<C: ReceiptTable, Work>(
             ));
         }
     }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

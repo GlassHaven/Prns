@@ -75,6 +75,22 @@ Tokio/Embassy BLE scenarios exercise the shared static-file command, exact file
 budgets and Embassy's existing 2 KiB completion buffer. See
 [verification evidence](../../validation/simulation/measurements/metadata-resource-response-limits.md).
 
+## Completed split-failure prerequisite
+
+A mismatched request ID in the first split-response envelope now fails the request
+as `ResponseTransferFailed(TransferCorrupt)`. Previously that segment was silently
+omitted while assembly continued, allowing the tail alone to settle successfully.
+Both normal opening and resumed decompression propagate the failure before
+advancing the assembly. Failed admitted split transfers also release their assembly state,
+including cancellation, malformed metadata, refused hashmaps and exhausted retries.
+Whole-transfer failures do not erase a separate split assembly waiting on the link.
+
+Buffered Tokio and Embassy request APIs discard provisional chunks on failure;
+tests also prove the next request can reuse the awaiter/slot. Direct journal
+consumers must wait for successful final settlement before publishing the value.
+No stored fields, capacities, wire formats or response-size admission bounds change.
+See [verification evidence](../../validation/simulation/measurements/split-response-failures.md).
+
 ## Remaining segmented scope
 
 Extend the delivered-value byte-counting contract to segmented Resource forms.
@@ -96,3 +112,7 @@ response, one terminal result, receipt cleanup, and subsequent link usability.
 Preserve Remote Control's fixed response bounds and stock-Reticulum wire
 interoperability. Audit reusable native/Node.js/WASM client semantics before
 publishing a changed limit contract; do not introduce a transport-specific fix.
+
+Include assembly cleanup when a request expires between segments or a continuation
+is refused before admission; the split-failure prerequisite handles admitted
+transfers only. Validate stable chain totals/correlation before loosening admission.
