@@ -4,7 +4,10 @@ use crate::engine::{
     RemoteControlControllerPairingRequestFailureCause, SendRequestFailure, SendRequestIntent,
     SendSinglePacketFailure, SendToLinkFailure, Settlement,
 };
-use crate::routing::delivery::receipts::{ExpiredReceipt, LinkOwnedReceiptKind, ReceiptKind};
+use crate::routing::dedup::PacketHash;
+use crate::routing::delivery::receipts::{
+    CulledReceipt, ExpiredReceipt, LinkOwnedReceiptKind, ReceiptKind,
+};
 use crate::routing::links::request::RequestId;
 use crate::routing::links::resources::assembly::AssemblyCorrelation;
 use crate::routing::links::LinkId;
@@ -66,17 +69,20 @@ impl<S: StorageLayout> EngineState<S> {
         }
     }
 
-    pub(crate) fn culled_settlement(&mut self, kind: ReceiptKind) -> Settlement {
-        match kind {
+    pub(crate) fn culled_settlement(&mut self, culled: CulledReceipt) -> Settlement {
+        match culled.kind {
             ReceiptKind::SendSinglePacket { .. } => {
                 Settlement::SendSinglePacket(Err(SendSinglePacketFailure::Culled))
             }
             ReceiptKind::SendToLink(_) => Settlement::SendToLink(Err(SendToLinkFailure::Culled)),
-            ReceiptKind::SendRequest { link_id, response } => self.failed_send_request_settlement(
-                link_id,
-                response.intent(),
-                SendRequestFailure::Culled,
-            ),
+            ReceiptKind::SendRequest { link_id, response } => {
+                self.retire_response_assembly(link_id, culled.packet_hash);
+                self.failed_send_request_settlement(
+                    link_id,
+                    response.intent(),
+                    SendRequestFailure::Culled,
+                )
+            }
         }
     }
 
@@ -87,18 +93,22 @@ impl<S: StorageLayout> EngineState<S> {
             }
             ReceiptKind::SendToLink(_) => Settlement::SendToLink(Err(SendToLinkFailure::Timeout)),
             ReceiptKind::SendRequest { link_id, response } => {
-                let request = RequestId::of_packet(&expired.packet_hash);
-                if self.incoming_assemblies.correlation(&link_id)
-                    == Some(AssemblyCorrelation::Response(request))
-                {
-                    self.incoming_assemblies.clear(&link_id);
-                }
+                self.retire_response_assembly(link_id, expired.packet_hash);
                 self.failed_send_request_settlement(
                     link_id,
                     response.intent(),
                     SendRequestFailure::Timeout,
                 )
             }
+        }
+    }
+
+    fn retire_response_assembly(&mut self, link_id: LinkId, packet_hash: PacketHash) {
+        let request = RequestId::of_packet(&packet_hash);
+        if self.incoming_assemblies.correlation(&link_id)
+            == Some(AssemblyCorrelation::Response(request))
+        {
+            self.incoming_assemblies.clear(&link_id);
         }
     }
 }

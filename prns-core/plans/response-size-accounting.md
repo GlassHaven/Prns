@@ -185,6 +185,12 @@ link and request ID. Both runtimes then complete a new three-segment response
 on the other link and reuse the original links. No persistent storage column or
 capacity changes; expired receipt results carry the already-stored packet hash.
 
+The [receipt-pressure scenarios](../../validation/simulation/measurements/receipt-pressure-response-recovery.md)
+also reproduce between-segment assembly retention when a newer request displaces
+the old receipt. Culling now uses the same link/request-scoped assembly cleanup
+as expiry. A one-receipt simulator profile proves that the replacement request
+still completes, and another link can subsequently use the single assembly slot.
+
 Extend the delivered-value byte-counting contract to segmented Resource forms.
 Separate early allocation protection from final delivered-payload validation;
 loosening an advertisement check alone would admit oversized legacy raw bodies.
@@ -205,9 +211,9 @@ Preserve Remote Control's fixed response bounds and stock-Reticulum wire
 interoperability. Audit reusable native/Node.js/WASM client semantics before
 publishing a changed limit contract; do not introduce a transport-specific fix.
 
-Request expiry between segments is covered. Still include assembly cleanup when
-a continuation is refused before admission, and audit receipt culling separately;
-the split-failure prerequisite handles admitted transfers only. Segment counts and request correlation are now stable across the
+Request expiry and receipt culling between segments are covered. Still include
+assembly cleanup when a continuation is refused before admission, and audit
+culling during an active transfer separately. Segment counts and request correlation are now stable across the
 chain; validate advertised stream totals before loosening admission. Arbitration
 between a whole response and an overlapping split response naming the same request
 is not addressed by the split-chain ownership checks.

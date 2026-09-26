@@ -654,7 +654,7 @@ impl<S: StorageLayout> EngineState<S> {
             timeout_at: InstantMillis(now.0.saturating_add(timeout_ms)),
         });
         if let Some(culled) = culled {
-            let settlement = self.culled_settlement(culled.kind);
+            let settlement = self.culled_settlement(culled);
             crate::engine::settle(sink, culled.command_id, settlement);
         }
         crate::engine::WakeSchedules {

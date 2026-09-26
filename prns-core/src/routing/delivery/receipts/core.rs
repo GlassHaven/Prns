@@ -132,6 +132,7 @@ pub struct ExpiredReceipt {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CulledReceipt {
+    pub packet_hash: PacketHash,
     pub command_id: CommandId,
     pub kind: ReceiptKind,
 }
@@ -193,6 +194,7 @@ impl<C: ReceiptTable> Receipts<C> {
         match pushed {
             Ok(_) => culled,
             Err(TrackReceiptError::TableFull) => Some(CulledReceipt {
+                packet_hash: receipt.packet_hash,
                 command_id: receipt.command_id,
                 kind: receipt.kind,
             }),
@@ -208,6 +210,7 @@ impl<C: ReceiptTable> Receipts<C> {
             .min_by_key(|(_, sent_at)| **sent_at)
             .map(|(index, _)| index)?;
         let culled = CulledReceipt {
+            packet_hash: *self.table.packet_hashes().get(index)?,
             command_id: *self.table.command_ids().get(index)?,
             kind: *self.table.kinds().get(index)?,
         };
@@ -548,6 +551,7 @@ mod tests {
         assert_eq!(
             receipts.track(outstanding(4, 4, key, 400, 7_000)),
             Some(CulledReceipt {
+                packet_hash: PacketHash::new([2; 32]),
                 command_id: CommandId(2),
                 kind: ReceiptKind::SendSinglePacket {
                     route_evidence: None,

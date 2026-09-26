@@ -10,13 +10,14 @@ use personal_rns::storage::{DisplayedStorageLimits, GrowableHeap, StorageCapacit
 pub(super) const TRANSFER_WINDOW_BYTES: usize = 512;
 const PARTS: usize = max_part_count(TRANSFER_WINDOW_BYTES);
 
-// All non-Resource tables retain the host fixture's storage. A single fixed
-// transfer/assembly slot forces segmentation and makes sequential reuse observable.
-pub(super) struct SegmentedStorage;
+// Single transfer/assembly slots expose reuse; receipt capacity is explicit so
+// pressure scenarios can displace a request without changing shipping profiles.
+pub(super) struct SegmentedStorage<const RECEIPTS: usize>;
 
-impl StorageLayout for SegmentedStorage {
+impl<const RECEIPTS: usize> StorageLayout for SegmentedStorage<RECEIPTS> {
     const LIMITS: DisplayedStorageLimits = DisplayedStorageLimits {
         resource_transfer_bytes: StorageCapacity::Fixed(TRANSFER_WINDOW_BYTES),
+        receipts: StorageCapacity::Fixed(RECEIPTS),
         ..GrowableHeap::LIMITS
     };
 
@@ -31,7 +32,7 @@ impl StorageLayout for SegmentedStorage {
     type UpstreamAppDestinations = <GrowableHeap as StorageLayout>::UpstreamAppDestinations;
     type HeldIdentities = <GrowableHeap as StorageLayout>::HeldIdentities;
     type SelfRatchets = <GrowableHeap as StorageLayout>::SelfRatchets;
-    type Receipts = <GrowableHeap as StorageLayout>::Receipts;
+    type Receipts = FixedReceiptTable<RECEIPTS>;
     type PacketHashes = <GrowableHeap as StorageLayout>::PacketHashes;
     type Blackholes = <GrowableHeap as StorageLayout>::Blackholes;
     type ReverseRoutes = <GrowableHeap as StorageLayout>::ReverseRoutes;
@@ -60,3 +61,4 @@ impl StorageLayout for SegmentedStorage {
     type Channels = <GrowableHeap as StorageLayout>::Channels;
     type DirtyInterfaces = <GrowableHeap as StorageLayout>::DirtyInterfaces;
 }
+use personal_rns::routing::delivery::receipts::FixedReceiptTable;

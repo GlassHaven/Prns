@@ -9,6 +9,73 @@ use crate::units::ByteLimit;
 
 const HASH: PacketHash = PacketHash::new([0x41; 32]);
 
+#[test]
+fn receipt_pressure_returns_the_displaced_identity_and_preserves_the_new_owner() {
+    let owner = LinkId::new([1; 16]);
+    let old = receipt(
+        owner,
+        CommandId(7),
+        RequestReceiptPolicy::ApplicationMaximum(11),
+    );
+    let new = OutstandingReceipt {
+        packet_hash: PacketHash::new([0x51; 32]),
+        command_id: CommandId(8),
+        sent_at: InstantMillis(200),
+        timeout_at: InstantMillis(9_000),
+        ..old
+    };
+    let mut receipts = Receipts::<FixedReceiptTable<1>>::default();
+    assert_eq!(receipts.track(old), None);
+    assert_eq!(
+        receipts.track(new),
+        Some(CulledReceipt {
+            packet_hash: old.packet_hash,
+            command_id: old.command_id,
+            kind: old.kind,
+        })
+    );
+    assert_eq!(
+        view(&receipts, &owner, RequestId::of_packet(&old.packet_hash)),
+        RequestView {
+            pending: false,
+            command: None,
+            limit: None,
+            intent: None,
+            deadline: None,
+        }
+    );
+    assert_eq!(
+        view(&receipts, &owner, RequestId::of_packet(&new.packet_hash)),
+        RequestView {
+            pending: true,
+            command: Some(new.command_id),
+            limit: Some(ByteLimit::Maximum(11)),
+            intent: Some(SendRequestIntent::Application),
+            deadline: Some(new.timeout_at),
+        }
+    );
+    assert_eq!(
+        receipts.pop_expired(new.timeout_at),
+        Some(ExpiredReceipt {
+            packet_hash: new.packet_hash,
+            command_id: new.command_id,
+            kind: new.kind,
+        })
+    );
+    assert!(receipts.is_empty());
+
+    let mut zero = Receipts::<FixedReceiptTable<0>>::default();
+    assert_eq!(
+        zero.track(new),
+        Some(CulledReceipt {
+            packet_hash: new.packet_hash,
+            command_id: new.command_id,
+            kind: new.kind,
+        })
+    );
+    assert!(zero.is_empty());
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct RequestView {
     pending: bool,
