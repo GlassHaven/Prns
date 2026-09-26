@@ -12,7 +12,7 @@ use personal_rns::runtime::{
     CryptoPoolConfig, Diagnostic, NoPersistence, NoRemoteControlHostControls,
     PreConfiguredDestination, PrnsEvent, PrnsNode, PrnsNodeHandle, PrnsNodeRecipe,
 };
-use personal_rns::storage::GrowableHeap;
+use personal_rns::storage::{GrowableHeap, StorageLayout};
 use prns_interfaces_tokio::bluetooth_auto::BluetoothAuto;
 use prns_simulation::ble::VirtualBleLab;
 use tokio::sync::oneshot;
@@ -20,11 +20,13 @@ use tokio::sync::oneshot;
 use super::clock::EmbassyTasks;
 use super::echo::{self, Echo};
 use super::fixture::{backend, MAX_PEERS};
+use super::response_trace::ResponseTrace;
 
 const CLOSURE_CAPACITY: usize = 4;
 
 pub(super) struct TokioNode {
     pub handle: PrnsNodeHandle,
+    pub responses: ResponseTrace,
     closed: Rc<RefCell<Vec<(LinkId, LinkClosedReason)>>>,
 }
 
@@ -60,6 +62,29 @@ pub(super) fn with_endpoints<R: RequestEndpointSet<NoRemoteControlHostControls> 
     destinations: [PreConfiguredDestination<'static>; 1],
     endpoints: R,
 ) -> oneshot::Receiver<TokioNode> {
+    with_storage(
+        tasks,
+        lab,
+        address,
+        endpoint,
+        destinations,
+        endpoints,
+        GrowableHeap,
+    )
+}
+
+pub(super) fn with_storage<
+    R: RequestEndpointSet<NoRemoteControlHostControls> + 'static,
+    S: StorageLayout + 'static,
+>(
+    tasks: &mut EmbassyTasks<'_>,
+    lab: &VirtualBleLab,
+    address: u8,
+    endpoint: Endpoint,
+    destinations: [PreConfiguredDestination<'static>; 1],
+    endpoints: R,
+    storage: S,
+) -> oneshot::Receiver<TokioNode> {
     let supervisor = BluetoothAuto::<_, MAX_PEERS>::new(
         backend(lab, address),
         BleIdentity::new([address; 16]),
@@ -72,19 +97,22 @@ pub(super) fn with_endpoints<R: RequestEndpointSet<NoRemoteControlHostControls> 
     let (ready, handle) = oneshot::channel();
     let closed = Rc::new(RefCell::new(Vec::with_capacity(CLOSURE_CAPACITY)));
     let closed_events = closed.clone();
+    let responses = ResponseTrace::new();
+    let response_events = responses.clone();
     tasks.insert(async move {
         let node = PrnsNode::new(PrnsNodeRecipe {
             transport_identity: None,
             remote_control: RemoteControlService::Unavailable,
             pre_configured_destinations: destinations,
             app_state: NoRemoteControlHostControls,
-            storage: GrowableHeap,
+            storage,
             request_endpoints: endpoints,
             interfaces: move |handle: &PrnsNodeHandle| {
                 let _attached = handle.supervise(supervisor);
             },
             persistence: NoPersistence,
             on_event: move |event, _| {
+                response_events.observe(&event);
                 if let PrnsEvent::Diagnostic(Diagnostic::LinkClosed { link_id, reason }) = event {
                     let mut events = closed_events.borrow_mut();
                     assert!(events.len() < CLOSURE_CAPACITY, "bounded closure inventory");
@@ -96,6 +124,7 @@ pub(super) fn with_endpoints<R: RequestEndpointSet<NoRemoteControlHostControls> 
         assert!(ready
             .send(TokioNode {
                 handle: node.handle(),
+                responses,
                 closed
             })
             .is_ok());

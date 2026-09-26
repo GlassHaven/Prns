@@ -158,6 +158,13 @@ passing simulator suites are separate regression evidence. See
 
 ## Remaining segmented scope
 
+The mixed-runtime simulator now exercises successful three-segment static-file
+responses, zero-budget refusal and reuse through both runtimes with a test-only
+512-byte transfer window. Raw journals and buffered request futures are checked
+separately. These scenarios do not yet enforce exact cumulative value budgets or
+inject inconsistent-peer/mid-transfer faults; see
+[simulation evidence](../../validation/simulation/measurements/segmented-resource-simulation.md).
+
 Extend the delivered-value byte-counting contract to segmented Resource forms.
 Separate early allocation protection from final delivered-payload validation;
 loosening an advertisement check alone would admit oversized legacy raw bodies.

@@ -1,0 +1,197 @@
+use super::*;
+use crate::response_trace::{ResponseEvent, ResponseTrace};
+use personal_rns::engine::{
+    CommandId, DeliveryEvidence, PacketReceiptDelivered, PrnsCommand, SendRequest, SendRequestData,
+};
+
+mod storage;
+use storage::{SegmentedStorage, TRANSFER_WINDOW_BYTES};
+
+const _: () = assert!(TRANSFER_BYTES > 2 * TRANSFER_WINDOW_BYTES);
+
+enum AdmissionCase {
+    RefusedAtOffer,
+    ThreeSegments,
+}
+
+fn journaled_request(
+    tasks: &mut EmbassyTasks<'_>,
+    handle: &impl PrnsNodeApi,
+    trace: ResponseTrace,
+    link: LinkId,
+    case: &AdmissionCase,
+) -> (CommandId, Settlement) {
+    assert!(trace.is_empty());
+    let started = tasks.snapshot().tick;
+    let command = handle
+        .issue(PrnsCommand::SendRequest(SendRequest {
+            link_id: link,
+            path_hash: RequestPathHash::of(files::FILE_PATH),
+            data: SendRequestData::from_slice(&(TRANSFER_BYTES as u16).to_be_bytes()).unwrap(),
+            response_timeout: RequestResponseTimeout::LinkDefault,
+            maximum_response_bytes: match case {
+                AdmissionCase::RefusedAtOffer => ByteLimit::Maximum(0),
+                AdmissionCase::ThreeSegments => ByteLimit::Unlimited,
+            },
+        }))
+        .unwrap();
+    let events = complete(tasks, async move { trace.completed().await });
+    let elapsed = RttMillis::new(tasks.snapshot().tick.get() - started.get());
+    let result = match case {
+        AdmissionCase::RefusedAtOffer => Err(SendRequestFailure::ResponseTooLarge),
+        AdmissionCase::ThreeSegments => Ok(PacketReceiptDelivered {
+            rtt: elapsed,
+            evidence: DeliveryEvidence::Response,
+        }),
+    };
+    let expected_terminal = ResponseEvent::Settled { command, result };
+    match case {
+        AdmissionCase::RefusedAtOffer => assert_eq!(events, [expected_terminal]),
+        AdmissionCase::ThreeSegments => {
+            assert_eq!(events.len(), 4, "three segments and exactly one settlement");
+            assert_eq!(events.last(), Some(&expected_terminal));
+            let mut bytes = Vec::new();
+            let mut positions = Vec::new();
+            for event in &events {
+                if let ResponseEvent::Segment {
+                    link,
+                    request,
+                    index,
+                    total,
+                    bytes: part,
+                } = event
+                {
+                    assert!(part.len() <= TRANSFER_WINDOW_BYTES);
+                    positions.push((*link, *request, *index, *total));
+                    bytes.extend_from_slice(part);
+                }
+            }
+            assert_eq!(positions.len(), 3);
+            let request = positions[0].1;
+            assert_eq!(
+                positions,
+                [
+                    (link, request, 1, 3),
+                    (link, request, 2, 3),
+                    (link, request, 3, 3)
+                ]
+            );
+            assert_eq!(bytes, files::FILE_BYTES[..TRANSFER_BYTES]);
+        }
+    }
+    (command, Settlement::SendRequest(result))
+}
+
+fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
+    let clock = ClockLease::acquire();
+    let lab = VirtualBleLab::new(
+        BleMediumConfig::new(TopologyConfig::FullyConnected, 2, 4, 4, TRACE_CAPACITY).unwrap(),
+    );
+    let mut driver =
+        ManualTimeDriver::new(ManualMedium::Ble(lab.clone()), Duration::from_millis(1)).unwrap();
+    let mut tasks = EmbassyTasks::new(&mut driver, clock);
+    let destination =
+        |address| destination_with_limit(address, ByteLimit::Maximum(REQUEST_BYTES as u64));
+    let embedded = ResourceNode::with_storage(
+        &mut tasks,
+        &lab,
+        EMBASSY_ADDRESS,
+        embedded_endpoint,
+        [destination(EMBASSY_ADDRESS)],
+        personal_rns::request_endpoints![Echo, files::FileReply],
+        SegmentedStorage,
+    );
+    let mut desktop = tokio_node::with_storage(
+        &mut tasks,
+        &lab,
+        TOKIO_ADDRESS,
+        desktop_endpoint,
+        [destination(TOKIO_ADDRESS)],
+        personal_rns::request_endpoints![Echo, files::FileReply],
+        SegmentedStorage,
+    );
+    assert!(tasks.settle() > 0);
+    let desktop = desktop.try_recv().unwrap();
+    converge(&mut tasks, &lab, &embedded, &desktop.handle);
+    let links = establish_pair(&mut tasks, &embedded, &desktop.handle);
+    for case in [AdmissionCase::RefusedAtOffer, AdmissionCase::ThreeSegments] {
+        journaled_request(
+            &mut tasks,
+            &desktop.handle,
+            desktop.responses.clone(),
+            links[1],
+            &case,
+        );
+        let responder = match case {
+            AdmissionCase::RefusedAtOffer => Settlement::Respond(Err(RespondFailure::Resource(
+                SendResourceFailure::RejectedByPeer,
+            ))),
+            AdmissionCase::ThreeSegments => Settlement::Respond(Ok(())),
+        };
+        assert_eq!(response_settlements(&embedded), [responder]);
+        let expected = journaled_request(
+            &mut tasks,
+            &embedded.handle,
+            embedded.responses.clone(),
+            links[0],
+            &case,
+        );
+        assert_eq!(embedded.take_settled(), [expected]);
+    }
+    for _ in 0..2 {
+        let handle = desktop.handle.clone();
+        let (result, elapsed) = complete(&mut tasks, async move {
+            measured(handle.request(
+                links[1],
+                RequestPathHash::of(files::FILE_PATH),
+                &(TRANSFER_BYTES as u16).to_be_bytes(),
+            ))
+            .await
+        });
+        assert_eq!(
+            result,
+            Ok((files::FILE_BYTES[..TRANSFER_BYTES].to_vec(), elapsed))
+        );
+        assert_eq!(
+            response_settlements(&embedded),
+            [Settlement::Respond(Ok(()))]
+        );
+        let handle = embedded.handle;
+        let (result, elapsed) = complete(&mut tasks, async move {
+            measured(handle.request(
+                links[0],
+                RequestPathHash::of(files::FILE_PATH),
+                &(TRANSFER_BYTES as u16).to_be_bytes(),
+            ))
+            .await
+        });
+        assert_eq!(
+            result.map(|(bytes, rtt)| (bytes.as_slice().to_vec(), rtt)),
+            Ok((files::FILE_BYTES[..TRANSFER_BYTES].to_vec(), elapsed))
+        );
+        assert!(response_settlements(&embedded).is_empty());
+    }
+    assert!(embedded.take_closed().is_empty());
+    assert!(desktop.take_closed().is_empty());
+    assert!(embedded.take_received().is_empty());
+    assert!(embedded.responses.is_empty());
+    assert!(desktop.responses.is_empty());
+    drop(tasks);
+    assert_radio_cleanup(&lab);
+}
+
+#[test]
+fn esp32_and_apple_nodes_reassemble_segmented_responses() {
+    scenario(
+        Endpoint::Esp32(Esp32Host::Esp32),
+        Endpoint::CoreBluetooth(AppleHost::MacOs),
+    );
+}
+
+#[test]
+fn nrf52_and_bluez_nodes_reassemble_segmented_responses() {
+    scenario(
+        Endpoint::Nrf52(Nrf52Host::Nrf52),
+        Endpoint::BlueZ(BlueZHost::Linux),
+    );
+}

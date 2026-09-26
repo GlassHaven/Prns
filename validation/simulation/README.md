@@ -513,3 +513,32 @@ value budget refuses the body. Further requests reuse the links. The host-only
 fixture enables Embassy's existing `large-static-responses` feature; no shipping
 capacity changes. These scenarios do not exercise Tokio's streaming-file
 convenience API or its background compression workers.
+
+### Segmented responses through both runtimes
+
+Two further `embassy_ble` scenarios force a 1,200-byte static file through a
+test-only 512-byte Resource transfer window, with one incoming transfer, one
+outgoing transfer and one assembly slot per direction. Other tables retain the
+existing host storage. Both ESP32/Apple and nRF52/BlueZ endpoint pairings exercise
+the real Tokio and Embassy nodes, shared segmentation logic and virtual BLE link.
+
+Raw request journals show exactly three ordered segments on the expected link,
+one consistent request ID, the complete literal file and exactly one terminal
+settlement whose RTT matches controlled elapsed time. Zero-budget offers fail
+with `ResponseTooLarge` without a whole response or any segments. Subsequent
+raw and buffered requests succeed on the same links, reusing the single transfer
+slot. Both radios detach once and the bounded BLE trace remains complete.
+
+The private raw-response observer retains at most eight events, each payload
+bounded to 2 KiB, and wakes through notifications rather than polling in a loop.
+Normal request futures still use each production runtime's completion path; the
+observer does not replace delivery or reconstruct their returned values.
+
+No production behavior, capacities or wire formats change. This establishes
+successful segmentation, early refusal and reuse, not mid-transfer fault
+injection or cumulative response-value accounting. Inconsistent-peer cases
+remain core-engine reproductions. See [coverage and verification](measurements/segmented-resource-simulation.md).
+
+```console
+cargo test --locked -p prns-simulation --features controlled-time --test embassy_ble segmented
+```

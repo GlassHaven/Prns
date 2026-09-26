@@ -23,6 +23,7 @@ mod interop;
 mod node;
 mod packet_limits;
 mod resources;
+mod response_trace;
 mod tokio_node;
 mod traffic;
 use clock::{ClockLease, CompletionBudget, EmbassyTasks};

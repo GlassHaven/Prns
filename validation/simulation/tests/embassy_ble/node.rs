@@ -17,7 +17,7 @@ use personal_rns::runtime::{
     Diagnostic, ManuallyAttached, Message, NoPersistence, NoRemoteControlHostControls,
     PreConfiguredDestination, PrnsEvent, PrnsNodeRecipe,
 };
-use personal_rns::storage::GrowableHeap;
+use personal_rns::storage::{GrowableHeap, StorageLayout};
 use personal_rns::wire::{DestinationHash, WireContext};
 use prns_core::entropy::EntropySource;
 use prns_interfaces_embassy::bluetooth_auto::BluetoothAutoStatus;
@@ -30,6 +30,7 @@ use prns_simulation::ble::VirtualBleLab;
 use super::clock::EmbassyTasks;
 use super::echo::{self, Echo};
 use super::fixture::{RadioFixture, RawMutex, MAX_PEERS};
+use super::response_trace::ResponseTrace;
 
 const COMMAND_CAPACITY: usize = 4;
 const EVENT_CAPACITY: usize = 8;
@@ -78,6 +79,7 @@ pub(super) type Node = NodeFixture<PAYLOAD_BYTES, MAX_SEND_REQUEST_DATA_LEN>;
 pub(super) struct NodeFixture<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize> {
     pub handle: Handle<RESPONSE_BYTES>,
     pub status: BluetoothAutoStatus<MAX_PEERS>,
+    pub responses: ResponseTrace,
     received: Rc<RefCell<Vec<Received>>>,
     settled: Rc<RefCell<Vec<(CommandId, Settlement)>>>,
     closed: Rc<RefCell<Vec<(LinkId, LinkClosedReason)>>>,
@@ -119,6 +121,29 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
         destinations: [PreConfiguredDestination<'static>; 1],
         endpoints: R,
     ) -> Self {
+        Self::with_storage(
+            tasks,
+            lab,
+            address,
+            endpoint,
+            destinations,
+            endpoints,
+            GrowableHeap,
+        )
+    }
+
+    pub(super) fn with_storage<
+        R: RequestEndpointSet<NoRemoteControlHostControls> + 'static,
+        S: StorageLayout + 'static,
+    >(
+        tasks: &mut EmbassyTasks<'_>,
+        lab: &VirtualBleLab,
+        address: u8,
+        endpoint: Endpoint,
+        destinations: [PreConfiguredDestination<'static>; 1],
+        endpoints: R,
+        storage: S,
+    ) -> Self {
         let RadioFixture {
             supervisor,
             fleet,
@@ -149,6 +174,8 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
         let received_events = received.clone();
         let settled_events = settled.clone();
         let closed_events = closed.clone();
+        let responses = ResponseTrace::new();
+        let response_events = responses.clone();
         let entropy = Box::leak(Box::new(
             SharedRuntimeEntropy::<RawMutex, _>::try_new(TestEntropy(address)).unwrap(),
         ));
@@ -157,36 +184,39 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             remote_control: RemoteControlService::Unavailable,
             pre_configured_destinations: destinations,
             app_state: NoRemoteControlHostControls,
-            storage: GrowableHeap,
+            storage,
             request_endpoints: endpoints,
             interfaces: ManuallyAttached,
             persistence: NoPersistence,
-            on_event: move |event, _: &NoRemoteControlHostControls| match event {
-                PrnsEvent::Diagnostic(Diagnostic::LinkClosed { link_id, reason }) => {
-                    let mut events = closed_events.borrow_mut();
-                    assert!(events.len() < EVENT_CAPACITY, "bounded closure inventory");
-                    events.push((link_id, reason));
+            on_event: move |event, _: &NoRemoteControlHostControls| {
+                response_events.observe(&event);
+                match event {
+                    PrnsEvent::Diagnostic(Diagnostic::LinkClosed { link_id, reason }) => {
+                        let mut events = closed_events.borrow_mut();
+                        assert!(events.len() < EVENT_CAPACITY, "bounded closure inventory");
+                        events.push((link_id, reason));
+                    }
+                    PrnsEvent::Message(Message::Delivered(Delivery::Plain(delivery))) => {
+                        let mut events = received_events.borrow_mut();
+                        assert!(events.len() < EVENT_CAPACITY, "bounded delivery inventory");
+                        events.push(Received {
+                            destination: delivery.destination,
+                            source: delivery.source_interface,
+                            context: delivery.context,
+                            arrived_at: delivery.arrived_at,
+                            payload: delivery.payload.to_vec(),
+                        });
+                    }
+                    PrnsEvent::Diagnostic(Diagnostic::CommandSettled { id, settlement }) => {
+                        let mut events = settled_events.borrow_mut();
+                        assert!(
+                            events.len() < EVENT_CAPACITY,
+                            "bounded settlement inventory"
+                        );
+                        events.push((id, settlement));
+                    }
+                    _ => {}
                 }
-                PrnsEvent::Message(Message::Delivered(Delivery::Plain(delivery))) => {
-                    let mut events = received_events.borrow_mut();
-                    assert!(events.len() < EVENT_CAPACITY, "bounded delivery inventory");
-                    events.push(Received {
-                        destination: delivery.destination,
-                        source: delivery.source_interface,
-                        context: delivery.context,
-                        arrived_at: delivery.arrived_at,
-                        payload: delivery.payload.to_vec(),
-                    });
-                }
-                PrnsEvent::Diagnostic(Diagnostic::CommandSettled { id, settlement }) => {
-                    let mut events = settled_events.borrow_mut();
-                    assert!(
-                        events.len() < EVENT_CAPACITY,
-                        "bounded settlement inventory"
-                    );
-                    events.push((id, settlement));
-                }
-                _ => {}
             },
         };
         let node: PrnsNode<
@@ -216,6 +246,7 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
         Self {
             handle,
             status,
+            responses,
             received,
             settled,
             closed,

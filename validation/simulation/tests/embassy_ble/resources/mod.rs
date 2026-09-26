@@ -30,6 +30,7 @@ use super::node::NodeFixture;
 use super::{tick, tokio_node};
 
 mod files;
+mod segmented;
 
 const REQUEST_BYTES: usize = 2048;
 const RESPONSE_BYTES: usize = 2048;
@@ -285,6 +286,10 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint, case: Respo
     assert!(embedded.take_closed().is_empty());
     assert!(desktop.take_closed().is_empty());
     drop(tasks);
+    assert_radio_cleanup(&lab);
+}
+
+fn assert_radio_cleanup(lab: &VirtualBleLab) {
     assert_eq!(lab.active_connection_count(), 0);
     let trace = lab.trace();
     assert_eq!(trace.discarded_events, 0);

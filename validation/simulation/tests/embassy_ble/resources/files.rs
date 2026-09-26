@@ -1,10 +1,10 @@
 use super::*;
 use personal_rns::engine::{PrnsCommand, Respond, RespondPayload};
 
-const FILE_PATH: &str = "/simulation/file-reply";
+pub(super) const FILE_PATH: &str = "/simulation/file-reply";
 // A recognized response-envelope header for an unrelated request is still
 // literal file content. The receiver must not interpret or remove its prefix.
-const FILE_BYTES: [u8; RESPONSE_BYTES] = {
+pub(super) const FILE_BYTES: [u8; RESPONSE_BYTES] = {
     let mut bytes = PAYLOAD;
     bytes[0] = 0x92;
     bytes[1] = 0xC4;
