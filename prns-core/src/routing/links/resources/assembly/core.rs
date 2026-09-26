@@ -73,9 +73,22 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
         }
     }
 
-    pub fn advance(&mut self, link_id: &LinkId, segment_bytes: u64) -> Option<AssemblyProgress> {
+    /// Commit only the next segment of the named chain, even if another transfer
+    /// was admitted or completed since this segment's admission.
+    pub fn advance(
+        &mut self,
+        link_id: &LinkId,
+        original_hash: &ResourceHash,
+        segment_index: u64,
+        total_segments: u64,
+        segment_bytes: u64,
+    ) -> Option<AssemblyProgress> {
+        if self.fit(link_id, original_hash, segment_index, total_segments) == SegmentFit::Unexpected
+        {
+            return None;
+        }
         let index = self.index_of(link_id)?;
-        let segments_received = self.table.segments_received()[index] + 1;
+        let segments_received = segment_index;
         let received_total = self.table.received_totals()[index].saturating_add(segment_bytes);
         self.table
             .set_progress(index, segments_received, received_total);
@@ -232,15 +245,15 @@ mod tests {
         let mut assemblies = table();
         assemblies.begin(link(1), hash(0xA), 3);
         assert_eq!(
-            assemblies.advance(&link(1), 100),
+            assemblies.advance(&link(1), &hash(0xA), 1, 3, 100),
             Some(AssemblyProgress::Assembling)
         );
         assert_eq!(
-            assemblies.advance(&link(1), 100),
+            assemblies.advance(&link(1), &hash(0xA), 2, 3, 100),
             Some(AssemblyProgress::Assembling)
         );
         assert_eq!(
-            assemblies.advance(&link(1), 50),
+            assemblies.advance(&link(1), &hash(0xA), 3, 3, 50),
             Some(AssemblyProgress::Complete {
                 total_size_bytes: 250
             })
@@ -251,7 +264,7 @@ mod tests {
     fn fit_expects_the_next_segment_of_the_right_chain() {
         let mut assemblies = table();
         assemblies.begin(link(1), hash(0xA), 3);
-        assemblies.advance(&link(1), 100);
+        assemblies.advance(&link(1), &hash(0xA), 1, 3, 100);
         assert_eq!(
             assemblies.fit(&link(1), &hash(0xA), 2, 3),
             SegmentFit::Expected
@@ -274,15 +287,15 @@ mod tests {
     fn fit_rejects_changed_counts_and_segments_after_completion() {
         let mut assemblies = table();
         assemblies.begin(link(1), hash(0xA), 3);
-        assemblies.advance(&link(1), 100);
+        assemblies.advance(&link(1), &hash(0xA), 1, 3, 100);
         for total in [0, 1, 2, 4, u64::MAX] {
             assert_eq!(
                 assemblies.fit(&link(1), &hash(0xA), 2, total),
                 SegmentFit::Unexpected
             );
         }
-        assemblies.advance(&link(1), 100);
-        assemblies.advance(&link(1), 100);
+        assemblies.advance(&link(1), &hash(0xA), 2, 3, 100);
+        assemblies.advance(&link(1), &hash(0xA), 3, 3, 100);
         assert_eq!(
             assemblies.fit(&link(1), &hash(0xA), 4, 3),
             SegmentFit::Unexpected
@@ -325,12 +338,53 @@ mod tests {
         );
     }
 
+    proptest::proptest! {
+        #[test]
+        fn advancement_commits_only_the_exact_chain_position(
+            total in 2u64..=u64::MAX,
+            received in proptest::prelude::any::<u64>(),
+            bytes in proptest::prelude::any::<u64>(),
+        ) {
+            let next = received.wrapping_add(1);
+            for (offered_hash, offered_index, offered_total) in [
+                (hash(0xA), next, total),
+                (hash(0xB), next, total),
+                (hash(0xA), received, total),
+                (hash(0xA), next, total - 1),
+            ] {
+                let mut assemblies = table();
+                assemblies.begin(link(1), hash(0xA), total);
+                assemblies.table.set_progress(0, received, 37);
+                let matches = offered_hash == hash(0xA) && offered_index == next
+                    && offered_total == total && received < total;
+                let received_total = 37u64.saturating_add(bytes);
+                let expected = if matches {
+                    Some(if next == total {
+                        AssemblyProgress::Complete { total_size_bytes: received_total }
+                    } else {
+                        AssemblyProgress::Assembling
+                    })
+                } else { None };
+                proptest::prop_assert_eq!(assemblies.advance(
+                    &link(1), &offered_hash, offered_index, offered_total, bytes
+                ), expected);
+                proptest::prop_assert_eq!(
+                    (assemblies.original_hash(&link(1)), assemblies.table.total_segments(),
+                        assemblies.table.segments_received(), assemblies.table.received_totals()),
+                    (Some(hash(0xA)), &[total][..],
+                        &[if matches { next } else { received }][..],
+                        &[if matches { received_total } else { 37 }][..])
+                );
+            }
+        }
+    }
+
     #[test]
     fn clear_retires_the_chain() {
         let mut assemblies = table();
         assemblies.begin(link(1), hash(0xA), 3);
         assemblies.clear(&link(1));
-        assert_eq!(assemblies.advance(&link(1), 100), None);
+        assert_eq!(assemblies.advance(&link(1), &hash(0xA), 1, 3, 100), None);
         assert_eq!(assemblies.original_hash(&link(1)), None);
     }
 

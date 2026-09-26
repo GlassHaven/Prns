@@ -121,6 +121,24 @@ cancellations leave the other request able to complete. This is cross-link
 isolation, not yet same-link split-chain correlation or cumulative accounting.
 See [verification evidence](../../validation/simulation/measurements/response-link-ownership.md).
 
+## Completed split-position ownership prerequisite
+
+Each admitted transfer now retains its offered original chain hash. Opening and
+resumed decompression verify that hash, the segment index and total count against
+the current assembly before proving or publishing bytes. A superseded transfer
+fails as `TransferCorrupt`; its cleanup cannot clear an unrelated or advanced
+assembly. Advancement itself also requires the exact named chain position.
+The original hash is a required argument to `IncomingResources::accept`, and
+`IncomingAssemblies::advance` now requires the original hash, index and count.
+There are no permissive link-only compatibility methods for either operation.
+
+This adds a 32-byte identity field to each incoming transfer state, without
+changing buffer capacities or the wire. Overlapping-chain tests cover normal
+opening, delayed decompression and cancellation, followed by exact completion of
+the replacement response. This protects assembly position; request correlation
+within one link is still a separate remaining invariant. See
+[verification evidence](../../validation/simulation/measurements/split-position-ownership.md).
+
 ## Remaining segmented scope
 
 Extend the delivered-value byte-counting contract to segmented Resource forms.
@@ -147,5 +165,7 @@ Include assembly cleanup when a request expires between segments or a continuati
 is refused before admission; the split-failure prerequisite handles admitted
 transfers only. Segment counts are now stable at admission; validate advertised
 stream totals and request correlation across the chain before loosening admission.
-Overlapping admitted chains on the same link also need conclusion-time ownership
-validation: admission checks alone do not reserve the assembly through completion.
+Conclusion now validates the retained chain position, but the assembly still
+does not bind a request ID or correlation kind across segments. In particular,
+overlapping chains naming the same request can still interfere with its receipt;
+that correlation ownership must be established before relaxing split admission.

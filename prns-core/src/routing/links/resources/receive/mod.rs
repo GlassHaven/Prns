@@ -11,6 +11,8 @@ pub mod rounds;
 #[cfg(test)]
 mod split_admission_tests;
 #[cfg(test)]
+mod split_ownership_tests;
+#[cfg(test)]
 mod split_response_failures_tests;
 #[cfg(test)]
 pub mod tests_support;

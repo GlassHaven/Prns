@@ -294,7 +294,7 @@ fn feed_inner<S: StorageLayout>(
     capture
 }
 
-fn capture_inbound_reaction(
+pub(super) fn capture_inbound_reaction(
     reaction: EngineReaction<'_, OwedWork<'_>>,
     capture: &mut InboundCapture,
     ready_opens: &mut std::collections::VecDeque<ResourceOpenCompleted<'static>>,

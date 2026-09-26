@@ -440,7 +440,10 @@ impl<S: StorageLayout> EngineState<S> {
             ),
             _ => (None, None),
         };
-        let index = match self.incoming_resources.accept(link_id, accepted) {
+        let index = match self
+            .incoming_resources
+            .accept(link_id, original_hash, accepted)
+        {
             Ok(index) => index,
             Err(
                 AcceptIncomingResourceError::TableFull

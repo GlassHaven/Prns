@@ -18,7 +18,7 @@ use crate::routing::links::request::{
 use crate::routing::links::resources::assemble_incoming::{
     open_transfer, verify_and_prove, OpenTransferError,
 };
-use crate::routing::links::resources::assembly::AssemblyProgress;
+use crate::routing::links::resources::assembly::{AssemblyProgress, SegmentFit};
 use crate::routing::links::resources::control::{write_proof_plaintext, PROOF_PLAINTEXT_LEN};
 #[cfg(feature = "resource-work-offload")]
 use crate::routing::links::resources::streamed_open::ResourceOpenLane;
@@ -49,6 +49,16 @@ impl<S: StorageLayout> EngineState<S> {
             return ConcludeResourceOutcome::NotTracked;
         };
         let state = *self.incoming_resources.state(index);
+        if state.total_segments > 1
+            && self.split_segment_fit(link_id, &state) == SegmentFit::Unexpected
+        {
+            return self.fail_incoming_resource(
+                link_id,
+                hash,
+                ResourceFailureCause::TransferCorrupt,
+                sink,
+            );
+        }
         let Some(LinkPhase::Active {
             key,
             mtu,
@@ -178,10 +188,7 @@ impl<S: StorageLayout> EngineState<S> {
         }
 
         let multi_segment = state.total_segments > 1;
-        let original_hash = self
-            .incoming_assemblies
-            .original_hash(link_id)
-            .unwrap_or(*hash);
+        let original_hash = state.original_hash;
 
         let delivery = {
             let (transfer, streamed) = self
@@ -276,6 +283,8 @@ impl<S: StorageLayout> EngineState<S> {
                         link_id,
                         ConcludedSegment {
                             original_hash,
+                            segment_index: state.segment_index,
+                            total_segments: state.total_segments,
                             correlation: state.correlation,
                             segment_bytes,
                         },
@@ -300,10 +309,18 @@ impl<S: StorageLayout> EngineState<S> {
     ) {
         let ConcludedSegment {
             original_hash,
+            segment_index,
+            total_segments,
             correlation,
             segment_bytes,
         } = segment;
-        match self.incoming_assemblies.advance(link_id, segment_bytes) {
+        match self.incoming_assemblies.advance(
+            link_id,
+            &original_hash,
+            segment_index,
+            total_segments,
+            segment_bytes,
+        ) {
             Some(AssemblyProgress::Complete { total_size_bytes }) => {
                 let settled = match correlation {
                     ResourceCorrelation::Response(id) => {
@@ -383,7 +400,9 @@ impl<S: StorageLayout> EngineState<S> {
         link_id: &LinkId,
         state: &IncomingResourceState,
     ) -> Option<CommandId> {
-        if state.total_segments > 1 {
+        if state.total_segments > 1
+            && self.split_segment_fit(link_id, state) == SegmentFit::Expected
+        {
             self.incoming_assemblies.clear(link_id);
         }
         match state.correlation {
@@ -393,6 +412,15 @@ impl<S: StorageLayout> EngineState<S> {
                 .map(|proven| proven.command_id),
             ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
         }
+    }
+
+    fn split_segment_fit(&self, link_id: &LinkId, state: &IncomingResourceState) -> SegmentFit {
+        self.incoming_assemblies.fit(
+            link_id,
+            &state.original_hash,
+            state.segment_index,
+            state.total_segments,
+        )
     }
 
     /// Verified exactly like an uncompressed assembly.
@@ -415,6 +443,19 @@ impl<S: StorageLayout> EngineState<S> {
         };
         let state = *self.incoming_resources.state(index);
         if state.status != IncomingResourceStatus::AwaitingDecompression {
+            return wake_schedule_changes;
+        }
+        if state.total_segments > 1
+            && self.split_segment_fit(&link_id, &state) == SegmentFit::Unexpected
+        {
+            self.fail_incoming_resource(
+                &link_id,
+                &hash,
+                ResourceFailureCause::TransferCorrupt,
+                sink,
+            );
+            wake_schedule_changes.resource_deadlines = self.resource_deadlines_wake();
+            wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
             return wake_schedule_changes;
         }
         self.retire_incoming_resource(&link_id, &hash);
@@ -501,10 +542,7 @@ impl<S: StorageLayout> EngineState<S> {
         wake_schedule_changes.link_deadlines = self.link_deadlines_wake();
 
         if is_split {
-            let original_hash = self
-                .incoming_assemblies
-                .original_hash(&link_id)
-                .unwrap_or(hash);
+            let original_hash = state.original_hash;
             if let Err(cause) = deliver_split_segment(
                 &self.receipts,
                 VerifiedSplitSegment {
@@ -526,6 +564,8 @@ impl<S: StorageLayout> EngineState<S> {
                 &link_id,
                 ConcludedSegment {
                     original_hash,
+                    segment_index: state.segment_index,
+                    total_segments: state.total_segments,
                     correlation: state.correlation,
                     segment_bytes: plaintext.len() as u64,
                 },
@@ -748,6 +788,8 @@ fn request_is_permitted<C: crate::routing::request_handlers::RequestHandlerTable
 
 struct ConcludedSegment {
     original_hash: ResourceHash,
+    segment_index: u64,
+    total_segments: u64,
     correlation: ResourceCorrelation,
     segment_bytes: u64,
 }

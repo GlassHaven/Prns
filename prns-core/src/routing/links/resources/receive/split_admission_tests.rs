@@ -212,10 +212,13 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
             }
             QueuedChain::Advanced => {
                 assert_eq!(
-                    response
-                        .receiver
-                        .incoming_assemblies
-                        .advance(&link_id(), SEGMENT_BYTES as u64),
+                    response.receiver.incoming_assemblies.advance(
+                        &link_id(),
+                        &response.original,
+                        2,
+                        2,
+                        SEGMENT_BYTES as u64
+                    ),
                     Some(AssemblyProgress::Complete {
                         total_size_bytes: (2 * SEGMENT_BYTES) as u64
                     })
@@ -227,10 +230,13 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                     .receiver
                     .incoming_assemblies
                     .begin(link_id(), response.original, 3);
-                response
-                    .receiver
-                    .incoming_assemblies
-                    .advance(&link_id(), SEGMENT_BYTES as u64);
+                response.receiver.incoming_assemblies.advance(
+                    &link_id(),
+                    &response.original,
+                    1,
+                    3,
+                    SEGMENT_BYTES as u64,
+                );
                 Some(response.original)
             }
         };
