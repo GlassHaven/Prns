@@ -39,9 +39,56 @@ async fn pending<F: Future>(mut future: Pin<&mut F>) {
 }
 
 async fn passes(gate: &WireGate, frame: &[u8]) {
-    tokio::time::timeout(WAIT_BUDGET, gate.before_send(frame))
-        .await
-        .unwrap();
+    assert_eq!(
+        tokio::time::timeout(WAIT_BUDGET, gate.before_send(frame))
+            .await
+            .unwrap(),
+        Disposition::Forward
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn loss_is_header_scoped_bounded_and_does_not_block_other_sends() {
+    let gate = WireGate::new();
+    let header = advertisement(LinkId::new([1; 16]));
+    let bytes = frame(header);
+    let started = tokio::time::Instant::now();
+    gate.lose_after(header, 1, NonZeroUsize::new(2).unwrap());
+    passes(&gate, &bytes).await;
+    for _ in 0..2 {
+        passes(&gate, &[]).await;
+        passes(&gate, &frame(advertisement(LinkId::new([2; 16])))).await;
+        passes(
+            &gate,
+            &frame(WirePacketHeader {
+                context: personal_rns::wire::WireContext::KeepAlive,
+                ..header
+            }),
+        )
+        .await;
+        assert_eq!(
+            tokio::time::timeout(WAIT_BUDGET, gate.before_send(&bytes))
+                .await
+                .unwrap(),
+            Disposition::Drop
+        );
+    }
+    assert_eq!(gate.stop_loss(), 2);
+    assert!(gate.is_idle());
+    passes(&gate, &bytes).await;
+    gate.lose_after(header, 0, NonZeroUsize::MIN);
+    assert_eq!(gate.stop_loss(), 0);
+    assert_eq!(started.elapsed(), Duration::ZERO);
+}
+
+#[tokio::test(start_paused = true)]
+#[should_panic(expected = "wire loss budget exhausted")]
+async fn exceeding_loss_budget_fails_instead_of_silently_forwarding() {
+    let gate = WireGate::new();
+    let bytes = frame(advertisement(LinkId::new([1; 16])));
+    gate.lose_after(advertisement(LinkId::new([1; 16])), 0, NonZeroUsize::MIN);
+    assert_eq!(gate.before_send(&bytes).await, Disposition::Drop);
+    gate.before_send(&bytes).await;
 }
 
 #[tokio::test(start_paused = true)]

@@ -174,8 +174,16 @@ also hold the next outgoing Resource advertisement and isolate the radios.
 Calibrated raw journals confirm the first segment precedes this cut; the real
 Tokio/Embassy buffered APIs return `Timeout` without partial success and recover
 after old-link retirement. Both bounded Embassy request slots are reusable
-concurrently. Inter-segment assembly reclamation while the original Reticulum
-link remains alive is still unproven by these scenarios.
+concurrently.
+
+The [live-link expiry scenarios](../../validation/simulation/measurements/live-link-response-expiry.md)
+drop continuation advertisements without blocking unrelated frames or retiring
+the link. They reproduced a retained assembly after request timeout: a subsequent
+request on a different link could not use the receiver's single assembly slot.
+Shared-core receipt expiry now clears only the response assembly with the same
+link and request ID. Both runtimes then complete a new three-segment response
+on the other link and reuse the original links. No persistent storage column or
+capacity changes; expired receipt results carry the already-stored packet hash.
 
 Extend the delivered-value byte-counting contract to segmented Resource forms.
 Separate early allocation protection from final delivered-payload validation;
@@ -197,9 +205,9 @@ Preserve Remote Control's fixed response bounds and stock-Reticulum wire
 interoperability. Audit reusable native/Node.js/WASM client semantics before
 publishing a changed limit contract; do not introduce a transport-specific fix.
 
-Include assembly cleanup when a request expires between segments or a continuation
-is refused before admission; the split-failure prerequisite handles admitted
-transfers only. Segment counts and request correlation are now stable across the
+Request expiry between segments is covered. Still include assembly cleanup when
+a continuation is refused before admission, and audit receipt culling separately;
+the split-failure prerequisite handles admitted transfers only. Segment counts and request correlation are now stable across the
 chain; validate advertised stream totals before loosening admission. Arbitration
 between a whole response and an overlapping split response naming the same request
 is not addressed by the split-chain ownership checks.

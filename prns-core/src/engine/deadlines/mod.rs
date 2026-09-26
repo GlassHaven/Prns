@@ -21,6 +21,9 @@ use crate::routing::warmth::WarmestOf;
 use crate::storage::{DirtyInterfaceSet, StorageLayout};
 use crate::wire::{BROADCAST_MTU, TRUNCATED_HASH_BYTE_LEN};
 
+#[cfg(test)]
+mod receipt_expiry_tests;
+
 impl<S: StorageLayout> EngineState<S> {
     pub fn settle_timed_out_receipts(
         &mut self,
@@ -28,7 +31,7 @@ impl<S: StorageLayout> EngineState<S> {
         sink: &mut impl FnMut(EngineReaction<'_>),
     ) -> WakeSchedules {
         while let Some(expired) = self.receipts.pop_expired(now) {
-            let settlement = self.timeout_settlement(expired.kind);
+            let settlement = self.timeout_settlement(expired);
             settle(sink, expired.command_id, settlement);
         }
         WakeSchedules {

@@ -18,6 +18,18 @@ enum State {
     },
     Held(WirePacketHeader),
     Released,
+    Losing {
+        header: WirePacketHeader,
+        passes: usize,
+        dropped: usize,
+        budget: NonZeroUsize,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Disposition {
+    Forward,
+    Drop,
 }
 
 struct Inner {
@@ -60,6 +72,55 @@ impl WireGate {
         matches!(*self.state(), State::Idle)
     }
 
+    pub(super) fn lose_after(&self, header: WirePacketHeader, passes: usize, budget: NonZeroUsize) {
+        let mut state = self.state();
+        assert!(
+            matches!(*state, State::Idle),
+            "one armed wire gate per radio"
+        );
+        *state = State::Losing {
+            header,
+            passes,
+            dropped: 0,
+            budget,
+        };
+    }
+
+    pub(super) fn stop_loss(&self) -> usize {
+        let mut state = self.state();
+        let State::Losing { dropped, .. } = *state else {
+            unreachable!("stop only an active loss rule");
+        };
+        *state = State::Idle;
+        dropped
+    }
+
+    fn discard(&self, frame: &[u8]) -> Disposition {
+        let Ok((observed, _)) = WirePacketHeader::parse(frame) else {
+            return Disposition::Forward;
+        };
+        let mut state = self.state();
+        let State::Losing {
+            header,
+            passes,
+            dropped,
+            budget,
+        } = &mut *state
+        else {
+            return Disposition::Forward;
+        };
+        if observed != *header {
+            return Disposition::Forward;
+        }
+        if *passes > 0 {
+            *passes -= 1;
+            return Disposition::Forward;
+        }
+        assert!(*dropped < budget.get(), "wire loss budget exhausted");
+        *dropped += 1;
+        Disposition::Drop
+    }
+
     pub(super) async fn held(&self) -> WirePacketHeader {
         loop {
             let reached = self.0.reached.notified();
@@ -67,6 +128,7 @@ impl WireGate {
                 State::Held(header) => return header,
                 State::Idle | State::Armed { .. } => {}
                 State::Released => unreachable!("observe a held frame before releasing it"),
+                State::Losing { .. } => unreachable!("loss rules do not hold frames"),
             }
             reached.await;
         }
@@ -100,14 +162,17 @@ impl WireGate {
         Some(HeldSend(self))
     }
 
-    async fn before_send(&self, frame: &[u8]) {
+    async fn before_send(&self, frame: &[u8]) -> Disposition {
+        if self.discard(frame) == Disposition::Drop {
+            return Disposition::Drop;
+        }
         let Some(_held) = self.hold(frame) else {
-            return;
+            return Disposition::Forward;
         };
         loop {
             let released = self.0.released.notified();
             if matches!(*self.state(), State::Released) {
-                return;
+                return Disposition::Forward;
             }
             released.await;
         }

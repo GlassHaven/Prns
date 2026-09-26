@@ -1493,7 +1493,7 @@ mod tests {
             .route_evidence_handle_for(&peer_destination())
             .unwrap();
         let mut buf = [0u8; BROADCAST_MTU];
-        state
+        let dispatch = state
             .write_commanded_send_single_packet(
                 CommandId(7),
                 &send_of(b"timed"),
@@ -1507,6 +1507,7 @@ mod tests {
         assert_eq!(
             state.receipts.pop_expired(InstantMillis(13_000)),
             Some(ExpiredReceipt {
+                packet_hash: PacketHash::of_wire_packet(&buf[..dispatch.wire_bytes]).unwrap(),
                 command_id: CommandId(7),
                 kind: ReceiptKind::SendSinglePacket {
                     route_evidence: Some(route_evidence),

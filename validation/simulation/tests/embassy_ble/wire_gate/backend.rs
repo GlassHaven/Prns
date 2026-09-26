@@ -135,7 +135,9 @@ impl BleSink for GatedSink {
     type Error = VirtualBleError;
 
     async fn send_frame(&mut self, frame: &[u8]) -> Result<(), Self::Error> {
-        self.gate.before_send(frame).await;
-        self.inner.send_frame(frame).await
+        match self.gate.before_send(frame).await {
+            super::Disposition::Forward => self.inner.send_frame(frame).await,
+            super::Disposition::Drop => Ok(()),
+        }
     }
 }

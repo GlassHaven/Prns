@@ -125,6 +125,7 @@ pub(crate) struct ReceiptProofCandidate {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExpiredReceipt {
+    pub packet_hash: PacketHash,
     pub command_id: CommandId,
     pub kind: ReceiptKind,
 }
@@ -234,6 +235,7 @@ impl<C: ReceiptTable> Receipts<C> {
             .iter()
             .position(|deadline| matches!(deadline, ReceiptDeadline::Due(at) if *at <= now))?;
         let expired = ExpiredReceipt {
+            packet_hash: *self.table.packet_hashes().get(index)?,
             command_id: *self.table.command_ids().get(index)?,
             kind: *self.table.kinds().get(index)?,
         };

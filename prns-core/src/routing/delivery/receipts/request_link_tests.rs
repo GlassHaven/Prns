@@ -84,6 +84,7 @@ fn check_foreign_link<C: ReceiptTable + Default>(owner: LinkId, foreign: LinkId)
         assert_eq!(
             receipts.pop_expired(InstantMillis(7_000)),
             Some(ExpiredReceipt {
+                packet_hash: HASH,
                 command_id: CommandId(7),
                 kind: receipt(owner, CommandId(7), policy).kind,
             })
@@ -193,6 +194,7 @@ fn check_colliding_requests<C: ReceiptTable + Default>() {
     assert_eq!(
         receipts.pop_expired(InstantMillis(7_000)),
         Some(ExpiredReceipt {
+            packet_hash: HASH,
             command_id: CommandId(6),
             kind: ReceiptKind::SendToLink(owner)
         })

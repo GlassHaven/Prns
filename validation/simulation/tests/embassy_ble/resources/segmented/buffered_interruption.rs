@@ -37,7 +37,7 @@ fn reuse_both_embassy_request_slots(
     assert!(embedded.take_settled().is_empty());
 }
 
-fn advertisement_header(link: LinkId) -> WirePacketHeader {
+pub(super) fn advertisement_header(link: LinkId) -> WirePacketHeader {
     WirePacketHeader {
         ifac_flag: IfacFlag::Open,
         context_flag: ContextFlag::Unset,

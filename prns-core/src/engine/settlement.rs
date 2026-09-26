@@ -4,7 +4,9 @@ use crate::engine::{
     RemoteControlControllerPairingRequestFailureCause, SendRequestFailure, SendRequestIntent,
     SendSinglePacketFailure, SendToLinkFailure, Settlement,
 };
-use crate::routing::delivery::receipts::{LinkOwnedReceiptKind, ReceiptKind};
+use crate::routing::delivery::receipts::{ExpiredReceipt, LinkOwnedReceiptKind, ReceiptKind};
+use crate::routing::links::request::RequestId;
+use crate::routing::links::resources::assembly::AssemblyCorrelation;
 use crate::routing::links::LinkId;
 use crate::storage::StorageLayout;
 
@@ -78,17 +80,25 @@ impl<S: StorageLayout> EngineState<S> {
         }
     }
 
-    pub(super) fn timeout_settlement(&mut self, kind: ReceiptKind) -> Settlement {
-        match kind {
+    pub(super) fn timeout_settlement(&mut self, expired: ExpiredReceipt) -> Settlement {
+        match expired.kind {
             ReceiptKind::SendSinglePacket { .. } => {
                 Settlement::SendSinglePacket(Err(SendSinglePacketFailure::Timeout))
             }
             ReceiptKind::SendToLink(_) => Settlement::SendToLink(Err(SendToLinkFailure::Timeout)),
-            ReceiptKind::SendRequest { link_id, response } => self.failed_send_request_settlement(
-                link_id,
-                response.intent(),
-                SendRequestFailure::Timeout,
-            ),
+            ReceiptKind::SendRequest { link_id, response } => {
+                let request = RequestId::of_packet(&expired.packet_hash);
+                if self.incoming_assemblies.correlation(&link_id)
+                    == Some(AssemblyCorrelation::Response(request))
+                {
+                    self.incoming_assemblies.clear(&link_id);
+                }
+                self.failed_send_request_settlement(
+                    link_id,
+                    response.intent(),
+                    SendRequestFailure::Timeout,
+                )
+            }
         }
     }
 }

@@ -9,6 +9,7 @@ use prns_simulation::{Reachability, TopologyMutation};
 
 mod buffered_interruption;
 mod interrupted;
+mod stalled;
 mod storage;
 use storage::{SegmentedStorage, TRANSFER_WINDOW_BYTES};
 
@@ -62,7 +63,11 @@ fn journaled_request(
     match case {
         AdmissionCase::RefusedAtOffer => assert_eq!(events, [expected_terminal]),
         AdmissionCase::ThreeSegments => {
-            assert_eq!(events.len(), 4, "three segments and exactly one settlement");
+            assert_eq!(
+                events.len(),
+                4,
+                "three segments and exactly one settlement: {events:?}"
+            );
             assert_eq!(events.last(), Some(&expected_terminal));
             let mut bytes = Vec::new();
             let mut positions = Vec::new();
