@@ -2,6 +2,7 @@ use super::*;
 use crate::engine::{RespondFailure, SendResourceFailure};
 use crate::units::ByteLimit;
 use crate::wire::{WireContext, WirePacketHeader};
+mod completion;
 
 fn assert_cancelled(
     competitor: &mut EngineState<TestStorageLayout>,

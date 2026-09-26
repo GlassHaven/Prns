@@ -32,9 +32,14 @@ impl SplitResponse {
 
     fn with_limit(limit: crate::units::ByteLimit) -> Self {
         let mut receiver = engine_with_active_link();
-        let mut sender = engine_with_active_link();
         let request =
             track_pending_request_with_limit(&mut receiver, REQUEST, 1_800, 20_000, limit);
+        Self::from_pending(receiver, request)
+    }
+
+    fn from_pending(mut receiver: EngineState<TestStorageLayout>, request: RequestId) -> Self {
+        let retained_transfers = receiver.incoming_resources.len();
+        let mut sender = engine_with_active_link();
         let first = advertise_response_segment_from(
             &mut sender,
             CommandId(20),
@@ -65,7 +70,7 @@ impl SplitResponse {
                 ..InboundCapture::default()
             }
         );
-        assert!(receiver.incoming_resources.is_empty());
+        assert_eq!(receiver.incoming_resources.len(), retained_transfers);
         let continuation = advertise_response_segment_from(
             &mut sender,
             CommandId(21),

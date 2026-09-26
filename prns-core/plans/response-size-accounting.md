@@ -273,5 +273,9 @@ completion-time arbitration gap. The
 [superseded-whole failure slice](../../validation/simulation/measurements/superseded-whole-failure.md)
 now preserves split ownership when such a whole transfer fails, is cancelled, or
 exhausts retries. A real-admission core-engine fixture proves the split response
-still completes. Successful whole completion and delayed successful worker verdicts
-remain open; these inconsistent-peer cases are not yet mixed-runtime injections.
+still completes. The
+[superseded-whole completion slice](../../validation/simulation/measurements/superseded-whole-completion.md)
+also cancels verified whole completion and delayed decompression results before
+proof or publication while the split owns the request. Explicit offloaded-open
+verdict scenarios, arrivals after split ownership ends, and mixed-runtime
+inconsistent-peer injections remain separate coverage work.

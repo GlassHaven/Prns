@@ -191,6 +191,8 @@ impl<S: StorageLayout> EngineState<S> {
 
         let multi_segment = state.total_segments > 1;
         let original_hash = state.original_hash;
+        let superseded =
+            self.whole_response_is_superseded(link_id, state.total_segments, state.correlation);
 
         let delivery = {
             let (transfer, streamed) = self
@@ -246,6 +248,11 @@ impl<S: StorageLayout> EngineState<S> {
             });
             match verified {
                 Err(cause) => Err(SplitDeliveryFailure::Resource(cause)),
+                Ok(_) if superseded => {
+                    self.retire_incoming_resource(link_id, hash);
+                    self.reject_offered_resource(link_id, hash, now, fill_random, sink);
+                    return ConcludeResourceOutcome::SupersededResponse;
+                }
                 Ok(verified) => {
                     let delivered = if multi_segment {
                         let delivered = deliver_split_segment(
@@ -601,6 +608,11 @@ impl<S: StorageLayout> EngineState<S> {
             wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
             return wake_schedule_changes;
         };
+        if self.whole_response_is_superseded(&link_id, state.total_segments, state.correlation) {
+            self.reject_offered_resource(&link_id, &hash, now, fill_random, sink);
+            wake_schedule_changes.link_deadlines = self.link_deadlines_wake();
+            return wake_schedule_changes;
+        }
         let Some(prove) = proof_emission(&link_id, &hash, &proof, mtu) else {
             self.fail_retired_incoming_resource(
                 &link_id,
@@ -923,6 +935,7 @@ pub enum ConcludeResourceOutcome {
     /// A pool worker still holds the streamed open; the span verdict re-concludes, under its own grace deadline.
     AwaitingOpenVerdict,
     Delivered,
+    SupersededResponse,
     ResponseTooLarge,
     Failed(ResourceFailureCause),
 }
