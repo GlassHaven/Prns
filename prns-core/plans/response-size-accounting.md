@@ -1,6 +1,7 @@
 # Response-size accounting
 
-Status: packet accounting corrected; Resource accounting remains open.
+Status: packet and whole, metadata-free Resource accounting corrected;
+metadata-bearing and segmented Resource accounting remains open.
 
 ## Completed packet slice
 
@@ -21,27 +22,46 @@ their limit still applies before decoding. N-API's `packed.length` is therefore
 the packet budget, not `data.length`. WASM's engine event projection retains the
 encoded bytes. Native/C and N-API fixture limits now include binary value headers.
 
-## Observed behavior
+## Completed whole-Resource slice
+
+Whole, metadata-free Resources now enforce the same encoded-value limit as
+packets. Advertisement admission discounts at most the fixed outer response
+envelope using saturating subtraction; existing transfer/storage ceilings still
+apply. Conclusion checks the actual value before any delivery, including legacy
+raw bodies with no prefix to discount and bodies resumed after decompression.
+Wrong enclosed request IDs settle as `ResponseTransferFailed(TransferCorrupt)`.
+Whole uncompressed streams must match their advertised length, as inflated whole
+streams already had to do.
+
+Owner tests cover canonical and legacy forms, compression, false lengths,
+zero/exact/overflow/unlimited limits, terminal settlement and retired state.
+Mixed-runtime BLE scenarios now accept exact 1,200-byte response-value budgets
+and fill Embassy's existing 2 KiB completion capacity. They still refuse an
+oversized response and reuse the same links afterward. No shipping buffer or
+queue capacity changed. See [verification evidence](../../validation/simulation/measurements/whole-resource-response-limits.md).
+
+## Original observation
 
 The mixed Tokio/Embassy Resource capstone found that a 1,200-byte application
 response is rejected with `maximum_response_bytes = 1200`, but succeeds when the
-limit includes `RESPONSE_WIRE_OVERHEAD`. The current test deliberately names this
-an envelope limit rather than claiming it is an application-payload limit.
+limit includes `RESPONSE_WIRE_OVERHEAD`. That original test deliberately named
+it an envelope limit; the corrected test now asserts response-value limits.
 
-- [Resource admission](../src/routing/links/resources/receive/gate.rs) compares
-  the advertised uncompressed `data_bytes` against the pending request's limit.
+- [Resource admission](../src/routing/links/resources/receive/gate.rs) previously
+  compared all advertised uncompressed `data_bytes` against the request limit.
 - [Packet admission](../src/routing/ingress/links.rs) previously subtracted two
   bytes unconditionally. It now uses the complete response value's length.
 - [Resource conclusion](../src/routing/links/resources/receive/conclude.rs) strips
   the response envelope, with compatibility for legacy raw-body responses.
   Metadata and segmented responses have additional accounting paths.
 - Embassy completion buffers retain application response bytes, not the outer
-  request/response envelope. Their capacity is currently also used as the core
-  limit, leaving less usable capacity for enveloped Resource responses.
+  request/response envelope. Their capacity is also used as the core limit;
+  discounting the outer envelope restores the full usable capacity for whole,
+  metadata-free responses.
 
-## Required scope of a correction
+## Remaining metadata and segmented scope
 
-Extend the packet's encoded-value byte-counting contract to Resource delivery.
+Extend the encoded-value byte-counting contract to the remaining Resource forms.
 Separate early allocation protection from final delivered-payload validation;
 loosening an advertisement check alone would admit oversized legacy raw bodies.
 Keep the authoritative accounting in shared core, with host completion buffers

@@ -632,24 +632,38 @@ fn deliver_single_segment<C: ReceiptTable, Work>(
 
     match correlation {
         ResourceCorrelation::Response(id) => {
-            let Some(data) = response_application_data(id, data) else {
-                return;
-            };
+            let response = response_application_data(id, data)
+                .ok_or(SendRequestFailure::ResponseTransferFailed(
+                    ResourceFailureCause::TransferCorrupt,
+                ))
+                .and_then(|data| {
+                    if receipts
+                        .pending_request_response_limit(id)
+                        .is_some_and(|limit| !limit.allows(data.len() as u64))
+                    {
+                        Err(SendRequestFailure::ResponseTooLarge)
+                    } else {
+                        Ok(data)
+                    }
+                });
             if let Some(proven) = receipts.settle_by_request_id(id) {
-                sink(EngineReaction::Journaled(Journaled::ResponseReceived {
-                    command_id: proven.command_id,
-                    link_id: *link_id,
-                    request_id: id,
-                    data,
-                }));
-                sink(EngineReaction::Journaled(Journaled::CommandSettled {
-                    id: proven.command_id,
-                    settlement: Settlement::SendRequest(Ok(PacketReceiptDelivered {
+                let result = response.map(|data| {
+                    sink(EngineReaction::Journaled(Journaled::ResponseReceived {
+                        command_id: proven.command_id,
+                        link_id: *link_id,
+                        request_id: id,
+                        data,
+                    }));
+                    PacketReceiptDelivered {
                         rtt: RttMillis::measured_between(proven.sent_at, now),
                         evidence: DeliveryEvidence::Response,
-                    })),
+                    }
+                });
+                sink(EngineReaction::Journaled(Journaled::CommandSettled {
+                    id: proven.command_id,
+                    settlement: Settlement::SendRequest(result),
                 }));
-            } else {
+            } else if let Ok(data) = response {
                 sink(EngineReaction::Journaled(Journaled::ResourceReceived {
                     link_id: *link_id,
                     hash: *hash,
@@ -828,6 +842,9 @@ fn prove_split<'t>(
     link_id: &LinkId,
     mtu: usize,
 ) -> Result<VerifiedSegment<'t>, ResourceFailureCause> {
+    if state.total_segments == 1 && stream.len() as u64 != state.uncompressed_data_bytes {
+        return Err(ResourceFailureCause::TransferCorrupt);
+    }
     let Some(prove) = proof_emission(link_id, hash, &proof, mtu) else {
         return Err(ResourceFailureCause::ProofUnsendable);
     };

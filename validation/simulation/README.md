@@ -477,9 +477,10 @@ Two additional `embassy_ble` scenarios transfer exact 1,200-byte application
 payloads with ESP32/Apple and nRF52/BlueZ endpoints. Tokio sends a Resource-backed
 request to Embassy and receives its Resource echo. Both nodes concurrently ask
 for Resource-sized replies on independent links. A desktop response limit one
-byte below the encoded envelope is refused with `ResponseTooLarge`, while the
-exact envelope limit succeeds; the embedded responder sees `RejectedByPeer`.
-Further replies and another upload succeed on those same links.
+byte below the encoded response value is refused with `ResponseTooLarge`, while
+the exact value limit succeeds; the embedded responder sees `RejectedByPeer`.
+Embassy also receives an exact 2 KiB response into its existing 2 KiB completion
+buffer. Further replies and another upload succeed on those same links.
 
 These scenarios use explicit 2 KiB request-routing and response-completion
 capacities in the host fixture. Existing small fixtures and shipping capacities
@@ -497,7 +498,7 @@ trace must remain complete, both radios must detach exactly once, and all BLE
 connections must close. This is not compressed/segmented Resource, native OS
 Bluetooth, firmware memory, hardware, or many-node scale evidence.
 
-The [local evidence](measurements/resource-transfers.md) lists checks and limits.
-The tests preserve current Resource envelope-limit behavior; the
-[shared-core accounting follow-up](../../prns-core/plans/response-size-accounting.md)
-records its mismatch with packet and completion-buffer accounting.
+The [original evidence](measurements/resource-transfers.md) records the initial
+envelope-limit observation. The [whole-Resource correction](measurements/whole-resource-response-limits.md)
+lists current checks and limits; the [accounting follow-up](../../prns-core/plans/response-size-accounting.md)
+tracks the remaining metadata-bearing and segmented response work.

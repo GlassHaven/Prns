@@ -32,7 +32,6 @@ use super::{tick, tokio_node};
 const REQUEST_BYTES: usize = 2048;
 const RESPONSE_BYTES: usize = 2048;
 const TRANSFER_BYTES: usize = 1200;
-const RESPONSE_ENVELOPE_BYTES: usize = RESPONSE_WIRE_OVERHEAD + TRANSFER_BYTES;
 const TRANSFER_BUDGET_MS: u64 = 10_000;
 const TRANSFER_POLLS_PER_TICK: usize = 256;
 const TRACE_CAPACITY: usize = 4096;
@@ -42,8 +41,8 @@ type ResourceNode = NodeFixture<RESPONSE_BYTES, REQUEST_BYTES>;
 
 // Application data only, not an entropy source. Dense bytes exercise the existing
 // uncompressed path without invoking workers outside the manually polled actors.
-const fn dense_payload() -> [u8; TRANSFER_BYTES] {
-    let mut bytes = [0; TRANSFER_BYTES];
+const fn dense_payload() -> [u8; RESPONSE_BYTES] {
+    let mut bytes = [0; RESPONSE_BYTES];
     let mut state = 0x914C_70A3u32;
     let mut index = 0;
     while index < bytes.len() {
@@ -56,7 +55,7 @@ const fn dense_payload() -> [u8; TRANSFER_BYTES] {
     bytes
 }
 
-const PAYLOAD: [u8; TRANSFER_BYTES] = dense_payload();
+const PAYLOAD: [u8; RESPONSE_BYTES] = dense_payload();
 const _: () = {
     assert!(TRANSFER_BYTES > MAX_SEND_REQUEST_DATA_LEN);
     assert!(TRANSFER_BYTES > MAX_RESPOND_DATA_LEN);
@@ -179,13 +178,13 @@ fn simultaneous_replies(
     assert_eq!(response_settlements(node), [Settlement::Respond(Ok(()))]);
 }
 
-fn desktop_resource_envelope_limit(
+fn desktop_resource_value_limit(
     tasks: &mut EmbassyTasks<'_>,
     node: &ResourceNode,
     desktop: &PrnsNodeHandle,
     link: LinkId,
 ) {
-    for maximum in [RESPONSE_ENVELOPE_BYTES - 1, RESPONSE_ENVELOPE_BYTES] {
+    for maximum in [TRANSFER_BYTES - 1, TRANSFER_BYTES] {
         let desktop = desktop.clone();
         let (result, elapsed) = complete(tasks, async move {
             measured(desktop.request_with_options(
@@ -199,7 +198,7 @@ fn desktop_resource_envelope_limit(
             ))
             .await
         });
-        let (response, settlement) = if maximum == RESPONSE_ENVELOPE_BYTES {
+        let (response, settlement) = if maximum == TRANSFER_BYTES {
             (
                 expected(TRANSFER_BYTES, elapsed),
                 Settlement::Respond(Ok(())),
@@ -215,6 +214,23 @@ fn desktop_resource_envelope_limit(
         assert_eq!(result, response);
         assert_eq!(response_settlements(node), [settlement]);
     }
+}
+
+fn embedded_completion_capacity(tasks: &mut EmbassyTasks<'_>, node: &ResourceNode, link: LinkId) {
+    let embedded = node.handle;
+    let (result, elapsed) = complete(tasks, async move {
+        measured(embedded.request(
+            link,
+            RequestPathHash::of(REPLY_PATH),
+            &(RESPONSE_BYTES as u16).to_be_bytes(),
+        ))
+        .await
+    });
+    assert_eq!(
+        result.map(|(bytes, rtt)| (bytes.as_slice().to_vec(), rtt)),
+        expected(RESPONSE_BYTES, elapsed),
+    );
+    assert!(response_settlements(node).is_empty());
 }
 
 fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
@@ -249,7 +265,8 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
     let links = establish_pair(&mut tasks, &embedded, &desktop.handle);
     upload_echo(&mut tasks, &embedded, &desktop.handle, links[1]);
     simultaneous_replies(&mut tasks, &embedded, &desktop.handle, links);
-    desktop_resource_envelope_limit(&mut tasks, &embedded, &desktop.handle, links[1]);
+    desktop_resource_value_limit(&mut tasks, &embedded, &desktop.handle, links[1]);
+    embedded_completion_capacity(&mut tasks, &embedded, links[0]);
     simultaneous_replies(&mut tasks, &embedded, &desktop.handle, links);
     upload_echo(&mut tasks, &embedded, &desktop.handle, links[1]);
     assert!(embedded.take_received().is_empty());

@@ -54,7 +54,8 @@ for static Embassy APIs and growable engine storage. No native OS BLE API, HCI,
 RF, firmware build, board memory contract, Miri/ISA, stock-Reticulum interop,
 other host platform, or full PR-lane checks were run for this slice.
 
-Resource response limits currently include the encoded envelope. A
+This original slice counted the encoded envelope. The subsequent
+[whole-Resource correction](whole-resource-response-limits.md) removes that
+discrepancy for whole, metadata-free responses. The
 [shared-core follow-up](../../../prns-core/plans/response-size-accounting.md)
-records the inconsistent packet/Resource/completion-buffer accounting; these
-tests do not assert that all transports expose a uniform application-byte limit.
+tracks the remaining metadata-bearing and segmented forms.

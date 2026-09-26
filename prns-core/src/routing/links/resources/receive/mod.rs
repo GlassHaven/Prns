@@ -9,3 +9,5 @@ pub mod rounds;
 #[cfg(test)]
 pub mod tests_support;
 pub mod watchdog;
+#[cfg(test)]
+mod whole_response_limits;

@@ -47,15 +47,17 @@ Commands settle as an explicit success or failure case. Cancellation does not ab
 
 ## Request response limits
 
-Request response limits apply before adapter binary decoding. For packet
-responses, `maximumResponseBytes` / `maximum_response_bytes` counts the complete
+Request response limits apply before adapter binary decoding. For packet and
+whole, metadata-free Resource responses, `maximumResponseBytes` / `maximum_response_bytes` counts the complete
 encoded response value, excluding only its outer request-ID envelope. For
 example, nine bytes returned as MessagePack bin8 require a limit of eleven; raw
 nine-byte responses require nine. A nil response counts as one byte. Zero is a
 real bound, not unlimited; omit the optional limit for unlimited.
 
-Resource responses currently use a stricter pre-allocation bound on the complete
-advertised uncompressed stream, including envelope and metadata. The shared-core
+Legacy raw Resource bodies count in full, and compressed bodies count after
+inflation. Metadata-bearing and segmented Resource responses retain a stricter
+admission bound on the complete advertised uncompressed stream, including envelope
+and metadata. The shared-core
 [response-size accounting follow-up](../prns-core/plans/response-size-accounting.md)
 owns removing that transport discrepancy. Native adapters still return decoded
 binary data where they already did; the limit is not a decoded-data budget.

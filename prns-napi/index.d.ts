@@ -371,8 +371,9 @@ export interface RequestOptions {
   /** Request timeout in milliseconds. */
   timeoutMillis?: number
   /**
-   * Encoded response limit before binary decoding (packet: `packed.length`,
-   * not `data.length`). Resources currently count the entire advertised
+   * Encoded response limit before binary decoding (`packed.length`, not
+   * `data.length`) for packets and whole, metadata-free Resources.
+   * Metadata-bearing and segmented Resources count the entire advertised
    * uncompressed stream, including envelope and metadata.
    */
   maximumResponseBytes?: number

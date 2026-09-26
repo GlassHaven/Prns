@@ -180,7 +180,18 @@ impl<S: StorageLayout> EngineState<S> {
                     settled_request: settled_request.command_id,
                 };
             }
-            if !maximum_response_bytes.allows(advertisement.data_bytes) {
+            // The envelope is not part of the response value. Only discount its
+            // possible fixed prefix here; conclusion validates the actual body,
+            // including the legacy form that carries no envelope at all.
+            let minimum_value_bytes =
+                if advertisement.total_segments == 1 && !advertisement.flags.has_metadata {
+                    advertisement.data_bytes.saturating_sub(
+                        crate::routing::links::request::RESPONSE_WIRE_OVERHEAD as u64,
+                    )
+                } else {
+                    advertisement.data_bytes
+                };
+            if !maximum_response_bytes.allows(minimum_value_bytes) {
                 let settled_request = self
                     .receipts
                     .settle_by_request_id(id)
@@ -644,7 +655,9 @@ mod tests {
             CommandId(42),
             1_800,
             20_000,
-            ByteLimit::Maximum(data.len() as u64 - 1),
+            ByteLimit::Maximum(
+                (data.len() - crate::routing::links::request::RESPONSE_WIRE_OVERHEAD - 1) as u64,
+            ),
         );
         let mut sender = engine_with_active_link();
         let mut advertisement = None;

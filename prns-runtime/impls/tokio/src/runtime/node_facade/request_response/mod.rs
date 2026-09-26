@@ -39,8 +39,8 @@ const RESPONSE_PACKET_CEILING: usize = LINK_MDU - RESPONSE_WIRE_OVERHEAD;
 pub struct RequestOptions {
     pub response_timeout: RequestResponseTimeout,
     /// Counts the encoded response value, before application decoding. See
-    /// [`crate::engine::SendRequest::maximum_response_bytes`] for the packet
-    /// contract and the current, stricter Resource admission bound.
+    /// [`crate::engine::SendRequest::maximum_response_bytes`] for the packet and
+    /// whole-Resource contract and the stricter metadata/segmented admission bound.
     pub maximum_response_bytes: ByteLimit,
 }
 
