@@ -1,13 +1,4 @@
 use super::*;
-use personal_rns::engine::LinkClosedReason;
-
-const INTERRUPTION_BUDGET_MS: u64 = 20_000;
-const INTERRUPTION_TRACE_CAPACITY: usize = 131_072;
-
-enum Requester {
-    Embassy,
-    Tokio,
-}
 
 fn interrupt(
     tasks: &mut EmbassyTasks<'_>,
@@ -97,18 +88,7 @@ fn recover_after_each_direction(
                 assert_eq!(embedded.take_settled(), [expected]);
             }
         }
-        assert_eq!(
-            lab.set_reachability(EMBASSY_RADIO, TOKIO_RADIO, Reachability::Reachable),
-            Ok(TopologyMutation::Applied)
-        );
-        converge(tasks, lab, embedded, &desktop.handle);
-        let mut expired: Vec<_> = links
-            .into_iter()
-            .map(|link| (link, LinkClosedReason::Timeout))
-            .collect();
-        expired.sort_by_key(|(link, _)| *link.as_bytes());
-        assert_eq!(embedded.take_closed(), expired);
-        assert_eq!(desktop.take_closed(), expired);
+        links = reconnect(tasks, lab, embedded, desktop, links);
         match requester {
             Requester::Tokio => assert_eq!(
                 response_settlements(embedded),
@@ -118,11 +98,6 @@ fn recover_after_each_direction(
             ),
             Requester::Embassy => assert!(response_settlements(embedded).is_empty()),
         }
-        let fresh = establish_pair(tasks, embedded, &desktop.handle);
-        for (old, new) in links.into_iter().zip(fresh) {
-            assert_ne!(old, new);
-        }
-        links = fresh;
         reassemble(tasks, lab, embedded, desktop, links);
     }
 }

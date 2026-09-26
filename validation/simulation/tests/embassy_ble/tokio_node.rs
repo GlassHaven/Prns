@@ -21,12 +21,14 @@ use super::clock::EmbassyTasks;
 use super::echo::{self, Echo};
 use super::fixture::{backend, MAX_PEERS};
 use super::response_trace::ResponseTrace;
+use super::wire_gate::{GatedBackend, WireGate};
 
 const CLOSURE_CAPACITY: usize = 4;
 
 pub(super) struct TokioNode {
     pub handle: PrnsNodeHandle,
     pub responses: ResponseTrace,
+    pub wire: WireGate,
     closed: Rc<RefCell<Vec<(LinkId, LinkClosedReason)>>>,
 }
 
@@ -85,8 +87,9 @@ pub(super) fn with_storage<
     endpoints: R,
     storage: S,
 ) -> oneshot::Receiver<TokioNode> {
+    let wire = WireGate::new();
     let supervisor = BluetoothAuto::<_, MAX_PEERS>::new(
-        backend(lab, address),
+        GatedBackend::new(backend(lab, address), wire.clone()),
         BleIdentity::new([address; 16]),
         endpoint,
         LinkCapabilities {
@@ -125,6 +128,7 @@ pub(super) fn with_storage<
             .send(TokioNode {
                 handle: node.handle(),
                 responses,
+                wire,
                 closed
             })
             .is_ok());

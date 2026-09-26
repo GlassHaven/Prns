@@ -31,10 +31,11 @@ use super::clock::EmbassyTasks;
 use super::echo::{self, Echo};
 use super::fixture::{RadioFixture, RawMutex, MAX_PEERS};
 use super::response_trace::ResponseTrace;
+use super::wire_gate::WireGate;
 
 const COMMAND_CAPACITY: usize = 4;
 const EVENT_CAPACITY: usize = 8;
-const REQUEST_CAPACITY: usize = 2;
+pub(super) const REQUEST_CAPACITY: usize = 2;
 pub(super) const PAYLOAD_BYTES: usize = 256;
 pub(super) type Handle<const RESPONSE_BYTES: usize> = PrnsNodeHandle<
     'static,
@@ -80,6 +81,7 @@ pub(super) struct NodeFixture<const RESPONSE_BYTES: usize, const REQUEST_BYTES: 
     pub handle: Handle<RESPONSE_BYTES>,
     pub status: BluetoothAutoStatus<MAX_PEERS>,
     pub responses: ResponseTrace,
+    pub wire: WireGate,
     received: Rc<RefCell<Vec<Received>>>,
     settled: Rc<RefCell<Vec<(CommandId, Settlement)>>>,
     closed: Rc<RefCell<Vec<(LinkId, LinkClosedReason)>>>,
@@ -150,6 +152,7 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             lanes,
             notify,
             lifecycle,
+            wire,
         } = RadioFixture::new(lab, address, endpoint);
         let status = supervisor.status();
         let commands = Box::leak(Box::new(
@@ -247,6 +250,7 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             handle,
             status,
             responses,
+            wire,
             received,
             settled,
             closed,

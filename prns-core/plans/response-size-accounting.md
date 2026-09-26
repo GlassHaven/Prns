@@ -169,8 +169,13 @@ The [interruption scenarios](../../validation/simulation/measurements/interrupte
 now isolate virtual BLE after the first verified segment in both directions.
 Raw requests settle once as `Timeout`, with no further response data, and the
 same nodes complete new transfers after rediscovery and old-link retirement.
-This does not prove buffered-request failure behavior or inter-segment assembly
-reclamation while the original Reticulum link remains alive.
+The [buffered-request cases](../../validation/simulation/measurements/buffered-resource-interruption.md)
+also hold the next outgoing Resource advertisement and isolate the radios.
+Calibrated raw journals confirm the first segment precedes this cut; the real
+Tokio/Embassy buffered APIs return `Timeout` without partial success and recover
+after old-link retirement. Both bounded Embassy request slots are reusable
+concurrently. Inter-segment assembly reclamation while the original Reticulum
+link remains alive is still unproven by these scenarios.
 
 Extend the delivered-value byte-counting contract to segmented Resource forms.
 Separate early allocation protection from final delivered-payload validation;

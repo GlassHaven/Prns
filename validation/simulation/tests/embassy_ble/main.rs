@@ -26,6 +26,7 @@ mod resources;
 mod response_trace;
 mod tokio_node;
 mod traffic;
+mod wire_gate;
 use clock::{ClockLease, CompletionBudget, EmbassyTasks};
 use fixture::{backend, lab, supervisor, MAX_PEERS};
 

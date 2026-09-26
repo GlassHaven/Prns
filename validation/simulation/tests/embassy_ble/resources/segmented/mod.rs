@@ -1,11 +1,13 @@
 use super::*;
 use crate::response_trace::{ResponseEvent, ResponseTrace};
 use personal_rns::engine::{
-    CommandId, DeliveryEvidence, PacketReceiptDelivered, PrnsCommand, SendRequest, SendRequestData,
+    CommandId, DeliveryEvidence, LinkClosedReason, PacketReceiptDelivered, PrnsCommand,
+    SendRequest, SendRequestData,
 };
 use personal_rns::interfaces::bluetooth_auto::BleAddress;
 use prns_simulation::{Reachability, TopologyMutation};
 
+mod buffered_interruption;
 mod interrupted;
 mod storage;
 use storage::{SegmentedStorage, TRANSFER_WINDOW_BYTES};
@@ -13,6 +15,13 @@ use storage::{SegmentedStorage, TRANSFER_WINDOW_BYTES};
 const _: () = assert!(TRANSFER_BYTES > 2 * TRANSFER_WINDOW_BYTES);
 const EMBASSY_RADIO: BleAddress = BleAddress::new([EMBASSY_ADDRESS; 6]);
 const TOKIO_RADIO: BleAddress = BleAddress::new([TOKIO_ADDRESS; 6]);
+const INTERRUPTION_BUDGET_MS: u64 = 20_000;
+const INTERRUPTION_TRACE_CAPACITY: usize = 131_072;
+
+enum Requester {
+    Embassy,
+    Tokio,
+}
 
 enum AdmissionCase {
     RefusedAtOffer,
@@ -149,8 +158,36 @@ fn scenario(
     assert!(embedded.take_received().is_empty());
     assert!(embedded.responses.is_empty());
     assert!(desktop.responses.is_empty());
+    assert!(embedded.wire.is_idle());
+    assert!(desktop.wire.is_idle());
     drop(tasks);
     assert_radio_cleanup(&lab);
+}
+
+fn reconnect(
+    tasks: &mut EmbassyTasks<'_>,
+    lab: &VirtualBleLab,
+    embedded: &ResourceNode,
+    desktop: &tokio_node::TokioNode,
+    links: [LinkId; 2],
+) -> [LinkId; 2] {
+    assert_eq!(
+        lab.set_reachability(EMBASSY_RADIO, TOKIO_RADIO, Reachability::Reachable),
+        Ok(TopologyMutation::Applied)
+    );
+    converge(tasks, lab, embedded, &desktop.handle);
+    let mut expired: Vec<_> = links
+        .into_iter()
+        .map(|link| (link, LinkClosedReason::Timeout))
+        .collect();
+    expired.sort_by_key(|(link, _)| *link.as_bytes());
+    assert_eq!(embedded.take_closed(), expired);
+    assert_eq!(desktop.take_closed(), expired);
+    let fresh = establish_pair(tasks, embedded, &desktop.handle);
+    for (old, new) in links.into_iter().zip(fresh) {
+        assert_ne!(old, new);
+    }
+    fresh
 }
 
 fn reassemble(

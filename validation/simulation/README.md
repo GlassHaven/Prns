@@ -554,11 +554,23 @@ trace to 131,072 events, and still require zero discarded events. Discovery
 retains its existing 60-second budget. Observer ordering and notification wakeups
 have focused tests. See [interruption evidence](measurements/interrupted-segmented-resource-simulation.md).
 
-The interruption tests observe raw commands, not buffered-request failure paths.
-They establish reuse after old-link retirement, not assembly reclamation while
-an old link stays alive. Cumulative response-value accounting and inconsistent
-peer injection remain open; inconsistent-peer cases still have core-engine
-reproductions only.
+Buffered-request interruption now uses a private, single-slot wire gate around
+the test backend. It holds the second outgoing Resource advertisement before
+GATT fragmentation; the test isolates the radios and releases the held send.
+Paired raw-command cases calibrate that exact cut against one verified segment,
+and ordinary Tokio/Embassy request futures must return `Timeout`, never partial
+success. Both directions and endpoint pairings recover using the same nodes;
+both Embassy request slots must also handle concurrent packet requests afterward.
+A no-outage control releases the gate and checks the full file and RTT unchanged.
+The gate retains only a header and bounded state, not payload copies or an event
+queue, and cancellation releases its ownership. It is confined to this test
+binary, with no shipping runtime or general simulator-library changes. See
+[buffered interruption evidence](measurements/buffered-resource-interruption.md).
+
+These interruption cases establish reuse after old-link retirement, not assembly
+reclamation while an old link stays alive. Cumulative response-value accounting
+and inconsistent-peer injection remain open; inconsistent-peer cases still have
+core-engine reproductions only.
 
 ```console
 cargo test --locked -p prns-simulation --features controlled-time --test embassy_ble segmented

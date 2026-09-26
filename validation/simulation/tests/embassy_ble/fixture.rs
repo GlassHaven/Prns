@@ -17,6 +17,8 @@ use prns_simulation::ble::{
 };
 use prns_simulation::{SimulationDurationInTicks, TopologyConfig};
 
+use super::wire_gate::{GatedBackend, WireGate};
+
 pub(super) const MAX_PEERS: usize = 2;
 pub(super) const ADVERTISING_INTERVAL_MS: u64 = 60_000;
 pub(super) const GATT_VALUE_BYTES: usize = 20;
@@ -24,7 +26,7 @@ pub(super) const GATT_QUEUE_DEPTH: usize = 4;
 pub(super) type RawMutex = CriticalSectionRawMutex;
 pub(super) type Lifecycle = Channel<RawMutex, InterfaceLifecycle, 4>;
 pub(super) type Fleet = EmbassyFleet<RawMutex, BLE_HW_MTU, 2, 4>;
-pub(super) type Supervisor = BluetoothAuto<VirtualBleBackend, MAX_PEERS>;
+pub(super) type Supervisor = BluetoothAuto<GatedBackend, MAX_PEERS>;
 
 pub(super) fn lab() -> VirtualBleLab {
     VirtualBleLab::new(BleMediumConfig::new(TopologyConfig::FullyConnected, 2, 4, 4, 64).unwrap())
@@ -71,14 +73,16 @@ pub(super) struct RadioFixture {
     pub lanes: ManifoldLaneSet<RawMutex, 1, 2>,
     pub notify: &'static Channel<RawMutex, InterfaceId, 2>,
     pub lifecycle: &'static Lifecycle,
+    pub wire: WireGate,
 }
 
 impl RadioFixture {
     pub fn new(lab: &VirtualBleLab, address: u8, endpoint: Endpoint) -> Self {
         let id = InterfaceId::from_channel_tag(InterfaceKind::BluetoothAuto, &[address]);
         let shared = Box::leak(Box::new(BluetoothAutoShared::new(id)));
+        let wire = WireGate::new();
         let supervisor = BluetoothAuto::new(
-            backend(lab, address),
+            GatedBackend::new(backend(lab, address), wire.clone()),
             BleIdentity::new([address; 16]),
             endpoint,
             LinkCapabilities {
@@ -104,6 +108,7 @@ impl RadioFixture {
             lanes,
             notify,
             lifecycle,
+            wire,
         }
     }
 }
