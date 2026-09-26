@@ -12,7 +12,9 @@ use crate::engine::{IssuedCommand, PrnsCommand};
 use crate::identity::IdentityHash;
 use crate::interfaces::AttachedInterfaces;
 use crate::interfaces::{InboundPacket, InterfaceId};
+use crate::routing::links::data::write_link_packet;
 use crate::routing::links::request::RequestId;
+use crate::routing::links::resources::advertisement::ResourceAdvertisement;
 use crate::routing::links::resources::{ResourceBody, ResourceMetadata, ResourceSend};
 use crate::routing::links::resources::{ResourceFailureCause, ResourceHash, ResourceStrategy};
 use crate::routing::links::table::LinkActivation;
@@ -20,7 +22,33 @@ use crate::routing::links::table::{InitiatedLink, RespondingLink};
 use crate::routing::links::{LinkId, LinkKey};
 use crate::routing::upstream_app_destinations::ProofStrategy;
 use crate::storage::StorageLayout;
-use crate::wire::{DestinationHash, BROADCAST_MTU};
+use crate::wire::{DestinationHash, WireContext, WirePacketHeader, BROADCAST_MTU};
+
+pub(crate) fn rewrite_advertisement(
+    frame: &[u8],
+    change: impl FnOnce(&mut ResourceAdvertisement<'_>),
+) -> std::vec::Vec<u8> {
+    let (_, sealed) = WirePacketHeader::parse(frame).unwrap();
+    let mut sealed = sealed.to_vec();
+    let key = link_key();
+    let plain = key.open_in_place(&mut sealed).unwrap();
+    let mut advertisement = ResourceAdvertisement::parse(plain).unwrap();
+    change(&mut advertisement);
+    let mut rewritten = [0; BROADCAST_MTU];
+    let length = advertisement.write(&mut rewritten).unwrap();
+    let mut result = [0; BROADCAST_MTU];
+    let length = write_link_packet(
+        &link_id(),
+        &key,
+        BROADCAST_MTU,
+        WireContext::ResourceAdvertisement,
+        &rewritten[..length],
+        &[0xD2; 16],
+        &mut result,
+    )
+    .unwrap();
+    result[..length].to_vec()
+}
 
 pub(crate) fn bytes_from_hex(s: &str) -> std::vec::Vec<u8> {
     (0..s.len())
@@ -417,16 +445,34 @@ pub(crate) fn advertise_response_segment_from<S: StorageLayout>(
     segment: crate::routing::links::resources::ResourceSegment,
     at: u64,
 ) -> std::vec::Vec<u8> {
+    advertise_response_body_from(
+        sender,
+        id,
+        request_id,
+        ResourceBody {
+            data,
+            compressed_candidate: candidate,
+            metadata: ResourceMetadata::None,
+        },
+        segment,
+        at,
+    )
+}
+
+pub(crate) fn advertise_response_body_from<S: StorageLayout>(
+    sender: &mut EngineState<S>,
+    id: CommandId,
+    request_id: RequestId,
+    body: ResourceBody<'_>,
+    segment: crate::routing::links::resources::ResourceSegment,
+    at: u64,
+) -> std::vec::Vec<u8> {
     let mut frame = None;
     sender.ingest_send_resource_segment_into(
         &ResourceSend {
             id,
             link_id: link_id(),
-            body: ResourceBody {
-                data,
-                compressed_candidate: candidate,
-                metadata: ResourceMetadata::None,
-            },
+            body,
             correlation: crate::routing::links::resources::ResourceCorrelation::Response(
                 request_id,
             ),

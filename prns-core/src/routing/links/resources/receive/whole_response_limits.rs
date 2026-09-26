@@ -4,13 +4,11 @@ use crate::engine::{
     CommandId, DeliveryEvidence, EngineReaction, EngineState, InstantMillis, Journaled, NoOwedWork,
     PacketReceiptDelivered, ResourceDecompressionCompleted, SendRequestFailure, Settlement,
 };
-use crate::routing::links::data::write_link_packet;
 use crate::routing::links::request::{write_response_plaintext, RequestId, RESPONSE_WIRE_OVERHEAD};
-use crate::routing::links::resources::advertisement::ResourceAdvertisement;
 use crate::routing::links::resources::table::IncomingResourceStatus;
 use crate::routing::links::resources::{ResourceFailureCause, ResourceSegment};
 use crate::units::{ByteLimit, RttMillis};
-use crate::wire::{WireContext, WirePacketHeader, BROADCAST_MTU};
+use crate::wire::{WireContext, WirePacketHeader};
 use proptest::prelude::*;
 
 #[derive(Clone, Copy)]
@@ -293,32 +291,6 @@ fn compressed_whole_responses_are_limited_after_inflation() {
     }
 }
 
-fn rewrite_advertisement(
-    frame: &[u8],
-    change: impl FnOnce(&mut ResourceAdvertisement<'_>),
-) -> std::vec::Vec<u8> {
-    let (_, sealed) = WirePacketHeader::parse(frame).unwrap();
-    let mut sealed = sealed.to_vec();
-    let key = link_key();
-    let plain = key.open_in_place(&mut sealed).unwrap();
-    let mut advertisement = ResourceAdvertisement::parse(plain).unwrap();
-    change(&mut advertisement);
-    let mut rewritten = [0; BROADCAST_MTU];
-    let length = advertisement.write(&mut rewritten).unwrap();
-    let mut result = [0; BROADCAST_MTU];
-    let length = write_link_packet(
-        &link_id(),
-        &key,
-        BROADCAST_MTU,
-        WireContext::ResourceAdvertisement,
-        &rewritten[..length],
-        &[0xD2; 16],
-        &mut result,
-    )
-    .unwrap();
-    result[..length].to_vec()
-}
-
 #[test]
 fn whole_uncompressed_responses_refuse_a_false_advertised_stream_length() {
     let body = [0xA7; 128];
@@ -365,8 +337,8 @@ fn whole_uncompressed_responses_refuse_a_false_advertised_stream_length() {
 }
 
 #[test]
-fn metadata_and_split_advertisements_keep_their_stricter_stream_limit() {
-    for (has_metadata, total_segments) in [(true, 1), (false, 2), (true, 2)] {
+fn split_advertisements_keep_their_stricter_stream_limit() {
+    for (has_metadata, total_segments) in [(false, 2), (true, 2)] {
         let mut receiver = engine_with_active_link();
         let request = track_pending_request_with_limit(
             &mut receiver,

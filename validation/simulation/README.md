@@ -501,4 +501,15 @@ Bluetooth, firmware memory, hardware, or many-node scale evidence.
 The [original evidence](measurements/resource-transfers.md) records the initial
 envelope-limit observation. The [whole-Resource correction](measurements/whole-resource-response-limits.md)
 lists current checks and limits; the [accounting follow-up](../../prns-core/plans/response-size-accounting.md)
-tracks the remaining metadata-bearing and segmented response work.
+tracks the remaining segmented response work.
+
+The [whole-file correction](measurements/metadata-resource-response-limits.md) adds
+two metadata-bearing scenarios through the shared static-file command on both
+runtime lanes. Exact 1,200-byte file budgets succeed; one byte less fails after
+verification without delivering content. Envelope-shaped file prefixes remain
+literal, and Embassy receives a full 2 KiB file into its existing completion
+capacity. Transport proofs acknowledge delivery even when the requester's final
+value budget refuses the body. Further requests reuse the links. The host-only
+fixture enables Embassy's existing `large-static-responses` feature; no shipping
+capacity changes. These scenarios do not exercise Tokio's streaming-file
+convenience API or its background compression workers.

@@ -33,13 +33,14 @@ pub struct SendRequest {
     pub path_hash: RequestPathHash,
     pub data: SendRequestData,
     pub response_timeout: RequestResponseTimeout,
-    /// Packet and whole, metadata-free Resource responses count the complete
+    /// Packet and metadata-free whole Resource responses count the complete
     /// value after the outer request-ID envelope, before application decoding.
     /// Binary value headers and the one-byte nil value count. Legacy raw
     /// Resource bodies count in full; compressed bodies count after inflation.
-    /// Metadata-bearing and segmented Resources retain a stricter admission
-    /// bound on the entire advertised uncompressed stream, including envelope
-    /// and metadata.
+    /// Whole metadata-bearing responses count literal file bytes, excluding
+    /// metadata and its framing. Independent transfer/storage ceilings apply.
+    /// Segmented Resources retain a stricter admission bound on the entire
+    /// advertised uncompressed stream, including envelope and metadata.
     pub maximum_response_bytes: ByteLimit,
 }
 

@@ -1,7 +1,7 @@
 # Response-size accounting
 
-Status: packet and whole, metadata-free Resource accounting corrected;
-metadata-bearing and segmented Resource accounting remains open.
+Status: packet and whole Resource accounting corrected, including metadata-bearing
+files; segmented Resource accounting remains open.
 
 ## Completed packet slice
 
@@ -59,9 +59,25 @@ it an envelope limit; the corrected test now asserts response-value limits.
   discounting the outer envelope restores the full usable capacity for whole,
   metadata-free responses.
 
-## Remaining metadata and segmented scope
+## Completed whole-file slice
 
-Extend the encoded-value byte-counting contract to the remaining Resource forms.
+Whole metadata-bearing responses count literal file bytes after removing the
+verified metadata block. Advertisement admission cannot know metadata length,
+so the final value check runs after verification/inflation; the existing
+uncompressed-stream, fixed-transfer and heap-memory ceilings still apply.
+Files remain literal even when their leading bytes resemble a response envelope,
+including the first segment of a split file. This matches the metadata-bearing
+response path in the pinned RNS 1.4.2 and 1.5.0 implementations.
+
+Owner tests cover metadata framing, arbitrary file bytes, exact bounds,
+compression, malformed metadata, allocation ceilings and retired state. Mixed
+Tokio/Embassy BLE scenarios exercise the shared static-file command, exact file
+budgets and Embassy's existing 2 KiB completion buffer. See
+[verification evidence](../../validation/simulation/measurements/metadata-resource-response-limits.md).
+
+## Remaining segmented scope
+
+Extend the delivered-value byte-counting contract to segmented Resource forms.
 Separate early allocation protection from final delivered-payload validation;
 loosening an advertisement check alone would admit oversized legacy raw bodies.
 Keep the authoritative accounting in shared core, with host completion buffers

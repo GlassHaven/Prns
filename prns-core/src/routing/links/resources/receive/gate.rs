@@ -180,17 +180,20 @@ impl<S: StorageLayout> EngineState<S> {
                     settled_request: settled_request.command_id,
                 };
             }
-            // The envelope is not part of the response value. Only discount its
-            // possible fixed prefix here; conclusion validates the actual body,
-            // including the legacy form that carries no envelope at all.
-            let minimum_value_bytes =
-                if advertisement.total_segments == 1 && !advertisement.flags.has_metadata {
-                    advertisement.data_bytes.saturating_sub(
-                        crate::routing::links::request::RESPONSE_WIRE_OVERHEAD as u64,
-                    )
-                } else {
-                    advertisement.data_bytes
-                };
+            // Whole responses exclude framing from their value budget. Metadata
+            // length is known only after verification, so its file may be empty.
+            // Conclusion checks the actual body; independent stream/storage
+            // ceilings below still bound admission. Split accounting is stricter.
+            let minimum_value_bytes = match (
+                advertisement.total_segments,
+                advertisement.flags.has_metadata,
+            ) {
+                (1, true) => 0,
+                (1, false) => advertisement
+                    .data_bytes
+                    .saturating_sub(crate::routing::links::request::RESPONSE_WIRE_OVERHEAD as u64),
+                _ => advertisement.data_bytes,
+            };
             if !maximum_response_bytes.allows(minimum_value_bytes) {
                 let settled_request = self
                     .receipts

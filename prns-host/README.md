@@ -55,9 +55,11 @@ nine-byte responses require nine. A nil response counts as one byte. Zero is a
 real bound, not unlimited; omit the optional limit for unlimited.
 
 Legacy raw Resource bodies count in full, and compressed bodies count after
-inflation. Metadata-bearing and segmented Resource responses retain a stricter
-admission bound on the complete advertised uncompressed stream, including envelope
-and metadata. The shared-core
+inflation. Whole metadata-bearing responses count literal file bytes, excluding
+metadata and its framing; file content is never parsed as a response envelope.
+Independent transfer/storage ceilings still apply. Segmented Resource responses
+retain a stricter admission bound on the complete advertised uncompressed stream,
+including envelope and metadata. The shared-core
 [response-size accounting follow-up](../prns-core/plans/response-size-accounting.md)
 owns removing that transport discrepancy. Native adapters still return decoded
 binary data where they already did; the limit is not a decoded-data budget.

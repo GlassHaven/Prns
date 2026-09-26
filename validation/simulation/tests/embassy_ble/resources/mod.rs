@@ -29,6 +29,8 @@ use super::interop::{converge, establish_pair, EMBASSY_ADDRESS, TOKIO_ADDRESS};
 use super::node::NodeFixture;
 use super::{tick, tokio_node};
 
+mod files;
+
 const REQUEST_BYTES: usize = 2048;
 const RESPONSE_BYTES: usize = 2048;
 const TRANSFER_BYTES: usize = 1200;
@@ -233,7 +235,12 @@ fn embedded_completion_capacity(tasks: &mut EmbassyTasks<'_>, node: &ResourceNod
     assert!(response_settlements(node).is_empty());
 }
 
-fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
+enum ResponseScenario {
+    Values,
+    Files,
+}
+
+fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint, case: ResponseScenario) {
     let clock = ClockLease::acquire();
     let lab = VirtualBleLab::new(
         BleMediumConfig::new(TopologyConfig::FullyConnected, 2, 4, 4, TRACE_CAPACITY).unwrap(),
@@ -249,7 +256,7 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
         EMBASSY_ADDRESS,
         embedded_endpoint,
         [destination(EMBASSY_ADDRESS)],
-        personal_rns::request_endpoints![Echo, ResourceEcho, ResourceReply],
+        personal_rns::request_endpoints![Echo, ResourceEcho, ResourceReply, files::FileReply],
     );
     let mut desktop = tokio_node::with_endpoints(
         &mut tasks,
@@ -257,16 +264,21 @@ fn scenario(embedded_endpoint: Endpoint, desktop_endpoint: Endpoint) {
         TOKIO_ADDRESS,
         desktop_endpoint,
         [destination(TOKIO_ADDRESS)],
-        personal_rns::request_endpoints![Echo, ResourceEcho, ResourceReply],
+        personal_rns::request_endpoints![Echo, ResourceEcho, ResourceReply, files::FileReply],
     );
     assert!(tasks.settle() > 0);
     let desktop = desktop.try_recv().unwrap();
     converge(&mut tasks, &lab, &embedded, &desktop.handle);
     let links = establish_pair(&mut tasks, &embedded, &desktop.handle);
-    upload_echo(&mut tasks, &embedded, &desktop.handle, links[1]);
-    simultaneous_replies(&mut tasks, &embedded, &desktop.handle, links);
-    desktop_resource_value_limit(&mut tasks, &embedded, &desktop.handle, links[1]);
-    embedded_completion_capacity(&mut tasks, &embedded, links[0]);
+    match case {
+        ResponseScenario::Values => {
+            upload_echo(&mut tasks, &embedded, &desktop.handle, links[1]);
+            simultaneous_replies(&mut tasks, &embedded, &desktop.handle, links);
+            desktop_resource_value_limit(&mut tasks, &embedded, &desktop.handle, links[1]);
+            embedded_completion_capacity(&mut tasks, &embedded, links[0]);
+        }
+        ResponseScenario::Files => files::exchange(&mut tasks, &embedded, &desktop.handle, links),
+    }
     simultaneous_replies(&mut tasks, &embedded, &desktop.handle, links);
     upload_echo(&mut tasks, &embedded, &desktop.handle, links[1]);
     assert!(embedded.take_received().is_empty());
@@ -296,6 +308,7 @@ fn esp32_and_apple_nodes_transfer_resources_and_enforce_response_limits() {
     scenario(
         Endpoint::Esp32(Esp32Host::Esp32),
         Endpoint::CoreBluetooth(AppleHost::MacOs),
+        ResponseScenario::Values,
     );
 }
 
@@ -304,5 +317,6 @@ fn nrf52_and_bluez_nodes_transfer_resources_and_enforce_response_limits() {
     scenario(
         Endpoint::Nrf52(Nrf52Host::Nrf52),
         Endpoint::BlueZ(BlueZHost::Linux),
+        ResponseScenario::Values,
     );
 }

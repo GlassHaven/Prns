@@ -174,8 +174,9 @@ pub struct RequestOptions {
     pub timeout_millis: Option<f64>,
     /// Encoded response limit before binary decoding (`packed.length`, not
     /// `data.length`) for packets and whole, metadata-free Resources.
-    /// Metadata-bearing and segmented Resources count the entire advertised
-    /// uncompressed stream, including envelope and metadata.
+    /// Whole metadata-bearing Resources count literal file bytes, excluding
+    /// metadata. Segmented Resources count the entire advertised uncompressed
+    /// stream, including envelope and metadata.
     pub maximum_response_bytes: Option<f64>,
 }
 

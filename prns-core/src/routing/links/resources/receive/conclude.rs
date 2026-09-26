@@ -598,11 +598,15 @@ struct AssembledSingleSegment<'a> {
     data: &'a [u8],
 }
 
-/// Stock RNS resource responses carry the same msgpack `[request_id, data]` envelope as packet
-/// responses. Accept data that is not a valid envelope as the former Prns raw-body form for wire
-/// continuity, but a valid envelope must name the request advertised by the resource.
-fn response_application_data(request_id: RequestId, data: &[u8]) -> Option<&[u8]> {
-    if data.first() != Some(&0x92) {
+/// Metadata-bearing RNS responses are literal file bytes, never envelopes.
+/// Other responses carry `[request_id, data]`, with the former Prns raw-body
+/// form accepted for wire continuity. Valid envelopes must name the advertised request.
+fn response_application_data<'a>(
+    request_id: RequestId,
+    metadata: Option<&[u8]>,
+    data: &'a [u8],
+) -> Option<&'a [u8]> {
+    if metadata.is_some() || data.first() != Some(&0x92) {
         return Some(data);
     }
     match parse_response_plaintext(data) {
@@ -611,7 +615,8 @@ fn response_application_data(request_id: RequestId, data: &[u8]) -> Option<&[u8]
     }
 }
 
-/// Correlated deliveries (a request or a settled response) carry no metadata lane because the reference's request/response machinery never reads it. A block on those transfers therefore strips and drops.
+/// Correlated deliveries expose the body, not the metadata block. Metadata still
+/// distinguishes raw file responses from enveloped response values.
 fn deliver_single_segment<C: ReceiptTable, Work>(
     receipts: &mut Receipts<C>,
     segment: AssembledSingleSegment<'_>,
@@ -632,7 +637,7 @@ fn deliver_single_segment<C: ReceiptTable, Work>(
 
     match correlation {
         ResourceCorrelation::Response(id) => {
-            let response = response_application_data(id, data)
+            let response = response_application_data(id, metadata, data)
                 .ok_or(SendRequestFailure::ResponseTransferFailed(
                     ResourceFailureCause::TransferCorrupt,
                 ))
@@ -760,7 +765,7 @@ fn deliver_split_segment<C: ReceiptTable, Work>(
     match answers {
         Some((command_id, request_id)) => {
             let data = if segment_index == 1 {
-                let Some(data) = response_application_data(request_id, data) else {
+                let Some(data) = response_application_data(request_id, metadata, data) else {
                     return;
                 };
                 data
@@ -984,17 +989,17 @@ mod seam_tests {
         let mut packed = [0u8; 64];
         let len = write_response_plaintext(&request_id, b"answer", &mut packed).unwrap();
         assert_eq!(
-            response_application_data(request_id, &packed[..len]),
+            response_application_data(request_id, None, &packed[..len]),
             Some(&b"answer"[..])
         );
         assert_eq!(
-            response_application_data(RequestId([0x42; 16]), &packed[..len]),
+            response_application_data(RequestId([0x42; 16]), None, &packed[..len]),
             None,
             "a stock envelope cannot settle another request",
         );
         let former_raw_body = b"\x92not-a-valid-response-envelope";
         assert_eq!(
-            response_application_data(request_id, former_raw_body),
+            response_application_data(request_id, None, former_raw_body),
             Some(&former_raw_body[..]),
             "a legacy raw body remains data even when its first byte resembles msgpack",
         );

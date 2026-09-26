@@ -373,8 +373,9 @@ export interface RequestOptions {
   /**
    * Encoded response limit before binary decoding (`packed.length`, not
    * `data.length`) for packets and whole, metadata-free Resources.
-   * Metadata-bearing and segmented Resources count the entire advertised
-   * uncompressed stream, including envelope and metadata.
+   * Whole metadata-bearing Resources count literal file bytes, excluding
+   * metadata. Segmented Resources count the entire advertised uncompressed
+   * stream, including envelope and metadata.
    */
   maximumResponseBytes?: number
 }

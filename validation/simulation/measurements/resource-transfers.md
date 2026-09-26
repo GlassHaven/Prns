@@ -3,7 +3,7 @@
 Host: macOS arm64. Local candidate based on `e6fe30134`, not hosted CI or
 exact-SHA release evidence. Shipping code and firmware capacities are unchanged.
 
-The [scenarios](../tests/embassy_ble/resources.rs) cover a Resource request and
+The [scenarios](../tests/embassy_ble/resources/mod.rs) cover a Resource request and
 echo, concurrent Resource replies, exact encoded response-envelope limits,
 typed refusal at one byte below that envelope, reuse after refusal, and teardown.
 They run against both ESP32/Apple and nRF52/BlueZ shared protocol endpoints.
@@ -58,4 +58,5 @@ This original slice counted the encoded envelope. The subsequent
 [whole-Resource correction](whole-resource-response-limits.md) removes that
 discrepancy for whole, metadata-free responses. The
 [shared-core follow-up](../../../prns-core/plans/response-size-accounting.md)
-tracks the remaining metadata-bearing and segmented forms.
+tracks the remaining segmented forms; the
+[whole-file follow-up](metadata-resource-response-limits.md) covers metadata-bearing responses.

@@ -3,6 +3,8 @@
 pub mod cancel;
 pub mod conclude;
 pub mod gate;
+#[cfg(test)]
+mod metadata_response_limits;
 pub mod offload;
 pub mod part_hash;
 pub mod rounds;
