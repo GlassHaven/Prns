@@ -211,9 +211,13 @@ Preserve Remote Control's fixed response bounds and stock-Reticulum wire
 interoperability. Audit reusable native/Node.js/WASM client semantics before
 publishing a changed limit contract; do not introduce a transport-specific fix.
 
-Request expiry and receipt culling between segments are covered. Still include
-assembly cleanup when a continuation is refused before admission, and audit
-culling during an active transfer separately. Segment counts and request correlation are now stable across the
+Request expiry and receipt culling between segments are covered. The
+[active-transfer cases](../../validation/simulation/measurements/active-response-culling.md)
+also cull a request after continuation admission while its next data part is held,
+then release that late part without disturbing the replacement request. Raw
+calibration and buffered APIs are tested separately; this is not exhaustive
+coverage of every possible transfer phase. Still include assembly cleanup when
+a continuation is refused before admission. Segment counts and request correlation are now stable across the
 chain; validate advertised stream totals before loosening admission. Arbitration
 between a whole response and an overlapping split response naming the same request
 is not addressed by the split-chain ownership checks.

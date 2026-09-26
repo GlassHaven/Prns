@@ -7,6 +7,7 @@ use personal_rns::engine::{
 use personal_rns::interfaces::bluetooth_auto::BleAddress;
 use prns_simulation::{Reachability, TopologyMutation};
 
+mod active_culling;
 mod buffered_interruption;
 mod culled;
 mod interrupted;
