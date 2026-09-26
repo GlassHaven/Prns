@@ -98,7 +98,7 @@ impl<S: StorageLayout> EngineState<S> {
             }
             ResourcePartHashLanding::Assembly { link_id, hash } => {
                 self.emit_resource_open(&link_id, &hash, sink);
-                self.conclude_resource(&link_id, &hash, now, sink);
+                self.conclude_resource(&link_id, &hash, now, fill_random, sink);
                 wake.resource_deadlines = self.resource_deadlines_wake();
                 wake.receipt_timeouts = self.receipt_timeouts_wake();
             }
@@ -723,7 +723,7 @@ impl<S: StorageLayout> EngineState<S> {
                 // Mark the final ready span in flight before conclusion observes the row. That
                 // makes a complete transfer park as AwaitingOpen until its typed completion.
                 self.emit_resource_open(&link_id, &hash, sink);
-                self.conclude_resource(&link_id, &hash, now, sink);
+                self.conclude_resource(&link_id, &hash, now, fill_random, sink);
                 wake_schedule_changes.resource_deadlines = self.resource_deadlines_wake();
                 wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
             }

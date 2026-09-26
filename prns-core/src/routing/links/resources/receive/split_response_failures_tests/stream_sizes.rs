@@ -179,6 +179,7 @@ fn changed_stream_size_cannot_be_completed_or_cleared_by_an_old_transfer() {
                         plaintext: &data,
                     },
                     InstantMillis(2_400),
+                    &mut |bytes| bytes.fill(0xC9),
                     &mut |reaction: EngineReaction<'_, NoOwedWork>| {
                         assert!(!matches!(
                             &reaction,

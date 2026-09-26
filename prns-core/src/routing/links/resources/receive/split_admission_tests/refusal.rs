@@ -5,7 +5,6 @@ use crate::units::ByteLimit;
 use crate::wire::{WireContext, WirePacketHeader};
 
 enum Refusal {
-    ResponseLimit,
     TransferCapacity,
     QueueCapacity,
     QueueDeadline,
@@ -48,25 +47,6 @@ fn expire_offers(response: &mut SplitResponse) -> InboundCapture {
 fn refused_continuation_cleans_up(refusal: Refusal) {
     let mut response = SplitResponse::with_limit(ByteLimit::Maximum(256));
     let continuation = match refusal {
-        Refusal::ResponseLimit => {
-            // Tighten the receipt policy without changing the chain's size declaration.
-            assert!(response
-                .receiver
-                .receipts
-                .settle_by_request_id(&link_id(), response.request)
-                .is_some());
-            assert_eq!(
-                track_pending_request_with_limit(
-                    &mut response.receiver,
-                    REQUEST,
-                    1_800,
-                    20_000,
-                    ByteLimit::Maximum(255),
-                ),
-                response.request
-            );
-            response.continuation.clone()
-        }
         Refusal::TransferCapacity => rewrite_advertisement(&response.continuation, |ad| {
             ad.transfer_bytes = 5_000;
         }),
@@ -102,7 +82,6 @@ fn refused_continuation_cleans_up(refusal: Refusal) {
     }));
     rejected.frames.clear();
     let failure = match refusal {
-        Refusal::ResponseLimit => SendRequestFailure::ResponseTooLarge,
         Refusal::TransferCapacity | Refusal::QueueCapacity | Refusal::QueueDeadline => {
             SendRequestFailure::ResourceCapacity
         }
@@ -125,11 +104,6 @@ fn refused_continuation_cleans_up(refusal: Refusal) {
             .original_hash(&link_id()),
         None
     );
-}
-
-#[test]
-fn oversized_continuation_releases_the_failed_response_assembly() {
-    refused_continuation_cleans_up(Refusal::ResponseLimit);
 }
 
 #[test]

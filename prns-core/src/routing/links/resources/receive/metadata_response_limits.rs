@@ -71,6 +71,7 @@ fn check_file(body: ResourceBody<'_>, limit: ByteLimit) {
                 plaintext: &plaintext,
             },
             InstantMillis(2_400),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |reaction: EngineReaction<'_, NoOwedWork>| match reaction {
                 EngineReaction::Journaled(Journaled::ResponseReceived {
                     command_id,

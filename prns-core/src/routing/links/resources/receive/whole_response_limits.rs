@@ -259,6 +259,7 @@ fn compressed_whole_responses_are_limited_after_inflation() {
                     plaintext: &stream,
                 },
                 InstantMillis(2_400),
+                &mut |bytes| bytes.fill(0xC9),
                 &mut |reaction: EngineReaction<'_, NoOwedWork>| match reaction {
                     EngineReaction::Journaled(Journaled::ResponseReceived {
                         command_id,
@@ -337,7 +338,7 @@ fn whole_uncompressed_responses_refuse_a_false_advertised_stream_length() {
 }
 
 #[test]
-fn split_advertisements_keep_their_stricter_stream_limit() {
+fn split_advertisements_defer_value_budgets_until_verification() {
     for (has_metadata, total_segments) in [(false, 2), (true, 2)] {
         let mut receiver = engine_with_active_link();
         let request = track_pending_request_with_limit(
@@ -363,18 +364,12 @@ fn split_advertisements_keep_their_stricter_stream_limit() {
             advertisement.flags.split = total_segments > 1;
             advertisement.total_segments = total_segments;
         });
-        let capture = feed(&mut receiver, &advertisement, 2_000);
-        assert_eq!(
-            (capture.responses, capture.settlements),
-            (
-                std::vec![],
-                std::vec![(
-                    CommandId(42),
-                    expected_settlement(Expected::RefusedAdvertisement, 200)
-                )]
-            ),
-        );
-        assert_retired(&receiver, request);
+        let mut capture = feed(&mut receiver, &advertisement, 2_000);
+        assert_eq!(capture.frames.len(), 1);
+        capture.frames.clear();
+        assert_eq!(capture, InboundCapture::default());
+        assert!(receiver.receipts.has_pending_request(&link_id(), request));
+        assert_eq!(receiver.incoming_resources.len(), 1);
     }
 }
 

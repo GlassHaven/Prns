@@ -28,10 +28,12 @@ enum Requester {
 }
 
 enum AdmissionCase {
-    RefusedAtOffer,
+    RefusedAtCompletion,
+    RefusedAfterFirstSegment,
     ThreeSegments,
 }
 
+#[allow(clippy::panic)]
 fn journaled_request(
     tasks: &mut EmbassyTasks<'_>,
     handle: &impl PrnsNodeApi,
@@ -48,15 +50,20 @@ fn journaled_request(
             data: SendRequestData::from_slice(&(TRANSFER_BYTES as u16).to_be_bytes()).unwrap(),
             response_timeout: RequestResponseTimeout::LinkDefault,
             maximum_response_bytes: match case {
-                AdmissionCase::RefusedAtOffer => ByteLimit::Maximum(0),
-                AdmissionCase::ThreeSegments => ByteLimit::Unlimited,
+                AdmissionCase::RefusedAtCompletion => ByteLimit::Maximum(0),
+                AdmissionCase::RefusedAfterFirstSegment => {
+                    ByteLimit::Maximum(TRANSFER_WINDOW_BYTES as u64)
+                }
+                AdmissionCase::ThreeSegments => ByteLimit::Maximum(TRANSFER_BYTES as u64),
             },
         }))
         .unwrap();
     let events = complete(tasks, async move { trace.completed().await });
     let elapsed = RttMillis::new(tasks.snapshot().tick.get() - started.get());
     let result = match case {
-        AdmissionCase::RefusedAtOffer => Err(SendRequestFailure::ResponseTooLarge),
+        AdmissionCase::RefusedAtCompletion | AdmissionCase::RefusedAfterFirstSegment => {
+            Err(SendRequestFailure::ResponseTooLarge)
+        }
         AdmissionCase::ThreeSegments => Ok(PacketReceiptDelivered {
             rtt: elapsed,
             evidence: DeliveryEvidence::Response,
@@ -64,7 +71,26 @@ fn journaled_request(
     };
     let expected_terminal = ResponseEvent::Settled { command, result };
     match case {
-        AdmissionCase::RefusedAtOffer => assert_eq!(events, [expected_terminal]),
+        AdmissionCase::RefusedAtCompletion => assert_eq!(events, [expected_terminal]),
+        AdmissionCase::RefusedAfterFirstSegment => {
+            let [ResponseEvent::Segment { request, bytes, .. }, _] = events.as_slice() else {
+                panic!("one provisional segment followed by refusal: {events:?}");
+            };
+            assert!(!bytes.is_empty() && bytes.len() <= TRANSFER_WINDOW_BYTES);
+            assert_eq!(
+                events,
+                [
+                    ResponseEvent::Segment {
+                        link,
+                        request: *request,
+                        index: 1,
+                        total: 3,
+                        bytes: files::FILE_BYTES[..bytes.len()].to_vec(),
+                    },
+                    expected_terminal
+                ]
+            );
+        }
         AdmissionCase::ThreeSegments => {
             assert_eq!(
                 events.len(),
@@ -225,7 +251,11 @@ fn reassemble(
     desktop: &tokio_node::TokioNode,
     links: [LinkId; 2],
 ) {
-    for case in [AdmissionCase::RefusedAtOffer, AdmissionCase::ThreeSegments] {
+    for case in [
+        AdmissionCase::RefusedAtCompletion,
+        AdmissionCase::RefusedAfterFirstSegment,
+        AdmissionCase::ThreeSegments,
+    ] {
         journaled_request(
             tasks,
             &desktop.handle,
@@ -234,9 +264,11 @@ fn reassemble(
             &case,
         );
         let responder = match case {
-            AdmissionCase::RefusedAtOffer => Settlement::Respond(Err(RespondFailure::Resource(
-                SendResourceFailure::RejectedByPeer,
-            ))),
+            AdmissionCase::RefusedAtCompletion | AdmissionCase::RefusedAfterFirstSegment => {
+                Settlement::Respond(Err(RespondFailure::Resource(
+                    SendResourceFailure::RejectedByPeer,
+                )))
+            }
             AdmissionCase::ThreeSegments => Settlement::Respond(Ok(())),
         };
         assert_eq!(response_settlements(embedded), [responder]);

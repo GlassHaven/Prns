@@ -549,6 +549,7 @@ where
                         plaintext: provide.plaintext.as_slice(),
                     },
                     now,
+                    &mut |entropy| host.fill_random(entropy),
                     &mut |reaction| {
                         route_command_reaction(
                             reaction,

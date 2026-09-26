@@ -409,8 +409,11 @@ where
                 ));
             }
             InlineReadyWork::ResourceOpen(completed) => {
-                wake.compose(
-                    engine.resume_resource_open(completed, now, &mut |reaction| {
+                wake.compose(engine.resume_resource_open(
+                    completed,
+                    now,
+                    &mut |entropy| host.fill_random(entropy),
+                    &mut |reaction| {
                         route_and_capture_owed_work(
                             reaction,
                             egress,
@@ -420,8 +423,8 @@ where
                             on_journaled,
                             &mut pending,
                         );
-                    }),
-                );
+                    },
+                ));
             }
             InlineReadyWork::ResourceDecompressionUnsupported { link_id, hash } => {
                 // The no-alloc Embassy runtime does not carry a bzip2 implementation. An empty
@@ -434,6 +437,7 @@ where
                         plaintext: &[],
                     },
                     now,
+                    &mut |entropy| host.fill_random(entropy),
                     &mut |reaction| {
                         route_reaction(reaction, egress, ifacs, pacers, now, on_journaled);
                     },

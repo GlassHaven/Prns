@@ -126,6 +126,7 @@ fn finish_segment(
                 plaintext,
             },
             InstantMillis(at + 10),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |reaction: EngineReaction<'_, NoOwedWork>| match reaction {
                 EngineReaction::Directive(Directive::EmitFrame { target, fill, .. }) => {
                     proofs.push((target, filled_frame(fill).unwrap()));

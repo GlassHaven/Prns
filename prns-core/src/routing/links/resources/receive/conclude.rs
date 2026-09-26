@@ -44,6 +44,7 @@ impl<S: StorageLayout> EngineState<S> {
         link_id: &LinkId,
         hash: &ResourceHash,
         now: InstantMillis,
+        fill_random: &mut impl FnMut(&mut [u8]),
         sink: &mut impl FnMut(EngineReaction<'_, OwedWork<'_>>),
     ) -> ConcludeResourceOutcome {
         let Some(index) = self.incoming_resources.lookup(link_id, hash) else {
@@ -246,10 +247,8 @@ impl<S: StorageLayout> EngineState<S> {
             match verified {
                 Err(cause) => Err(SplitDeliveryFailure::Resource(cause)),
                 Ok(verified) => {
-                    emit_proof(verified.prove, fire_on, sink);
-                    self.links.note_outbound(link_id, now);
                     let delivered = if multi_segment {
-                        deliver_split_segment(
+                        let delivered = deliver_split_segment(
                             &self.receipts,
                             &self.incoming_assemblies,
                             VerifiedSplitSegment {
@@ -262,8 +261,15 @@ impl<S: StorageLayout> EngineState<S> {
                                 data: verified.data,
                             },
                             sink,
-                        )
+                        );
+                        if !matches!(&delivered, Err(SplitDeliveryFailure::ResponseTooLarge)) {
+                            emit_proof(verified.prove, fire_on, sink);
+                            self.links.note_outbound(link_id, now);
+                        }
+                        delivered
                     } else {
+                        emit_proof(verified.prove, fire_on, sink);
+                        self.links.note_outbound(link_id, now);
                         let request_permitted = request_is_permitted(
                             &self.request_handlers,
                             state.correlation,
@@ -302,7 +308,7 @@ impl<S: StorageLayout> EngineState<S> {
             }
             Err(SplitDeliveryFailure::ResponseTooLarge) => {
                 self.retire_incoming_resource(link_id, hash);
-                self.refuse_split_response_value(link_id, &state, sink);
+                self.refuse_split_response_value(link_id, hash, &state, now, fill_random, sink);
                 ConcludeResourceOutcome::ResponseTooLarge
             }
             Ok(segment_bytes) => {
@@ -475,6 +481,7 @@ impl<S: StorageLayout> EngineState<S> {
         &mut self,
         completed: ResourceDecompressionCompleted<'_>,
         now: InstantMillis,
+        fill_random: &mut impl FnMut(&mut [u8]),
         sink: &mut impl FnMut(EngineReaction<'_, Work>),
     ) -> crate::engine::WakeSchedules {
         let ResourceDecompressionCompleted {
@@ -603,13 +610,9 @@ impl<S: StorageLayout> EngineState<S> {
             return wake_schedule_changes;
         };
 
-        emit_proof(prove, fire_on, sink);
-        self.links.note_outbound(&link_id, now);
-        wake_schedule_changes.link_deadlines = self.link_deadlines_wake();
-
         if is_split {
             let original_hash = state.original_hash;
-            let value = match deliver_split_segment(
+            let delivered = deliver_split_segment(
                 &self.receipts,
                 &self.incoming_assemblies,
                 VerifiedSplitSegment {
@@ -622,17 +625,28 @@ impl<S: StorageLayout> EngineState<S> {
                     data,
                 },
                 sink,
-            ) {
+            );
+            if !matches!(&delivered, Err(SplitDeliveryFailure::ResponseTooLarge)) {
+                emit_proof(prove, fire_on, sink);
+                self.links.note_outbound(&link_id, now);
+            }
+            let value = match delivered {
                 Ok(value) => value,
                 Err(failure) => {
                     match failure {
                         SplitDeliveryFailure::Resource(cause) => self
                             .fail_retired_incoming_resource(&link_id, &hash, &state, cause, sink),
-                        SplitDeliveryFailure::ResponseTooLarge => {
-                            self.refuse_split_response_value(&link_id, &state, sink)
-                        }
+                        SplitDeliveryFailure::ResponseTooLarge => self.refuse_split_response_value(
+                            &link_id,
+                            &hash,
+                            &state,
+                            now,
+                            fill_random,
+                            sink,
+                        ),
                     }
                     wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
+                    wake_schedule_changes.link_deadlines = self.link_deadlines_wake();
                     return wake_schedule_changes;
                 }
             };
@@ -654,6 +668,8 @@ impl<S: StorageLayout> EngineState<S> {
                 sink,
             );
         } else {
+            emit_proof(prove, fire_on, sink);
+            self.links.note_outbound(&link_id, now);
             let request_permitted = request_is_permitted(
                 &self.request_handlers,
                 state.correlation,
@@ -678,6 +694,7 @@ impl<S: StorageLayout> EngineState<S> {
                 sink,
             );
         }
+        wake_schedule_changes.link_deadlines = self.link_deadlines_wake();
         wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
         wake_schedule_changes
     }
@@ -685,10 +702,15 @@ impl<S: StorageLayout> EngineState<S> {
     fn refuse_split_response_value<Work>(
         &mut self,
         link_id: &LinkId,
+        hash: &ResourceHash,
         state: &IncomingResourceState,
+        now: InstantMillis,
+        fill_random: &mut impl FnMut(&mut [u8]),
         sink: &mut impl FnMut(EngineReaction<'_, Work>),
     ) {
-        if let Some(id) = self.settle_failed_resource_claim(link_id, state) {
+        let settled = self.settle_failed_resource_claim(link_id, state);
+        self.reject_offered_resource(link_id, hash, now, fill_random, sink);
+        if let Some(id) = settled {
             sink(EngineReaction::Journaled(Journaled::CommandSettled {
                 id,
                 settlement: Settlement::SendRequest(Err(SendRequestFailure::ResponseTooLarge)),
@@ -1066,9 +1088,14 @@ mod seam_tests {
             },
         );
         while let Some(completed) = ready_opens.pop_front() {
-            engine.resume_resource_open(completed, InstantMillis(at), &mut |reaction| {
-                capture_inflate_reaction(reaction, &mut ready_opens, &mut inflate);
-            });
+            engine.resume_resource_open(
+                completed,
+                InstantMillis(at),
+                &mut |bytes| bytes.fill(0xC9),
+                &mut |reaction| {
+                    capture_inflate_reaction(reaction, &mut ready_opens, &mut inflate);
+                },
+            );
         }
         inflate
     }
@@ -1202,6 +1229,7 @@ mod seam_tests {
                 plaintext: &plaintext,
             },
             InstantMillis(2_400),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |reaction: EngineReaction<'_, crate::engine::NoOwedWork>| match reaction {
                 EngineReaction::Directive(Directive::EmitFrame { fill, .. }) => {
                     if let Some(frame) = filled_frame(fill) {
@@ -1283,6 +1311,7 @@ mod seam_tests {
                 plaintext: &composite,
             },
             InstantMillis(2_400),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |reaction: EngineReaction<'_, crate::engine::NoOwedWork>| match reaction {
                 EngineReaction::Directive(Directive::EmitFrame { fill, .. }) => {
                     if let Some(frame) = filled_frame(fill) {
@@ -1394,6 +1423,7 @@ mod seam_tests {
                 plaintext: &corrupted,
             },
             InstantMillis(2_400),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |reaction: EngineReaction<'_, crate::engine::NoOwedWork>| match reaction {
                 EngineReaction::Journaled(Journaled::ResourceFailed { hash, .. }) => {
                     failed.push(hash);
@@ -1413,6 +1443,7 @@ mod seam_tests {
                 plaintext: &plaintext,
             },
             InstantMillis(2_500),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |_: EngineReaction<'_, crate::engine::NoOwedWork>| {
                 panic!("a retired transfer answers nothing");
             },
@@ -1431,6 +1462,7 @@ mod seam_tests {
                 plaintext: b"anything",
             },
             InstantMillis(2_400),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |_: EngineReaction<'_, crate::engine::NoOwedWork>| touched = true,
         );
         assert!(!touched, "an unknown transfer answers nothing");
@@ -1523,6 +1555,7 @@ mod seam_tests {
                 plaintext: &response,
             },
             InstantMillis(2_400),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |reaction: EngineReaction<'_, crate::engine::NoOwedWork>| match reaction {
                 EngineReaction::Directive(Directive::EmitFrame { .. }) => proof_frames += 1,
                 EngineReaction::Journaled(Journaled::ResponseReceived {
@@ -1618,6 +1651,7 @@ mod seam_tests {
                 plaintext: &packed_request,
             },
             InstantMillis(2_400),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |reaction: EngineReaction<'_, crate::engine::NoOwedWork>| {
                 if let EngineReaction::Journaled(Journaled::RequestReceived {
                     destination,
@@ -1689,6 +1723,7 @@ mod seam_tests {
                 plaintext: data,
             },
             InstantMillis(at + 400),
+            &mut |bytes| bytes.fill(0xC9),
             &mut |reaction: EngineReaction<'_, crate::engine::NoOwedWork>| match reaction {
                 EngineReaction::Directive(Directive::EmitFrame { fill, .. }) => {
                     proof_frame = filled_frame(fill);
@@ -2155,6 +2190,7 @@ mod seam_tests {
                     plaintext: data,
                 },
                 InstantMillis(at + 400),
+                &mut |bytes| bytes.fill(0xC9),
                 &mut |reaction: EngineReaction<'_, crate::engine::NoOwedWork>| match reaction {
                     EngineReaction::Directive(Directive::EmitFrame { fill, .. }) => {
                         proof_frame = filled_frame(fill);

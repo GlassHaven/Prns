@@ -1,7 +1,7 @@
 # Response-size accounting
 
-Status: packet and whole Resource accounting corrected, including metadata-bearing
-files; segmented Resource accounting remains open.
+Status: packet, whole Resource and segmented Resource value accounting corrected,
+including metadata-bearing files. Additional boundary and ownership coverage remains.
 
 ## Completed packet slice
 
@@ -161,7 +161,7 @@ passing simulator suites are separate regression evidence. See
 The mixed-runtime simulator now exercises successful three-segment static-file
 responses, zero-budget refusal and reuse through both runtimes with a test-only
 512-byte transfer window. Raw journals and buffered request futures are checked
-separately. These scenarios do not yet enforce exact cumulative value budgets or
+separately. These initial scenarios did not enforce exact cumulative value budgets or
 inject inconsistent peers; see
 [simulation evidence](../../validation/simulation/measurements/segmented-resource-simulation.md).
 
@@ -202,9 +202,15 @@ promotion/expiry, completion, advancement and failure cleanup. The distinct
 delivered-value budget is still unfinished.
 The [value-accounting slice](../../validation/simulation/measurements/split-value-accounting.md)
 adds separate verified-value progress and cumulative checks before chunk delivery.
-Admission is still deliberately conservative: a trial relaxation exposed missing
-completion-time cancellation in the simulator's sender-reuse checks. Wire fresh
-entropy and cancellation through all completion paths before relaxing that guard.
+That slice retained conservative admission: a trial relaxation exposed missing
+completion-time cancellation in the simulator's sender-reuse checks. The
+[completion-cancellation slice](../../validation/simulation/measurements/split-response-budget-cancellation.md)
+now requires fresh entropy on each completion API and cancels oversized split
+responses without proving the offending segment. Admission defers the value budget
+to verified cumulative bytes, retaining independent stream and allocation bounds.
+Owner tests use real request limits from creation, and the mixed-runtime capstone
+proves zero-budget refusal, refusal after a provisional segment, exact 1,200-byte
+completion and sender/receiver reuse on the same links.
 The [atomic progress follow-up](../../validation/simulation/measurements/atomic-stream-progress.md)
 also makes advancement enforce that same checked stream total before mutating
 the assembly, rather than trusting callers and using saturating addition.

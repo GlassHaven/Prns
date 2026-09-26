@@ -287,9 +287,14 @@ fn feed_inner<S: StorageLayout>(
         },
     );
     while let Some(completed) = ready_opens.pop_front() {
-        engine.resume_resource_open(completed, InstantMillis(at), &mut |reaction| {
-            capture_inbound_reaction(reaction, &mut capture, &mut ready_opens);
-        });
+        engine.resume_resource_open(
+            completed,
+            InstantMillis(at),
+            &mut |bytes| bytes.fill(0xC9),
+            &mut |reaction| {
+                capture_inbound_reaction(reaction, &mut capture, &mut ready_opens);
+            },
+        );
     }
     capture
 }

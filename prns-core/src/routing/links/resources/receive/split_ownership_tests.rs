@@ -226,6 +226,7 @@ fn a_replaced_split_transfer_cannot_publish_or_advance_the_current_chain() {
                     plaintext: &old.body,
                 },
                 InstantMillis(2_400),
+                &mut |bytes| bytes.fill(0xC9),
                 &mut |reaction| capture_inbound_reaction(reaction, &mut capture, &mut ready),
             );
             assert!(ready.is_empty());

@@ -199,10 +199,9 @@ impl<S: StorageLayout> EngineState<S> {
                     settled_request: settled_request.command_id,
                 };
             }
-            // Whole responses exclude framing from their value budget. Metadata
-            // length is known only after verification, so its file may be empty.
-            // Conclusion checks the actual body; independent stream/storage
-            // ceilings below still bound admission. Split accounting is stricter.
+            // Split values are budgeted cumulatively after verified framing is
+            // removed. Metadata length is also unknown until opening. Independent
+            // stream/storage ceilings below still bound admission.
             let minimum_value_bytes = match (
                 advertisement.total_segments,
                 advertisement.flags.has_metadata,
@@ -211,7 +210,7 @@ impl<S: StorageLayout> EngineState<S> {
                 (1, false) => advertisement
                     .data_bytes
                     .saturating_sub(crate::routing::links::request::RESPONSE_WIRE_OVERHEAD as u64),
-                _ => advertisement.data_bytes,
+                _ => 0,
             };
             if !maximum_response_bytes.allows(minimum_value_bytes) {
                 let settled_request =

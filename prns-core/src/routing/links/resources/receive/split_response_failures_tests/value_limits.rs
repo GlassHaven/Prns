@@ -1,6 +1,8 @@
 use super::*;
+use crate::engine::{RespondFailure, SendResourceFailure};
 use crate::routing::links::resources::{ResourceBody, ResourceMetadata};
 use crate::units::ByteLimit;
+use crate::wire::WirePacketHeader;
 
 enum Framing {
     Raw,
@@ -11,7 +13,8 @@ enum Framing {
 fn check_value_limit(opening: &Opening, framing: &Framing, value: &[u8], limit: ByteLimit) {
     let mut receiver = engine_with_active_link();
     let mut sender = engine_with_active_link();
-    let request = track_pending_request(&mut receiver, CommandId(42), 1_800, 20_000);
+    let request =
+        track_pending_request_with_limit(&mut receiver, CommandId(42), 1_800, 20_000, limit);
     let split = value.len() / 2;
     let (head, tail) = value.split_at(split);
     let first = match framing {
@@ -45,7 +48,6 @@ fn check_value_limit(opening: &Opening, framing: &Framing, value: &[u8], limit: 
         };
         plaintext.extend_from_slice(data);
         let at = 2_000 + (index - 1) * 1_000;
-        set_completion_policy(&mut receiver, request, ByteLimit::Unlimited);
         let ad = advertise_response_body_from(
             &mut sender,
             CommandId(20 + index),
@@ -65,10 +67,9 @@ fn check_value_limit(opening: &Opening, framing: &Framing, value: &[u8], limit: 
         let pull = feed(&mut receiver, &ad, at + 100);
         assert_eq!(pull.frames.len(), 1);
         assert_eq!(pull.settlements, std::vec![]);
-        set_completion_policy(&mut receiver, request, limit);
         let served = feed(&mut sender, &pull.frames[0].1, at + 200);
         assert!(!served.frames.is_empty());
-        let proofs = finish_segment(
+        let replies = finish_segment(
             &mut receiver,
             &served.frames,
             &plaintext,
@@ -78,7 +79,26 @@ fn check_value_limit(opening: &Opening, framing: &Framing, value: &[u8], limit: 
         );
         let cumulative = if index == 1 { head.len() } else { value.len() };
         if !limit.allows(cumulative as u64) {
-            assert_eq!(proofs.len(), 1);
+            assert_eq!(replies.len(), 1);
+            assert_eq!(
+                WirePacketHeader::parse(&replies[0].1).unwrap().0.context,
+                WireContext::ResourceReceiverCancel
+            );
+            let rejected = feed(&mut sender, &replies[0].1, at + 400);
+            assert_eq!(
+                rejected,
+                InboundCapture {
+                    settlements: std::vec![(
+                        CommandId(20 + index),
+                        Settlement::Respond(Err(RespondFailure::Resource(
+                            SendResourceFailure::RejectedByPeer
+                        )))
+                    )],
+                    ..InboundCapture::default()
+                }
+            );
+            assert!(sender.outgoing_resources.is_empty());
+            assert_eq!(sender.outgoing_assemblies.original_hash(&link_id()), None);
             assert_eq!(
                 delivered,
                 Delivery {
@@ -103,8 +123,8 @@ fn check_value_limit(opening: &Opening, framing: &Framing, value: &[u8], limit: 
             }
             return;
         }
-        assert_eq!(proofs.len(), 1);
-        for (_, proof) in proofs {
+        assert_eq!(replies.len(), 1);
+        for (_, proof) in replies {
             feed(&mut sender, &proof, at + 400);
         }
     }
@@ -130,23 +150,6 @@ fn check_value_limit(opening: &Opening, framing: &Framing, value: &[u8], limit: 
         }
     );
     assert_retired(&receiver, request);
-}
-
-// Admission remains conservative until completion-time cancellation is wired.
-// Replace only the receipt policy after admission to isolate verified accounting.
-fn set_completion_policy(
-    receiver: &mut EngineState<TestStorageLayout>,
-    request: RequestId,
-    limit: ByteLimit,
-) {
-    assert!(receiver
-        .receipts
-        .settle_by_request_id(&link_id(), request)
-        .is_some());
-    assert_eq!(
-        track_pending_request_with_limit(receiver, CommandId(42), 1_800, 20_000, limit),
-        request
-    );
 }
 
 #[test]
