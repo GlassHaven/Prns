@@ -9,6 +9,7 @@ use prns_simulation::{Reachability, TopologyMutation};
 
 mod active_culling;
 mod buffered_interruption;
+mod capacity;
 mod culled;
 mod interrupted;
 mod stalled;
@@ -21,6 +22,32 @@ const TOKIO_RADIO: BleAddress = BleAddress::new([TOKIO_ADDRESS; 6]);
 const INTERRUPTION_BUDGET_MS: u64 = 20_000;
 const INTERRUPTION_TRACE_CAPACITY: usize = 131_072;
 const ORDINARY_RECEIPTS: usize = crate::node::REQUEST_CAPACITY;
+
+fn reuse_both_embassy_request_slots(
+    tasks: &mut EmbassyTasks<'_>,
+    embedded: &ResourceNode,
+    link: LinkId,
+) {
+    const _: () = assert!(crate::node::REQUEST_CAPACITY == 2);
+    let handle = embedded.handle;
+    let replies = complete(tasks, async move {
+        let path = RequestPathHash::of(crate::echo::QUERY_PATH);
+        tokio::join!(
+            measured(handle.request(link, path, b"first slot")),
+            measured(handle.request(link, path, b"second slot")),
+        )
+    });
+    for ((result, elapsed), expected) in [
+        (replies.0, b"first slot".as_slice()),
+        (replies.1, b"second slot".as_slice()),
+    ] {
+        assert_eq!(
+            result.map(|(bytes, rtt)| (bytes.as_slice().to_vec(), rtt)),
+            Ok((expected.to_vec(), elapsed))
+        );
+    }
+    assert!(embedded.take_settled().is_empty());
+}
 
 enum Requester {
     Embassy,

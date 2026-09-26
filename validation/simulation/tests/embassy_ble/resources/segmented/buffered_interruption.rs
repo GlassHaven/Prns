@@ -10,33 +10,6 @@ enum RequestKind {
     Buffered,
 }
 
-const _: () = assert!(crate::node::REQUEST_CAPACITY == 2);
-
-fn reuse_both_embassy_request_slots(
-    tasks: &mut EmbassyTasks<'_>,
-    embedded: &ResourceNode,
-    link: LinkId,
-) {
-    let handle = embedded.handle;
-    let replies = complete(tasks, async move {
-        let path = RequestPathHash::of(crate::echo::QUERY_PATH);
-        tokio::join!(
-            measured(handle.request(link, path, b"first slot")),
-            measured(handle.request(link, path, b"second slot")),
-        )
-    });
-    for ((result, elapsed), expected) in [
-        (replies.0, b"first slot".as_slice()),
-        (replies.1, b"second slot".as_slice()),
-    ] {
-        assert_eq!(
-            result.map(|(bytes, rtt)| (bytes.as_slice().to_vec(), rtt)),
-            Ok((expected.to_vec(), elapsed))
-        );
-    }
-    assert!(embedded.take_settled().is_empty());
-}
-
 pub(super) fn advertisement_header(link: LinkId) -> WirePacketHeader {
     WirePacketHeader {
         ifac_flag: IfacFlag::Open,

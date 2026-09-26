@@ -227,8 +227,13 @@ from arbitrary application data. Check overflow-safe advertised bounds and
 bounded allocation before receiving an untrusted transfer.
 
 Extend owner tests and the mixed-runtime capstones with exact Embassy completion
-capacity boundaries. Verify typed refusal, no truncated or partial successful
-response, one terminal result, receipt cleanup, and subsequent link usability.
+capacity boundaries. The
+[segmented completion-capacity scenarios](../../validation/simulation/measurements/segmented-completion-capacity.md)
+now cover 2,047, 2,048 and 2,049-byte files under a 2,048-byte budget with five
+segments, raw journals and real buffered request APIs in both directions. They
+verify late refusal without partial success, one terminal result, same-link
+recovery, and reuse of both embedded completion slots. Further inconsistent-peer
+injections and whole/split overlap arbitration remain separate work.
 Preserve Remote Control's fixed response bounds and stock-Reticulum wire
 interoperability. Audit reusable native/Node.js/WASM client semantics before
 publishing a changed limit contract; do not introduce a transport-specific fix.

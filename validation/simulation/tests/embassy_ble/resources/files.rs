@@ -4,8 +4,14 @@ use personal_rns::engine::{PrnsCommand, Respond, RespondPayload};
 pub(super) const FILE_PATH: &str = "/simulation/file-reply";
 // A recognized response-envelope header for an unrelated request is still
 // literal file content. The receiver must not interpret or remove its prefix.
-pub(super) const FILE_BYTES: [u8; RESPONSE_BYTES] = {
-    let mut bytes = PAYLOAD;
+pub(super) const FILE_BYTES: [u8; RESPONSE_BYTES + 1] = {
+    let mut bytes = [0; RESPONSE_BYTES + 1];
+    let mut index = 0;
+    while index < PAYLOAD.len() {
+        bytes[index] = PAYLOAD[index];
+        index += 1;
+    }
+    bytes[RESPONSE_BYTES] = 0xA7;
     bytes[0] = 0x92;
     bytes[1] = 0xC4;
     bytes[2] = 16;
@@ -91,7 +97,7 @@ pub(super) fn exchange(
     });
     assert_eq!(
         result.map(|(bytes, rtt)| (bytes.as_slice().to_vec(), rtt)),
-        Ok((FILE_BYTES.to_vec(), elapsed)),
+        Ok((FILE_BYTES[..RESPONSE_BYTES].to_vec(), elapsed)),
     );
     assert!(response_settlements(node).is_empty());
 }
