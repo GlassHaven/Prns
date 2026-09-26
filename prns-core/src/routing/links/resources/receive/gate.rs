@@ -158,8 +158,11 @@ impl<S: StorageLayout> EngineState<S> {
             && self.incoming_assemblies.fit(
                 &link_id,
                 &advertisement.original_hash,
-                advertisement.segment_index,
-                advertisement.total_segments,
+                crate::routing::links::resources::ResourceSegment {
+                    index: advertisement.segment_index,
+                    total_segments: advertisement.total_segments,
+                    total_data_bytes: advertisement.data_bytes,
+                },
                 correlation.into(),
             ) == SegmentFit::Unexpected
         {
@@ -432,8 +435,11 @@ impl<S: StorageLayout> EngineState<S> {
             && self.incoming_assemblies.fit(
                 &link_id,
                 &original_hash,
-                segment_index,
-                total_segment_count,
+                crate::routing::links::resources::ResourceSegment {
+                    index: segment_index,
+                    total_segments: total_segment_count,
+                    total_data_bytes: accepted.uncompressed_data_bytes,
+                },
                 correlation.into(),
             ) == SegmentFit::Unexpected
         {
@@ -490,6 +496,7 @@ impl<S: StorageLayout> EngineState<S> {
                 link_id,
                 original_hash,
                 total_segment_count,
+                accepted.uncompressed_data_bytes,
                 correlation.into(),
             );
         }

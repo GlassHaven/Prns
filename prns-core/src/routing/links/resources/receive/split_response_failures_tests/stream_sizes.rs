@@ -121,3 +121,100 @@ fn inflated_segments_enforce_cumulative_advertised_stream_size() {
         check_stream_size(Opening::Inflated, advertised);
     }
 }
+
+#[test]
+fn changed_stream_size_cannot_be_completed_or_cleared_by_an_old_transfer() {
+    for opening in [Opening::Uncompressed, Opening::Inflated] {
+        let mut receiver = engine_with_active_link();
+        let mut sender = engine_with_active_link();
+        let request = track_pending_request(&mut receiver, CommandId(42), 1_800, 20_000);
+        let data = [0xA1; SEGMENT_BYTES];
+        let advertisement = advertise_response_segment_from(
+            &mut sender,
+            CommandId(20),
+            request,
+            &data,
+            opening.candidate(),
+            ResourceSegment {
+                index: 1,
+                total_segments: 2,
+                total_data_bytes: STREAM_BYTES,
+            },
+            2_000,
+        );
+        let pull = feed(&mut receiver, &advertisement, 2_100);
+        assert_eq!(pull.frames.len(), 1);
+        let hash = receiver
+            .incoming_resources
+            .first_hash_for_link(&link_id())
+            .unwrap();
+        let served = feed(&mut sender, &pull.frames[0].1, 2_200);
+        assert_eq!(served.frames.len(), 1);
+        let mut delivered = Delivery::default();
+        if matches!(opening, Opening::Inflated) {
+            assert!(delivered
+                .absorb(feed(&mut receiver, &served.frames[0].1, 2_300))
+                .is_empty());
+            assert_eq!(delivered, Delivery::default());
+        }
+        let deadline = receiver
+            .receipts
+            .pending_request_deadline(&link_id(), request);
+        receiver.incoming_assemblies.begin(
+            link_id(),
+            hash,
+            2,
+            STREAM_BYTES + 1,
+            AssemblyCorrelation::Response(request),
+        );
+        match opening {
+            Opening::Uncompressed => assert!(delivered
+                .absorb(feed(&mut receiver, &served.frames[0].1, 2_400))
+                .is_empty()),
+            Opening::Inflated => {
+                receiver.resume_resource_decompression(
+                    ResourceDecompressionCompleted {
+                        link_id: link_id(),
+                        hash,
+                        plaintext: &data,
+                    },
+                    InstantMillis(2_400),
+                    &mut |reaction: EngineReaction<'_, NoOwedWork>| {
+                        assert!(!matches!(
+                            &reaction,
+                            EngineReaction::Directive(Directive::EmitFrame { .. })
+                        ));
+                        delivered.record(reaction);
+                    },
+                );
+            }
+        }
+        assert_eq!(
+            delivered,
+            Delivery {
+                failures: std::vec![(hash, ResourceFailureCause::TransferCorrupt)],
+                ..Delivery::default()
+            }
+        );
+        assert!(receiver.incoming_resources.is_empty());
+        assert_eq!(
+            receiver
+                .receipts
+                .pending_request_deadline(&link_id(), request),
+            deadline
+        );
+        assert_eq!(
+            receiver.incoming_assemblies.fit(
+                &link_id(),
+                &hash,
+                ResourceSegment {
+                    index: 1,
+                    total_segments: 2,
+                    total_data_bytes: STREAM_BYTES + 1
+                },
+                AssemblyCorrelation::Response(request),
+            ),
+            crate::routing::links::resources::assembly::SegmentFit::Expected
+        );
+    }
+}

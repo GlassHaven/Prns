@@ -1,5 +1,6 @@
 use super::*;
 use crate::routing::links::request::RequestId;
+use crate::routing::links::resources::ResourceSegment;
 use crate::routing::links::resources::{ResourceCorrelation, ResourceHash};
 use crate::routing::links::LinkId;
 
@@ -16,24 +17,65 @@ fn correlation_matrix<C: IncomingAssemblyTable + Default>(first: RequestId, seco
     let hash = ResourceHash::new([0xB2; 32]);
     for expected in correlations(first) {
         let mut assemblies = IncomingAssemblies::<C>::default();
-        assemblies.begin(link, hash, 2, expected);
+        assemblies.begin(link, hash, 2, 42, expected);
         assert_eq!(
-            assemblies.advance(&link, &hash, 1, 2, 31, expected),
+            assemblies.advance(
+                &link,
+                &hash,
+                ResourceSegment {
+                    index: 1,
+                    total_segments: 2,
+                    total_data_bytes: 42
+                },
+                31,
+                expected
+            ),
             Some(AssemblyProgress::Assembling)
         );
         for offered in correlations(first).into_iter().chain(correlations(second)) {
             if offered == expected {
                 assert_eq!(
-                    assemblies.fit(&link, &hash, 2, 2, offered),
+                    assemblies.fit(
+                        &link,
+                        &hash,
+                        ResourceSegment {
+                            index: 2,
+                            total_segments: 2,
+                            total_data_bytes: 42
+                        },
+                        offered
+                    ),
                     SegmentFit::Expected
                 );
                 continue;
             }
             assert_eq!(
-                assemblies.fit(&link, &hash, 2, 2, offered),
+                assemblies.fit(
+                    &link,
+                    &hash,
+                    ResourceSegment {
+                        index: 2,
+                        total_segments: 2,
+                        total_data_bytes: 42
+                    },
+                    offered
+                ),
                 SegmentFit::Unexpected
             );
-            assert_eq!(assemblies.advance(&link, &hash, 2, 2, 900, offered), None);
+            assert_eq!(
+                assemblies.advance(
+                    &link,
+                    &hash,
+                    ResourceSegment {
+                        index: 2,
+                        total_segments: 2,
+                        total_data_bytes: 42
+                    },
+                    900,
+                    offered
+                ),
+                None
+            );
             assert_eq!(
                 (
                     assemblies.original_hash(&link),
@@ -43,7 +85,17 @@ fn correlation_matrix<C: IncomingAssemblyTable + Default>(first: RequestId, seco
             );
         }
         assert_eq!(
-            assemblies.advance(&link, &hash, 2, 2, 11, expected),
+            assemblies.advance(
+                &link,
+                &hash,
+                ResourceSegment {
+                    index: 2,
+                    total_segments: 2,
+                    total_data_bytes: 42
+                },
+                11,
+                expected
+            ),
             Some(AssemblyProgress::Complete {
                 total_size_bytes: 42
             })
@@ -70,8 +122,8 @@ fn column_ownership<C: IncomingAssemblyTable + Default>() {
     let hash = ResourceHash::new([0xB2; 32]);
     let request = AssemblyCorrelation::Request(RequestId([3; 16]));
     let response = AssemblyCorrelation::Response(RequestId([4; 16]));
-    assemblies.begin(first, hash, 2, request);
-    assemblies.begin(second, hash, 2, response);
+    assemblies.begin(first, hash, 2, 42, request);
+    assemblies.begin(second, hash, 2, 42, response);
     assemblies.clear(&first);
     assert_eq!(
         (
@@ -80,8 +132,8 @@ fn column_ownership<C: IncomingAssemblyTable + Default>() {
         ),
         (None, Some(response))
     );
-    assemblies.begin(first, hash, 2, AssemblyCorrelation::Unsolicited);
-    assemblies.begin(second, hash, 2, request);
+    assemblies.begin(first, hash, 2, 42, AssemblyCorrelation::Unsolicited);
+    assemblies.begin(second, hash, 2, 42, request);
     assert_eq!(
         (
             assemblies.correlation(&first),

@@ -183,8 +183,11 @@ fn assert_old_failed_only(
         receiver.incoming_assemblies.fit(
             &link_id(),
             &current.hash,
-            1,
-            2,
+            ResourceSegment {
+                index: 1,
+                total_segments: 2,
+                total_data_bytes: 132
+            },
             AssemblyCorrelation::Response(current.request)
         ),
         SegmentFit::Expected
@@ -326,8 +329,11 @@ fn stale_transfers_cannot_fail_a_replacement_answering_the_same_request() {
             receiver.incoming_assemblies.fit(
                 &link_id(),
                 &current.hash,
-                1,
-                2,
+                ResourceSegment {
+                    index: 1,
+                    total_segments: 2,
+                    total_data_bytes: 132
+                },
                 AssemblyCorrelation::Response(current.request)
             ),
             SegmentFit::Expected

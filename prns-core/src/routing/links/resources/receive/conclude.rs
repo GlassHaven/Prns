@@ -302,6 +302,7 @@ impl<S: StorageLayout> EngineState<S> {
                             original_hash,
                             segment_index: state.segment_index,
                             total_segments: state.total_segments,
+                            total_data_bytes: state.uncompressed_data_bytes,
                             correlation: state.correlation,
                             segment_bytes,
                         },
@@ -328,14 +329,18 @@ impl<S: StorageLayout> EngineState<S> {
             original_hash,
             segment_index,
             total_segments,
+            total_data_bytes,
             correlation,
             segment_bytes,
         } = segment;
         match self.incoming_assemblies.advance(
             link_id,
             &original_hash,
-            segment_index,
-            total_segments,
+            ResourceSegment {
+                index: segment_index,
+                total_segments,
+                total_data_bytes,
+            },
             segment_bytes,
             correlation.into(),
         ) {
@@ -442,8 +447,11 @@ impl<S: StorageLayout> EngineState<S> {
         self.incoming_assemblies.fit(
             link_id,
             &state.original_hash,
-            state.segment_index,
-            state.total_segments,
+            ResourceSegment {
+                index: state.segment_index,
+                total_segments: state.total_segments,
+                total_data_bytes: state.uncompressed_data_bytes,
+            },
             state.correlation.into(),
         )
     }
@@ -612,6 +620,7 @@ impl<S: StorageLayout> EngineState<S> {
                     original_hash,
                     segment_index: state.segment_index,
                     total_segments: state.total_segments,
+                    total_data_bytes: state.uncompressed_data_bytes,
                     correlation: state.correlation,
                     segment_bytes: plaintext.len() as u64,
                 },
@@ -836,6 +845,7 @@ struct ConcludedSegment {
     original_hash: ResourceHash,
     segment_index: u64,
     total_segments: u64,
+    total_data_bytes: u64,
     correlation: ResourceCorrelation,
     segment_bytes: u64,
 }

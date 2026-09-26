@@ -340,6 +340,7 @@ fn failed_whole_resource_still_settles_without_erasing_a_split_chain_for_the_sam
             link_id(),
             previous,
             2,
+            256,
             AssemblyCorrelation::Response(request),
         );
         let mut sender = engine_with_active_link();

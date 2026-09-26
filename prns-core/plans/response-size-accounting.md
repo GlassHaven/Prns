@@ -196,8 +196,10 @@ The [cumulative stream-size prerequisite](../../validation/simulation/measuremen
 now checks verified stream bytes against each admitted segment's size declaration
 before proving or delivering that segment. It rejects cumulative overflow or
 overrun, and requires exact equality at the final segment, using the existing
-stream counter. This does not yet bind the first size declaration across all
-continuations or enforce the distinct delivered-value budget.
+stream counter. The [size-identity slice](../../validation/simulation/measurements/split-stream-size-identity.md)
+now retains the first size declaration and requires it at admission, queued
+promotion/expiry, completion, advancement and failure cleanup. The distinct
+delivered-value budget is still unfinished.
 Separate early allocation protection from final delivered-payload validation;
 loosening an advertisement check alone would admit oversized legacy raw bodies.
 Keep the authoritative accounting in shared core, with host completion buffers

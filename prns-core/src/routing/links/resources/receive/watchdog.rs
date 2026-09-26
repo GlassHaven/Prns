@@ -95,8 +95,11 @@ impl<S: StorageLayout> EngineState<S> {
                         && self.incoming_assemblies.fit(
                             &offer.link_id(),
                             &offer.original_hash(),
-                            accepted.segment_index,
-                            accepted.total_segment_count,
+                            crate::routing::links::resources::ResourceSegment {
+                                index: accepted.segment_index,
+                                total_segments: accepted.total_segment_count,
+                                total_data_bytes: accepted.uncompressed_data_bytes,
+                            },
                             accepted.correlation.into(),
                         ) == SegmentFit::Unexpected
                     {

@@ -47,9 +47,25 @@ fn expire_offers(response: &mut SplitResponse) -> InboundCapture {
 fn refused_continuation_cleans_up(refusal: Refusal) {
     let mut response = SplitResponse::with_limit(ByteLimit::Maximum(256));
     let continuation = match refusal {
-        Refusal::ResponseLimit => rewrite_advertisement(&response.continuation, |ad| {
-            ad.data_bytes = 257;
-        }),
+        Refusal::ResponseLimit => {
+            // Tighten the receipt policy without changing the chain's size declaration.
+            assert!(response
+                .receiver
+                .receipts
+                .settle_by_request_id(&link_id(), response.request)
+                .is_some());
+            assert_eq!(
+                track_pending_request_with_limit(
+                    &mut response.receiver,
+                    REQUEST,
+                    1_800,
+                    20_000,
+                    ByteLimit::Maximum(255),
+                ),
+                response.request
+            );
+            response.continuation.clone()
+        }
         Refusal::TransferCapacity => rewrite_advertisement(&response.continuation, |ad| {
             ad.transfer_bytes = 5_000;
         }),
@@ -137,6 +153,7 @@ fn stale_queued_continuations_cannot_fail_a_replacement_at_the_wait_deadline() {
         QueuedChain::Replaced,
         QueuedChain::Advanced,
         QueuedChain::ChangedCount,
+        QueuedChain::ChangedStreamSize,
         QueuedChain::ChangedCorrelation,
     ] {
         let mut response = SplitResponse::after_first_segment();
@@ -152,7 +169,10 @@ fn stale_queued_continuations_cannot_fail_a_replacement_at_the_wait_deadline() {
             .pending_request_deadline(&link_id(), response.request);
         match change {
             QueuedChain::Removed => response.receiver.incoming_assemblies.clear(&link_id()),
-            QueuedChain::Replaced | QueuedChain::ChangedCount | QueuedChain::ChangedCorrelation => {
+            QueuedChain::Replaced
+            | QueuedChain::ChangedCount
+            | QueuedChain::ChangedStreamSize
+            | QueuedChain::ChangedCorrelation => {
                 let original = match change {
                     QueuedChain::Replaced => ResourceHash::new([0xD1; 32]),
                     _ => response.original,
@@ -167,18 +187,27 @@ fn stale_queued_continuations_cannot_fail_a_replacement_at_the_wait_deadline() {
                     }
                     _ => AssemblyCorrelation::Response(response.request),
                 };
+                let size = if matches!(change, QueuedChain::ChangedStreamSize) {
+                    512
+                } else {
+                    256
+                };
                 response.receiver.incoming_assemblies.begin(
                     link_id(),
                     original,
                     count,
+                    size,
                     correlation,
                 );
                 assert_eq!(
                     response.receiver.incoming_assemblies.advance(
                         &link_id(),
                         &original,
-                        1,
-                        count,
+                        ResourceSegment {
+                            index: 1,
+                            total_segments: count,
+                            total_data_bytes: size
+                        },
                         SEGMENT_BYTES as u64,
                         correlation
                     ),
@@ -190,8 +219,11 @@ fn stale_queued_continuations_cannot_fail_a_replacement_at_the_wait_deadline() {
                     response.receiver.incoming_assemblies.advance(
                         &link_id(),
                         &response.original,
-                        2,
-                        2,
+                        ResourceSegment {
+                            index: 2,
+                            total_segments: 2,
+                            total_data_bytes: 256
+                        },
                         SEGMENT_BYTES as u64,
                         AssemblyCorrelation::Response(response.request)
                     ),
@@ -248,10 +280,13 @@ fn refusing_a_whole_response_does_not_clear_another_assembly_correlation() {
         AssemblyCorrelation::Response(RequestId([0xE2; 16])),
     ] {
         let mut response = SplitResponse::with_limit(ByteLimit::Maximum(256));
-        response
-            .receiver
-            .incoming_assemblies
-            .begin(link_id(), response.original, 2, correlation);
+        response.receiver.incoming_assemblies.begin(
+            link_id(),
+            response.original,
+            2,
+            256,
+            correlation,
+        );
         let refused = rewrite_advertisement(&response.continuation, |ad| {
             ad.segment_index = 1;
             ad.total_segments = 1;

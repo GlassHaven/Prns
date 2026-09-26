@@ -10,6 +10,7 @@ use crate::routing::delivery::receipts::{OutstandingReceipt, ReceiptKind, Reques
 use crate::routing::links::request::RequestId;
 use crate::routing::links::resources::assembly::{AssemblyCorrelation, AssemblyProgress};
 use crate::routing::links::resources::ResourceHash;
+use crate::routing::links::resources::ResourceSegment;
 use crate::routing::links::LinkId;
 
 #[test]
@@ -37,23 +38,36 @@ fn receipt_expiry_reclaims_only_its_own_response_assembly() {
     ] {
         let mut state = EngineState::<TestStorageLayout>::default();
         if let Some(correlation) = correlation {
-            state.incoming_assemblies.begin(owner, hash, 2, correlation);
+            state
+                .incoming_assemblies
+                .begin(owner, hash, 2, 19, correlation);
             assert_eq!(
-                state
-                    .incoming_assemblies
-                    .advance(&owner, &hash, 1, 2, 17, correlation),
+                state.incoming_assemblies.advance(
+                    &owner,
+                    &hash,
+                    ResourceSegment {
+                        index: 1,
+                        total_segments: 2,
+                        total_data_bytes: 19
+                    },
+                    17,
+                    correlation
+                ),
                 Some(AssemblyProgress::Assembling)
             );
         }
         state
             .incoming_assemblies
-            .begin(other, hash, 2, AssemblyCorrelation::Response(request));
+            .begin(other, hash, 2, 19, AssemblyCorrelation::Response(request));
         assert_eq!(
             state.incoming_assemblies.advance(
                 &other,
                 &hash,
-                1,
-                2,
+                ResourceSegment {
+                    index: 1,
+                    total_segments: 2,
+                    total_data_bytes: 19
+                },
                 17,
                 AssemblyCorrelation::Response(request)
             ),
@@ -116,9 +130,17 @@ fn receipt_expiry_reclaims_only_its_own_response_assembly() {
         ] {
             if let Some(correlation) = correlation {
                 assert_eq!(
-                    state
-                        .incoming_assemblies
-                        .advance(&link, &hash, 2, 2, 2, correlation),
+                    state.incoming_assemblies.advance(
+                        &link,
+                        &hash,
+                        ResourceSegment {
+                            index: 2,
+                            total_segments: 2,
+                            total_data_bytes: 19
+                        },
+                        2,
+                        correlation
+                    ),
                     Some(AssemblyProgress::Complete {
                         total_size_bytes: 19
                     })

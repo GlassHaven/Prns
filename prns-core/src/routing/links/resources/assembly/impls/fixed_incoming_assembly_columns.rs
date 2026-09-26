@@ -9,6 +9,7 @@ pub struct FixedIncomingAssemblyTable<const MAX_INCOMING_ASSEMBLIES: usize> {
     original_hashes: [ResourceHash; MAX_INCOMING_ASSEMBLIES],
     correlations: [AssemblyCorrelation; MAX_INCOMING_ASSEMBLIES],
     total_segments: [u64; MAX_INCOMING_ASSEMBLIES],
+    stream_sizes: [u64; MAX_INCOMING_ASSEMBLIES],
     segments_received: [u64; MAX_INCOMING_ASSEMBLIES],
     received_totals: [u64; MAX_INCOMING_ASSEMBLIES],
 }
@@ -23,6 +24,7 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> Default
             original_hashes: [ResourceHash::new([0u8; RESOURCE_HASH_LEN]); MAX_INCOMING_ASSEMBLIES],
             correlations: [AssemblyCorrelation::Unsolicited; MAX_INCOMING_ASSEMBLIES],
             total_segments: [0; MAX_INCOMING_ASSEMBLIES],
+            stream_sizes: [0; MAX_INCOMING_ASSEMBLIES],
             segments_received: [0; MAX_INCOMING_ASSEMBLIES],
             received_totals: [0; MAX_INCOMING_ASSEMBLIES],
         }
@@ -54,6 +56,9 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> IncomingAssemblyTable
     fn segments_received(&self) -> &[u64] {
         &self.segments_received[..self.len]
     }
+    fn stream_sizes(&self) -> &[u64] {
+        &self.stream_sizes[..self.len]
+    }
     fn received_totals(&self) -> &[u64] {
         &self.received_totals[..self.len]
     }
@@ -63,6 +68,7 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> IncomingAssemblyTable
         link_id: LinkId,
         original_hash: ResourceHash,
         total_segments: u64,
+        stream_size: u64,
         correlation: AssemblyCorrelation,
     ) {
         if self.len >= MAX_INCOMING_ASSEMBLIES {
@@ -73,6 +79,7 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> IncomingAssemblyTable
         self.original_hashes[i] = original_hash;
         self.correlations[i] = correlation;
         self.total_segments[i] = total_segments;
+        self.stream_sizes[i] = stream_size;
         self.segments_received[i] = 0;
         self.received_totals[i] = 0;
         self.len += 1;
@@ -90,6 +97,7 @@ impl<const MAX_INCOMING_ASSEMBLIES: usize> IncomingAssemblyTable
             self.original_hashes[index] = self.original_hashes[last];
             self.correlations[index] = self.correlations[last];
             self.total_segments[index] = self.total_segments[last];
+            self.stream_sizes[index] = self.stream_sizes[last];
             self.segments_received[index] = self.segments_received[last];
             self.received_totals[index] = self.received_totals[last];
         }

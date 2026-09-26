@@ -166,7 +166,36 @@ enum QueuedChain {
     Replaced,
     Advanced,
     ChangedCount,
+    ChangedStreamSize,
     ChangedCorrelation,
+}
+
+#[test]
+fn a_continuation_cannot_rewrite_the_original_stream_size() {
+    for changed_size in [0, 255, 257, u64::MAX] {
+        let mut response = SplitResponse::after_first_segment();
+        let deadline = response
+            .receiver
+            .receipts
+            .pending_request_deadline(&link_id(), response.request);
+        let changed =
+            rewrite_advertisement(&response.continuation, |ad| ad.data_bytes = changed_size);
+        assert_eq!(
+            feed(&mut response.receiver, &changed, 2_400),
+            InboundCapture::default()
+        );
+        assert!(response.receiver.incoming_resources.is_empty());
+        assert_eq!(
+            response
+                .receiver
+                .receipts
+                .pending_request_deadline(&link_id(), response.request),
+            deadline
+        );
+        let pull = feed(&mut response.receiver, &response.continuation, 2_500);
+        assert_eq!(pull.frames.len(), 1);
+        response.complete(&pull.frames[0].1);
+    }
 }
 
 #[test]
@@ -275,6 +304,7 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
         QueuedChain::Replaced,
         QueuedChain::Advanced,
         QueuedChain::ChangedCount,
+        QueuedChain::ChangedStreamSize,
         QueuedChain::ChangedCorrelation,
     ] {
         let mut response = SplitResponse::after_first_segment();
@@ -314,6 +344,7 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                     link_id(),
                     replacement,
                     2,
+                    256,
                     AssemblyCorrelation::Response(response.request),
                 );
                 Some(replacement)
@@ -323,8 +354,11 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                     response.receiver.incoming_assemblies.advance(
                         &link_id(),
                         &response.original,
-                        2,
-                        2,
+                        ResourceSegment {
+                            index: 2,
+                            total_segments: 2,
+                            total_data_bytes: 256
+                        },
                         SEGMENT_BYTES as u64,
                         AssemblyCorrelation::Response(response.request)
                     ),
@@ -334,18 +368,32 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                 );
                 Some(response.original)
             }
-            QueuedChain::ChangedCount => {
+            QueuedChain::ChangedCount | QueuedChain::ChangedStreamSize => {
+                let count = if matches!(change, QueuedChain::ChangedCount) {
+                    3
+                } else {
+                    2
+                };
+                let size = if matches!(change, QueuedChain::ChangedStreamSize) {
+                    512
+                } else {
+                    256
+                };
                 response.receiver.incoming_assemblies.begin(
                     link_id(),
                     response.original,
-                    3,
+                    count,
+                    size,
                     AssemblyCorrelation::Response(response.request),
                 );
                 response.receiver.incoming_assemblies.advance(
                     &link_id(),
                     &response.original,
-                    1,
-                    3,
+                    ResourceSegment {
+                        index: 1,
+                        total_segments: count,
+                        total_data_bytes: size,
+                    },
                     SEGMENT_BYTES as u64,
                     AssemblyCorrelation::Response(response.request),
                 );
@@ -357,14 +405,18 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                     link_id(),
                     response.original,
                     2,
+                    256,
                     changed,
                 );
                 assert_eq!(
                     response.receiver.incoming_assemblies.advance(
                         &link_id(),
                         &response.original,
-                        1,
-                        2,
+                        ResourceSegment {
+                            index: 1,
+                            total_segments: 2,
+                            total_data_bytes: 256
+                        },
                         SEGMENT_BYTES as u64,
                         changed
                     ),
@@ -402,6 +454,7 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
             | QueuedChain::Replaced
             | QueuedChain::Advanced
             | QueuedChain::ChangedCount
+            | QueuedChain::ChangedStreamSize
             | QueuedChain::ChangedCorrelation => {
                 assert!(
                     pulls.is_empty(),
