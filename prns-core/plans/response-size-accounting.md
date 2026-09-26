@@ -135,9 +135,26 @@ There are no permissive link-only compatibility methods for either operation.
 This adds a 32-byte identity field to each incoming transfer state, without
 changing buffer capacities or the wire. Overlapping-chain tests cover normal
 opening, delayed decompression and cancellation, followed by exact completion of
-the replacement response. This protects assembly position; request correlation
-within one link is still a separate remaining invariant. See
+the replacement response. This protects assembly position; the following slice
+also binds request correlation within one link. See
 [verification evidence](../../validation/simulation/measurements/split-position-ownership.md).
+
+## Completed split-correlation prerequisite
+
+Each assembly now retains its semantic association: unsolicited, request with ID,
+or response with ID. Continuations must preserve that complete association at
+initial admission, queued promotion, completion and advancement. Initial validation
+runs before response policy so a retargeted oversized continuation cannot fail the
+unrelated request it names. A stale split transfer also cannot settle the receipt
+of a replacement chain answering the same request or change its deadline.
+
+`IncomingAssemblies::begin`, `fit` and `advance` require an explicit
+`AssemblyCorrelation`; fixed and heap tables retain it with the owning row. No
+wire shape, buffer size or transfer capacity changes. Deterministic core-engine
+tests reproduce retargeting and same-request replacement failure with encrypted
+frames. The exact failure injections are not yet mixed-runtime simulator scenarios;
+passing simulator suites are separate regression evidence. See
+[verification evidence](../../validation/simulation/measurements/split-correlation-ownership.md).
 
 ## Remaining segmented scope
 
@@ -163,9 +180,7 @@ publishing a changed limit contract; do not introduce a transport-specific fix.
 
 Include assembly cleanup when a request expires between segments or a continuation
 is refused before admission; the split-failure prerequisite handles admitted
-transfers only. Segment counts are now stable at admission; validate advertised
-stream totals and request correlation across the chain before loosening admission.
-Conclusion now validates the retained chain position, but the assembly still
-does not bind a request ID or correlation kind across segments. In particular,
-overlapping chains naming the same request can still interfere with its receipt;
-that correlation ownership must be established before relaxing split admission.
+transfers only. Segment counts and request correlation are now stable across the
+chain; validate advertised stream totals before loosening admission. Arbitration
+between a whole response and an overlapping split response naming the same request
+is not addressed by the split-chain ownership checks.

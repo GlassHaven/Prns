@@ -7,6 +7,7 @@ use crate::engine::{
 };
 use crate::routing::links::data::write_link_packet;
 use crate::routing::links::request::{write_response_plaintext, RequestId, RESPONSE_WIRE_OVERHEAD};
+use crate::routing::links::resources::assembly::AssemblyCorrelation;
 use crate::routing::links::resources::{ResourceFailureCause, ResourceHash, ResourceSegment};
 use crate::units::RttMillis;
 use crate::wire::{WireContext, BROADCAST_MTU};
@@ -329,12 +330,17 @@ fn a_cancelled_split_response_releases_its_assembly_and_settles_once() {
 }
 
 #[test]
-fn failed_whole_resource_preserves_a_different_split_assembly_waiting_on_the_link() {
+fn failed_whole_resource_still_settles_without_erasing_a_split_chain_for_the_same_request() {
     for opening in [Opening::Uncompressed, Opening::Inflated] {
         let mut receiver = engine_with_active_link();
         let request = track_pending_request(&mut receiver, CommandId(42), 1_800, 20_000);
         let previous = ResourceHash::new([0x31; 32]);
-        receiver.incoming_assemblies.begin(link_id(), previous, 2);
+        receiver.incoming_assemblies.begin(
+            link_id(),
+            previous,
+            2,
+            AssemblyCorrelation::Response(request),
+        );
         let mut sender = engine_with_active_link();
         let body = [0xFF; 128];
         let advertisement = advertise_response_segment_from(

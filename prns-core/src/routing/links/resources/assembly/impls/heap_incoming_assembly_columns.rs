@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::routing::links::resources::assembly::IncomingAssemblyTable;
+use crate::routing::links::resources::assembly::{AssemblyCorrelation, IncomingAssemblyTable};
 use crate::routing::links::resources::ResourceHash;
 use crate::routing::links::LinkId;
 
@@ -8,6 +8,7 @@ use crate::routing::links::LinkId;
 pub struct HeapIncomingAssemblyTable {
     link_ids: Vec<LinkId>,
     original_hashes: Vec<ResourceHash>,
+    correlations: Vec<AssemblyCorrelation>,
     total_segments: Vec<u64>,
     segments_received: Vec<u64>,
     received_totals: Vec<u64>,
@@ -27,6 +28,9 @@ impl IncomingAssemblyTable for HeapIncomingAssemblyTable {
     fn original_hashes(&self) -> &[ResourceHash] {
         &self.original_hashes
     }
+    fn correlations(&self) -> &[AssemblyCorrelation] {
+        &self.correlations
+    }
     fn total_segments(&self) -> &[u64] {
         &self.total_segments
     }
@@ -37,9 +41,16 @@ impl IncomingAssemblyTable for HeapIncomingAssemblyTable {
         &self.received_totals
     }
 
-    fn push(&mut self, link_id: LinkId, original_hash: ResourceHash, total_segments: u64) {
+    fn push(
+        &mut self,
+        link_id: LinkId,
+        original_hash: ResourceHash,
+        total_segments: u64,
+        correlation: AssemblyCorrelation,
+    ) {
         self.link_ids.push(link_id);
         self.original_hashes.push(original_hash);
+        self.correlations.push(correlation);
         self.total_segments.push(total_segments);
         self.segments_received.push(0);
         self.received_totals.push(0);
@@ -53,6 +64,7 @@ impl IncomingAssemblyTable for HeapIncomingAssemblyTable {
     fn swap_remove(&mut self, index: usize) {
         self.link_ids.swap_remove(index);
         self.original_hashes.swap_remove(index);
+        self.correlations.swap_remove(index);
         self.total_segments.swap_remove(index);
         self.segments_received.swap_remove(index);
         self.received_totals.swap_remove(index);

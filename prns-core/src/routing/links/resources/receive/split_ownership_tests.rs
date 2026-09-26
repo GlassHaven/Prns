@@ -10,7 +10,7 @@ use crate::routing::dedup::PacketHash;
 use crate::routing::delivery::receipts::{OutstandingReceipt, ReceiptKind};
 use crate::routing::links::data::write_link_packet;
 use crate::routing::links::request::RequestId;
-use crate::routing::links::resources::assembly::SegmentFit;
+use crate::routing::links::resources::assembly::{AssemblyCorrelation, SegmentFit};
 use crate::routing::links::resources::{ResourceFailureCause, ResourceHash, ResourceSegment};
 use crate::units::{ByteLimit, RttMillis};
 use crate::wire::{WireContext, BROADCAST_MTU};
@@ -54,6 +54,17 @@ impl FirstSegment {
             }),
             None
         );
+        Self::admit_response(receiver, command, request, byte, opening, at)
+    }
+
+    fn admit_response(
+        receiver: &mut EngineState<TestStorageLayout>,
+        command: CommandId,
+        request: RequestId,
+        byte: u8,
+        opening: Opening,
+        at: u64,
+    ) -> Self {
         let mut sender = engine_with_active_link();
         let body = [byte; 128];
         let candidate = match opening {
@@ -169,9 +180,13 @@ fn assert_old_failed_only(
         .lookup(&link_id(), &old.hash)
         .is_none());
     assert_eq!(
-        receiver
-            .incoming_assemblies
-            .fit(&link_id(), &current.hash, 1, 2),
+        receiver.incoming_assemblies.fit(
+            &link_id(),
+            &current.hash,
+            1,
+            2,
+            AssemblyCorrelation::Response(current.request)
+        ),
         SegmentFit::Expected
     );
     assert!(!receiver
@@ -251,4 +266,72 @@ fn cancelling_a_replaced_split_transfer_preserves_the_current_chain() {
         ResourceFailureCause::CancelledBySender,
     );
     current.complete_current(&mut receiver);
+}
+
+#[test]
+fn stale_transfers_cannot_fail_a_replacement_answering_the_same_request() {
+    for cause in [
+        ResourceFailureCause::TransferCorrupt,
+        ResourceFailureCause::CancelledBySender,
+    ] {
+        let mut receiver = engine_with_active_link();
+        let old = FirstSegment::admit(&mut receiver, 42, Opening::Inline, 2_000);
+        let current = FirstSegment::admit_response(
+            &mut receiver,
+            old.command,
+            old.request,
+            43,
+            Opening::Inline,
+            2_300,
+        );
+        assert_ne!(old.hash, current.hash);
+        let deadline = receiver
+            .receipts
+            .pending_request_deadline(&link_id(), old.request);
+        let capture = if cause == ResourceFailureCause::TransferCorrupt {
+            feed(&mut receiver, &old.part, 2_400)
+        } else {
+            let mut cancel = [0; BROADCAST_MTU];
+            let length = write_link_packet(
+                &link_id(),
+                &link_key(),
+                BROADCAST_MTU,
+                WireContext::ResourceInitiatorCancel,
+                old.hash.as_bytes(),
+                &[0xD5; 16],
+                &mut cancel,
+            )
+            .unwrap();
+            feed(&mut receiver, &cancel[..length], 2_400)
+        };
+        assert_eq!(
+            capture,
+            InboundCapture {
+                failed: std::vec![(old.hash, cause)],
+                ..InboundCapture::default()
+            }
+        );
+        assert_eq!(
+            receiver
+                .receipts
+                .pending_request_deadline(&link_id(), old.request),
+            deadline
+        );
+        assert_eq!(receiver.incoming_resources.len(), 1);
+        assert!(receiver
+            .incoming_resources
+            .lookup(&link_id(), &old.hash)
+            .is_none());
+        assert_eq!(
+            receiver.incoming_assemblies.fit(
+                &link_id(),
+                &current.hash,
+                1,
+                2,
+                AssemblyCorrelation::Response(current.request)
+            ),
+            SegmentFit::Expected
+        );
+        current.complete_current(&mut receiver);
+    }
 }

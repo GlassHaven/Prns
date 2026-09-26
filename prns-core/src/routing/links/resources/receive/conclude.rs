@@ -320,6 +320,7 @@ impl<S: StorageLayout> EngineState<S> {
             segment_index,
             total_segments,
             segment_bytes,
+            correlation.into(),
         ) {
             Some(AssemblyProgress::Complete { total_size_bytes }) => {
                 let settled = match correlation {
@@ -400,10 +401,16 @@ impl<S: StorageLayout> EngineState<S> {
         link_id: &LinkId,
         state: &IncomingResourceState,
     ) -> Option<CommandId> {
-        if state.total_segments > 1
-            && self.split_segment_fit(link_id, state) == SegmentFit::Expected
-        {
-            self.incoming_assemblies.clear(link_id);
+        if state.total_segments > 1 {
+            if self.split_segment_fit(link_id, state) == SegmentFit::Expected {
+                self.incoming_assemblies.clear(link_id);
+            } else if self.incoming_assemblies.correlation(link_id)
+                == Some(state.correlation.into())
+            {
+                // A replacement chain still owns this request. The stale
+                // transfer must not settle it or alter its current deadline.
+                return None;
+            }
         }
         match state.correlation {
             ResourceCorrelation::Response(id) => self
@@ -420,6 +427,7 @@ impl<S: StorageLayout> EngineState<S> {
             &state.original_hash,
             state.segment_index,
             state.total_segments,
+            state.correlation.into(),
         )
     }
 

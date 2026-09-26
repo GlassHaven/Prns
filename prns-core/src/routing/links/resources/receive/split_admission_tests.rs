@@ -5,7 +5,7 @@ use crate::engine::{
     PacketReceiptDelivered, Settlement,
 };
 use crate::routing::links::request::RequestId;
-use crate::routing::links::resources::assembly::AssemblyProgress;
+use crate::routing::links::resources::assembly::{AssemblyCorrelation, AssemblyProgress};
 use crate::routing::links::resources::{ResourceHash, ResourceSegment};
 use crate::units::RttMillis;
 
@@ -160,6 +160,105 @@ enum QueuedChain {
     Replaced,
     Advanced,
     ChangedCount,
+    ChangedCorrelation,
+}
+
+#[test]
+fn continuations_cannot_retarget_a_request_or_change_correlation_kind() {
+    use crate::crypto::Ed25519PublicKey;
+    use crate::identity::IdentitySigningPublicKey;
+    use crate::routing::dedup::PacketHash;
+    use crate::routing::delivery::receipts::{OutstandingReceipt, ReceiptKind};
+    use crate::units::ByteLimit;
+
+    enum Change {
+        OtherResponse,
+        OversizedOtherResponse,
+        Request,
+        Unsolicited,
+    }
+    for change in [
+        Change::OtherResponse,
+        Change::OversizedOtherResponse,
+        Change::Request,
+        Change::Unsolicited,
+    ] {
+        let mut response = SplitResponse::after_first_segment();
+        accept_everything(&mut response.receiver);
+        let other_hash = PacketHash::new([0xE2; 32]);
+        let other_request = RequestId::of_packet(&other_hash);
+        let limit = match change {
+            Change::OversizedOtherResponse => ByteLimit::Maximum(0),
+            _ => ByteLimit::Unlimited,
+        };
+        assert_eq!(
+            response.receiver.receipts.track(OutstandingReceipt {
+                packet_hash: other_hash,
+                command_id: CommandId(43),
+                kind: ReceiptKind::request(
+                    link_id(),
+                    limit,
+                    crate::engine::SendRequestIntent::Application
+                ),
+                peer_signing_key: IdentitySigningPublicKey::new(Ed25519PublicKey([0x99; 32])),
+                sent_at: InstantMillis(1_800),
+                timeout_at: InstantMillis(20_000),
+            }),
+            None
+        );
+        let deadlines = (
+            response
+                .receiver
+                .receipts
+                .pending_request_deadline(&link_id(), response.request),
+            response
+                .receiver
+                .receipts
+                .pending_request_deadline(&link_id(), other_request),
+        );
+        let changed = rewrite_advertisement(&response.continuation, |ad| match change {
+            Change::OtherResponse | Change::OversizedOtherResponse => {
+                ad.request_id = Some(other_request)
+            }
+            Change::Request => {
+                ad.flags.is_response = false;
+                ad.flags.is_request = true;
+            }
+            Change::Unsolicited => {
+                ad.flags.is_response = false;
+                ad.request_id = None;
+            }
+        });
+        assert_eq!(
+            feed(&mut response.receiver, &changed, 2_400),
+            InboundCapture::default()
+        );
+        assert!(response.receiver.incoming_resources.is_empty());
+        assert!(response.receiver.pending_resource_offers.is_empty());
+        assert_eq!(
+            (
+                response
+                    .receiver
+                    .receipts
+                    .pending_request_deadline(&link_id(), response.request),
+                response
+                    .receiver
+                    .receipts
+                    .pending_request_deadline(&link_id(), other_request),
+            ),
+            deadlines
+        );
+        let pull = feed(&mut response.receiver, &response.continuation, 2_500);
+        assert_eq!(pull.frames.len(), 1);
+        response.complete(&pull.frames[0].1);
+        assert_eq!(
+            response
+                .receiver
+                .receipts
+                .pending_request_deadline(&link_id(), other_request),
+            deadlines.1
+        );
+    }
 }
 
 #[test]
@@ -170,6 +269,7 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
         QueuedChain::Replaced,
         QueuedChain::Advanced,
         QueuedChain::ChangedCount,
+        QueuedChain::ChangedCorrelation,
     ] {
         let mut response = SplitResponse::after_first_segment();
         accept_everything(&mut response.receiver);
@@ -204,10 +304,12 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
             }
             QueuedChain::Replaced => {
                 let replacement = ResourceHash::new([0xD1; 32]);
-                response
-                    .receiver
-                    .incoming_assemblies
-                    .begin(link_id(), replacement, 2);
+                response.receiver.incoming_assemblies.begin(
+                    link_id(),
+                    replacement,
+                    2,
+                    AssemblyCorrelation::Response(response.request),
+                );
                 Some(replacement)
             }
             QueuedChain::Advanced => {
@@ -217,7 +319,8 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                         &response.original,
                         2,
                         2,
-                        SEGMENT_BYTES as u64
+                        SEGMENT_BYTES as u64,
+                        AssemblyCorrelation::Response(response.request)
                     ),
                     Some(AssemblyProgress::Complete {
                         total_size_bytes: (2 * SEGMENT_BYTES) as u64
@@ -226,16 +329,40 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                 Some(response.original)
             }
             QueuedChain::ChangedCount => {
-                response
-                    .receiver
-                    .incoming_assemblies
-                    .begin(link_id(), response.original, 3);
+                response.receiver.incoming_assemblies.begin(
+                    link_id(),
+                    response.original,
+                    3,
+                    AssemblyCorrelation::Response(response.request),
+                );
                 response.receiver.incoming_assemblies.advance(
                     &link_id(),
                     &response.original,
                     1,
                     3,
                     SEGMENT_BYTES as u64,
+                    AssemblyCorrelation::Response(response.request),
+                );
+                Some(response.original)
+            }
+            QueuedChain::ChangedCorrelation => {
+                let changed = AssemblyCorrelation::Request(response.request);
+                response.receiver.incoming_assemblies.begin(
+                    link_id(),
+                    response.original,
+                    2,
+                    changed,
+                );
+                assert_eq!(
+                    response.receiver.incoming_assemblies.advance(
+                        &link_id(),
+                        &response.original,
+                        1,
+                        2,
+                        SEGMENT_BYTES as u64,
+                        changed
+                    ),
+                    Some(AssemblyProgress::Assembling)
                 );
                 Some(response.original)
             }
@@ -268,7 +395,8 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
             QueuedChain::Removed
             | QueuedChain::Replaced
             | QueuedChain::Advanced
-            | QueuedChain::ChangedCount => {
+            | QueuedChain::ChangedCount
+            | QueuedChain::ChangedCorrelation => {
                 assert!(
                     pulls.is_empty(),
                     "stale continuation must not start receiving"

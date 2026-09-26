@@ -150,6 +150,21 @@ impl<S: StorageLayout> EngineState<S> {
             (false, true, Some(id)) => ResourceCorrelation::Response(id),
             _ => ResourceCorrelation::Unsolicited,
         };
+        // Refuse a retargeted continuation before policy can settle the request
+        // it names. Admission repeats this check after application/queue waits.
+        let multi_segment = advertisement.total_segments > 1;
+        if multi_segment
+            && advertisement.segment_index > 1
+            && self.incoming_assemblies.fit(
+                &link_id,
+                &advertisement.original_hash,
+                advertisement.segment_index,
+                advertisement.total_segments,
+                correlation.into(),
+            ) == SegmentFit::Unexpected
+        {
+            return IngestPacketOutcome::Ignored(IgnoreReason::Malformed);
+        }
         if let ResourceCorrelation::Request { .. } = correlation {
             let maximum_request_bytes = responder_destination
                 .and_then(|destination| self.upstream_app_destinations.lookup_single(&destination))
@@ -242,18 +257,6 @@ impl<S: StorageLayout> EngineState<S> {
             if compression == ResourceCompression::Bz2 {
                 return IngestPacketOutcome::Ignored(IgnoreReason::StrategyDeclined);
             }
-        }
-        let multi_segment = advertisement.total_segments > 1;
-        if multi_segment
-            && advertisement.segment_index > 1
-            && self.incoming_assemblies.fit(
-                &link_id,
-                &advertisement.original_hash,
-                advertisement.segment_index,
-                advertisement.total_segments,
-            ) == SegmentFit::Unexpected
-        {
-            return IngestPacketOutcome::Ignored(IgnoreReason::Malformed);
         }
         if let GatePolicy::Admit {
             max_uncompressed_bytes,
@@ -425,6 +428,7 @@ impl<S: StorageLayout> EngineState<S> {
                 &original_hash,
                 segment_index,
                 total_segment_count,
+                correlation.into(),
             ) == SegmentFit::Unexpected
         {
             return AcceptedResourceAdmission::Ignored(IgnoreReason::Malformed);
@@ -476,8 +480,12 @@ impl<S: StorageLayout> EngineState<S> {
             state.inherited_eifr = inherited.1;
         }
         if total_segment_count > 1 && segment_index == 1 {
-            self.incoming_assemblies
-                .begin(link_id, original_hash, total_segment_count);
+            self.incoming_assemblies.begin(
+                link_id,
+                original_hash,
+                total_segment_count,
+                correlation.into(),
+            );
         }
         if let ResourceCorrelation::Response(id) = correlation {
             self.claim_resource_response(&link_id, id);
