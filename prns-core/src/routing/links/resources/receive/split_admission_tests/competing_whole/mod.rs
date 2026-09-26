@@ -3,6 +3,9 @@ use crate::engine::{RespondFailure, SendResourceFailure};
 use crate::units::ByteLimit;
 use crate::wire::{WireContext, WirePacketHeader};
 mod completion;
+mod streamed_completion;
+#[cfg(feature = "resource-work-offload")]
+mod worker_completion;
 
 fn assert_cancelled(
     competitor: &mut EngineState<TestStorageLayout>,

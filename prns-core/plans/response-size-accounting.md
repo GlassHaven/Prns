@@ -276,6 +276,11 @@ exhausts retries. A real-admission core-engine fixture proves the split response
 still completes. The
 [superseded-whole completion slice](../../validation/simulation/measurements/superseded-whole-completion.md)
 also cancels verified whole completion and delayed decompression results before
-proof or publication while the split owns the request. Explicit offloaded-open
-verdict scenarios, arrivals after split ownership ends, and mixed-runtime
+proof or publication while the split owns the request. The
+[worker-verdict follow-up](../../validation/simulation/measurements/superseded-whole-worker.md)
+explicitly covers delayed whole-open verdicts (opened, pre-digested and unavailable
+fallback) and stale replay before and after transfer-slot reuse. Its streamed-open
+follow-up holds a real first-span job across split admission and checks completion
+both between segments and during continuation reception. Detached-transfer worker
+storage, arrivals after split ownership ends, and mixed-runtime
 inconsistent-peer injections remain separate coverage work.
