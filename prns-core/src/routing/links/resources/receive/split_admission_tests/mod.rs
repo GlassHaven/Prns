@@ -17,9 +17,9 @@ const SEGMENT_BYTES: usize = 128;
 const FIRST: [u8; SEGMENT_BYTES] = [0xA7; SEGMENT_BYTES];
 const LAST: [u8; SEGMENT_BYTES] = [0xB8; SEGMENT_BYTES];
 
-struct SplitResponse {
-    receiver: EngineState<TestStorageLayout>,
-    sender: EngineState<TestStorageLayout>,
+struct SplitResponse<S: crate::storage::StorageLayout = TestStorageLayout> {
+    receiver: EngineState<S>,
+    sender: EngineState<S>,
     request: RequestId,
     original: ResourceHash,
     continuation: std::vec::Vec<u8>,
@@ -36,10 +36,12 @@ impl SplitResponse {
             track_pending_request_with_limit(&mut receiver, REQUEST, 1_800, 20_000, limit);
         Self::from_pending(receiver, request)
     }
+}
 
-    fn from_pending(mut receiver: EngineState<TestStorageLayout>, request: RequestId) -> Self {
+impl<S: crate::storage::StorageLayout> SplitResponse<S> {
+    fn from_pending(mut receiver: EngineState<S>, request: RequestId) -> Self {
         let retained_transfers = receiver.incoming_resources.len();
-        let mut sender = engine_with_active_link();
+        let mut sender = active_engine::<S>();
         let first = advertise_response_segment_from(
             &mut sender,
             CommandId(20),
@@ -129,9 +131,9 @@ impl SplitResponse {
     }
 }
 
-fn serve_pull(
-    sender: &mut EngineState<TestStorageLayout>,
-    receiver: &mut EngineState<TestStorageLayout>,
+fn serve_pull<S: crate::storage::StorageLayout>(
+    sender: &mut EngineState<S>,
+    receiver: &mut EngineState<S>,
     pull: &[u8],
     at: u64,
 ) -> InboundCapture {

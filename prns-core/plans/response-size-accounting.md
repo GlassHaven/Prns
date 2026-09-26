@@ -281,6 +281,8 @@ proof or publication while the split owns the request. The
 explicitly covers delayed whole-open verdicts (opened, pre-digested and unavailable
 fallback) and stale replay before and after transfer-slot reuse. Its streamed-open
 follow-up holds a real first-span job across split admission and checks completion
-both between segments and during continuation reception. Detached-transfer worker
-storage, arrivals after split ownership ends, and mixed-runtime
+both between segments and during continuation reception. The
+[detached-buffer follow-up](../../validation/simulation/measurements/superseded-whole-detached.md)
+also exercises growable-heap transfer ownership through the tail worker, including
+refusal of duplicate buffer take/dispatch. Arrivals after split ownership ends and mixed-runtime
 inconsistent-peer injections remain separate coverage work.
