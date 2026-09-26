@@ -1,4 +1,5 @@
 use super::tests_support::*;
+mod refusal;
 use crate::engine::test_support::{filled_frame, TestStorageLayout};
 use crate::engine::{
     CommandId, DeliveryEvidence, Directive, EngineReaction, EngineState, InstantMillis, Journaled,
@@ -24,9 +25,14 @@ struct SplitResponse {
 
 impl SplitResponse {
     fn after_first_segment() -> Self {
+        Self::with_limit(crate::units::ByteLimit::Unlimited)
+    }
+
+    fn with_limit(limit: crate::units::ByteLimit) -> Self {
         let mut receiver = engine_with_active_link();
         let mut sender = engine_with_active_link();
-        let request = track_pending_request(&mut receiver, REQUEST, 1_800, 20_000);
+        let request =
+            track_pending_request_with_limit(&mut receiver, REQUEST, 1_800, 20_000, limit);
         let first = advertise_response_segment_from(
             &mut sender,
             CommandId(20),

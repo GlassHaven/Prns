@@ -19,7 +19,7 @@ promotion and application-approved offers. No retained fields, buffers,
 capacities or wire shapes change. The existing malformed-offer outcome remains
 silent and does not settle a still-pending response request.
 
-`receive/split_admission_tests.rs` drives real encrypted Resource segments through
+`receive/split_admission_tests/mod.rs` drives real encrypted Resource segments through
 fixed-storage core engines. It proves unchanged response bytes and terminal RTT,
 refusal of changed totals, successful recovery with a valid advertisement, bounded
 queue promotion, no allocation or timeout claim for stale queued continuations,

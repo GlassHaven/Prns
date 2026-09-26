@@ -4,7 +4,6 @@ use crate::engine::{
     RemoteControlControllerPairingRequestFailureCause, SendRequestFailure, SendRequestIntent,
     SendSinglePacketFailure, SendToLinkFailure, Settlement,
 };
-use crate::routing::dedup::PacketHash;
 use crate::routing::delivery::receipts::{
     CulledReceipt, ExpiredReceipt, LinkOwnedReceiptKind, ReceiptKind,
 };
@@ -76,7 +75,7 @@ impl<S: StorageLayout> EngineState<S> {
             }
             ReceiptKind::SendToLink(_) => Settlement::SendToLink(Err(SendToLinkFailure::Culled)),
             ReceiptKind::SendRequest { link_id, response } => {
-                self.retire_response_assembly(link_id, culled.packet_hash);
+                self.retire_response_assembly(link_id, RequestId::of_packet(&culled.packet_hash));
                 self.failed_send_request_settlement(
                     link_id,
                     response.intent(),
@@ -93,7 +92,7 @@ impl<S: StorageLayout> EngineState<S> {
             }
             ReceiptKind::SendToLink(_) => Settlement::SendToLink(Err(SendToLinkFailure::Timeout)),
             ReceiptKind::SendRequest { link_id, response } => {
-                self.retire_response_assembly(link_id, expired.packet_hash);
+                self.retire_response_assembly(link_id, RequestId::of_packet(&expired.packet_hash));
                 self.failed_send_request_settlement(
                     link_id,
                     response.intent(),
@@ -103,8 +102,7 @@ impl<S: StorageLayout> EngineState<S> {
         }
     }
 
-    fn retire_response_assembly(&mut self, link_id: LinkId, packet_hash: PacketHash) {
-        let request = RequestId::of_packet(&packet_hash);
+    pub(crate) fn retire_response_assembly(&mut self, link_id: LinkId, request: RequestId) {
         if self.incoming_assemblies.correlation(&link_id)
             == Some(AssemblyCorrelation::Response(request))
         {

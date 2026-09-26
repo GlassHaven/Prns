@@ -7,6 +7,7 @@ use crate::engine::{
     EngineReaction, EngineState, InstantMillis, Journaled, SendRequestFailure, Settlement,
 };
 use crate::routing::links::request::RequestId;
+use crate::routing::links::resources::assembly::SegmentFit;
 use crate::routing::links::resources::table::{
     IncomingResourceStatus, IncomingResourceStorageAdmission,
 };
@@ -86,6 +87,19 @@ impl<S: StorageLayout> EngineState<S> {
                         self.links.phase_for(&offer.link_id()),
                         Some(LinkPhase::Active { .. })
                     ) {
+                        return Some((index, PendingOfferDueAction::Drop));
+                    }
+                    let accepted = offer.accepted();
+                    if accepted.total_segment_count > 1
+                        && accepted.segment_index > 1
+                        && self.incoming_assemblies.fit(
+                            &offer.link_id(),
+                            &offer.original_hash(),
+                            accepted.segment_index,
+                            accepted.total_segment_count,
+                            accepted.correlation.into(),
+                        ) == SegmentFit::Unexpected
+                    {
                         return Some((index, PendingOfferDueAction::Drop));
                     }
                     let admission = self
@@ -177,6 +191,7 @@ impl<S: StorageLayout> EngineState<S> {
                     else {
                         continue;
                     };
+                    self.retire_response_assembly(offer.link_id(), request_id);
                     sink(EngineReaction::Journaled(Journaled::CommandSettled {
                         id: receipt.command_id,
                         settlement: Settlement::SendRequest(Err(failure)),

@@ -216,8 +216,13 @@ Request expiry and receipt culling between segments are covered. The
 also cull a request after continuation admission while its next data part is held,
 then release that late part without disturbing the replacement request. Raw
 calibration and buffered APIs are tested separately; this is not exhaustive
-coverage of every possible transfer phase. Still include assembly cleanup when
-a continuation is refused before admission. Segment counts and request correlation are now stable across the
+coverage of every possible transfer phase. The
+[refusal cleanup slice](../../validation/simulation/measurements/refused-continuation-cleanup.md)
+now reclaims a failed response assembly when a continuation exceeds the response
+limit, cannot fit transfer storage, encounters a full offer queue, or expires
+while queued. Stale queued continuations are discarded before they can fail a
+replacement chain. These new refusal cases have core-engine reproductions, not
+yet mixed-runtime simulator injections. Segment counts and request correlation are now stable across the
 chain; validate advertised stream totals before loosening admission. Arbitration
 between a whole response and an overlapping split response naming the same request
 is not addressed by the split-chain ownership checks.

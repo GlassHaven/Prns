@@ -211,10 +211,13 @@ impl<S: StorageLayout> EngineState<S> {
                 _ => advertisement.data_bytes,
             };
             if !maximum_response_bytes.allows(minimum_value_bytes) {
-                let settled_request = self
-                    .receipts
-                    .settle_by_request_id(&link_id, id)
-                    .map(|proven| proven.command_id);
+                let settled_request =
+                    self.receipts
+                        .settle_by_request_id(&link_id, id)
+                        .map(|proven| {
+                            self.retire_response_assembly(link_id, id);
+                            proven.command_id
+                        });
                 return IngestPacketOutcome::ResourceTooLarge {
                     link_id,
                     hash: advertisement.hash,
@@ -398,7 +401,10 @@ impl<S: StorageLayout> EngineState<S> {
             ResourceCorrelation::Response(request_id) => self
                 .receipts
                 .settle_by_request_id(&link_id, request_id)
-                .map(|receipt| receipt.command_id),
+                .map(|receipt| {
+                    self.retire_response_assembly(link_id, request_id);
+                    receipt.command_id
+                }),
             ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
         };
         AcceptedResourceAdmission::CapacityRejected {
