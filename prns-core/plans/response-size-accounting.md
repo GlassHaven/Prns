@@ -269,4 +269,9 @@ now cancels fresh and queued whole offers when a matching split assembly owns th
 request, before policy refusal or queue expiry can settle it. These are deterministic
 core-engine reproductions, not yet mixed-runtime inconsistent-peer injections.
 Whole transfers admitted before the split owner appeared remain a separate
-completion-time arbitration gap.
+completion-time arbitration gap. The
+[superseded-whole failure slice](../../validation/simulation/measurements/superseded-whole-failure.md)
+now preserves split ownership when such a whole transfer fails, is cancelled, or
+exhausts retries. A real-admission core-engine fixture proves the split response
+still completes. Successful whole completion and delayed successful worker verdicts
+remain open; these inconsistent-peer cases are not yet mixed-runtime injections.

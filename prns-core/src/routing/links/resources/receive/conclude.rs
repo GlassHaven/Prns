@@ -441,6 +441,9 @@ impl<S: StorageLayout> EngineState<S> {
         link_id: &LinkId,
         state: &IncomingResourceState,
     ) -> Option<CommandId> {
+        if self.whole_response_is_superseded(link_id, state.total_segments, state.correlation) {
+            return None;
+        }
         if state.total_segments > 1 {
             if self.split_segment_fit(link_id, state) == SegmentFit::Expected {
                 self.incoming_assemblies.clear(link_id);

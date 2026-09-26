@@ -1,5 +1,6 @@
 use super::tests_support::*;
 mod stream_sizes;
+mod superseded_whole;
 mod value_limits;
 use crate::engine::test_support::{filled_frame, TestStorageLayout};
 use crate::engine::{
@@ -333,7 +334,7 @@ fn a_cancelled_split_response_releases_its_assembly_and_settles_once() {
 }
 
 #[test]
-fn preadmitted_whole_failure_still_settles_without_erasing_a_later_split_chain() {
+fn preadmitted_whole_failure_preserves_a_later_split_claim() {
     for opening in [Opening::Uncompressed, Opening::Inflated] {
         let mut receiver = engine_with_active_link();
         let request = track_pending_request(&mut receiver, CommandId(42), 1_800, 20_000);
@@ -352,8 +353,7 @@ fn preadmitted_whole_failure_still_settles_without_erasing_a_later_split_chain()
         let advertisement =
             rewrite_advertisement(&advertisement, |ad| ad.flags.has_metadata = true);
         let pull = feed(&mut receiver, &advertisement, 2_000);
-        // Already-admitted whole transfers remain a separate completion-time
-        // ownership case; this fixture deliberately predates the split owner.
+        // The whole transfer was admitted before the split acquired ownership.
         receiver.incoming_assemblies.begin(
             link_id(),
             previous,
@@ -377,14 +377,17 @@ fn preadmitted_whole_failure_still_settles_without_erasing_a_later_split_chain()
         );
         assert_eq!(
             delivery,
-            expected_failure(hash, ResourceFailureCause::MetadataOverrun)
+            Delivery {
+                failures: std::vec![(hash, ResourceFailureCause::MetadataOverrun)],
+                ..Delivery::default()
+            }
         );
         assert_eq!(
             receiver.incoming_assemblies.original_hash(&link_id()),
             Some(previous)
         );
         assert!(receiver.incoming_resources.is_empty());
-        assert!(!receiver.receipts.has_pending_request(&link_id(), request));
+        assert!(receiver.receipts.has_pending_request(&link_id(), request));
     }
 }
 
