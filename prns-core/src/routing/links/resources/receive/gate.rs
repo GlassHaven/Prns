@@ -164,14 +164,15 @@ impl<S: StorageLayout> EngineState<S> {
             }
         }
         if let ResourceCorrelation::Response(id) = correlation {
-            let Some(maximum_response_bytes) = self.receipts.pending_request_response_limit(id)
+            let Some(maximum_response_bytes) =
+                self.receipts.pending_request_response_limit(&link_id, id)
             else {
                 return IngestPacketOutcome::Ignored(IgnoreReason::UnmatchedResponse);
             };
-            if self.receipts.pending_request_intent(id)
+            if self.receipts.pending_request_intent(&link_id, id)
                 == Some(crate::engine::SendRequestIntent::RemoteControlControllerPairing)
             {
-                let Some(settled_request) = self.receipts.settle_by_request_id(id) else {
+                let Some(settled_request) = self.receipts.settle_by_request_id(&link_id, id) else {
                     return IngestPacketOutcome::Ignored(IgnoreReason::UnmatchedResponse);
                 };
                 return IngestPacketOutcome::PairingResponseResourceUnsupported {
@@ -197,7 +198,7 @@ impl<S: StorageLayout> EngineState<S> {
             if !maximum_response_bytes.allows(minimum_value_bytes) {
                 let settled_request = self
                     .receipts
-                    .settle_by_request_id(id)
+                    .settle_by_request_id(&link_id, id)
                     .map(|proven| proven.command_id);
                 return IngestPacketOutcome::ResourceTooLarge {
                     link_id,
@@ -393,7 +394,7 @@ impl<S: StorageLayout> EngineState<S> {
         let settled_request = match correlation {
             ResourceCorrelation::Response(request_id) => self
                 .receipts
-                .settle_by_request_id(request_id)
+                .settle_by_request_id(&link_id, request_id)
                 .map(|receipt| receipt.command_id),
             ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
         };
@@ -714,7 +715,9 @@ mod tests {
             )],
         );
         assert!(receiver.incoming_resources.is_empty());
-        assert!(!receiver.receipts.has_pending_request(request_id));
+        assert!(!receiver
+            .receipts
+            .has_pending_request(&link_id(), request_id));
     }
 
     #[test]
@@ -947,7 +950,9 @@ mod tests {
         );
 
         assert!(
-            requester.receipts.has_pending_request(request_id),
+            requester
+                .receipts
+                .has_pending_request(&link_id(), request_id),
             "the request resource books the pending row its response will settle",
         );
     }
@@ -1669,7 +1674,9 @@ mod tests {
             )],
         );
         assert!(receiver.pending_resource_offers.is_empty());
-        assert!(!receiver.receipts.has_pending_request(request_id));
+        assert!(!receiver
+            .receipts
+            .has_pending_request(&link_id(), request_id));
         #[cfg(feature = "runtime-metrics")]
         {
             let events = receiver.metrics_snapshot().resources.admission_events;

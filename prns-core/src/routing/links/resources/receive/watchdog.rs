@@ -59,7 +59,7 @@ impl<S: StorageLayout> EngineState<S> {
         match offer.correlation() {
             ResourceCorrelation::Response(request_id) => self
                 .receipts
-                .pending_request_deadline(request_id)
+                .pending_request_deadline(&offer.link_id(), request_id)
                 .map_or(InstantMillis(0), |request_deadline| {
                     wait_deadline.min(request_deadline)
                 }),
@@ -98,8 +98,9 @@ impl<S: StorageLayout> EngineState<S> {
                     let wait_deadline = offer.wait_deadline();
                     match offer.correlation() {
                         ResourceCorrelation::Response(request_id) => {
-                            let Some(request_deadline) =
-                                self.receipts.pending_request_deadline(request_id)
+                            let Some(request_deadline) = self
+                                .receipts
+                                .pending_request_deadline(&offer.link_id(), request_id)
                             else {
                                 return Some((index, PendingOfferDueAction::Reject));
                             };
@@ -170,7 +171,10 @@ impl<S: StorageLayout> EngineState<S> {
                         fill_random,
                         sink,
                     );
-                    let Some(receipt) = self.receipts.settle_by_request_id(request_id) else {
+                    let Some(receipt) = self
+                        .receipts
+                        .settle_by_request_id(&offer.link_id(), request_id)
+                    else {
                         continue;
                     };
                     sink(EngineReaction::Journaled(Journaled::CommandSettled {

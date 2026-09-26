@@ -306,7 +306,9 @@ impl<S: StorageLayout> EngineState<S> {
         match self.incoming_assemblies.advance(link_id, segment_bytes) {
             Some(AssemblyProgress::Complete { total_size_bytes }) => {
                 let settled = match correlation {
-                    ResourceCorrelation::Response(id) => self.receipts.settle_by_request_id(id),
+                    ResourceCorrelation::Response(id) => {
+                        self.receipts.settle_by_request_id(link_id, id)
+                    }
                     ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
                 };
                 match settled {
@@ -328,6 +330,7 @@ impl<S: StorageLayout> EngineState<S> {
             Some(AssemblyProgress::Assembling) => {
                 if let ResourceCorrelation::Response(id) = correlation {
                     self.receipts.arm_request_timeout(
+                        link_id,
                         id,
                         InstantMillis(now.0.saturating_add(request_response_timeout_ms(link_rtt))),
                     );
@@ -386,7 +389,7 @@ impl<S: StorageLayout> EngineState<S> {
         match state.correlation {
             ResourceCorrelation::Response(id) => self
                 .receipts
-                .settle_by_request_id(id)
+                .settle_by_request_id(link_id, id)
                 .map(|proven| proven.command_id),
             ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
         }
@@ -662,7 +665,7 @@ fn deliver_single_segment<C: ReceiptTable, Work>(
                 ))
                 .and_then(|data| {
                     if receipts
-                        .pending_request_response_limit(id)
+                        .pending_request_response_limit(link_id, id)
                         .is_some_and(|limit| !limit.allows(data.len() as u64))
                     {
                         Err(SendRequestFailure::ResponseTooLarge)
@@ -670,7 +673,7 @@ fn deliver_single_segment<C: ReceiptTable, Work>(
                         Ok(data)
                     }
                 });
-            if let Some(proven) = receipts.settle_by_request_id(id) {
+            if let Some(proven) = receipts.settle_by_request_id(link_id, id) {
                 let result = response.map(|data| {
                     sink(EngineReaction::Journaled(Journaled::ResponseReceived {
                         command_id: proven.command_id,
@@ -777,7 +780,7 @@ fn deliver_split_segment<C: ReceiptTable, Work>(
 
     let answers = match correlation {
         ResourceCorrelation::Response(id) => receipts
-            .pending_request_command(id)
+            .pending_request_command(link_id, id)
             .map(|command_id| (command_id, id)),
         ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
     };
@@ -1402,7 +1405,9 @@ mod seam_tests {
                 }
             },
         );
-        assert!(requester.receipts.has_pending_request(request_id));
+        assert!(requester
+            .receipts
+            .has_pending_request(&link_id(), request_id));
 
         let mut responder = engine_with_active_link();
         let response = case1_plaintext();
@@ -1470,7 +1475,9 @@ mod seam_tests {
             settled_ok,
             "the inflated response settles the pending request it answers",
         );
-        assert!(!requester.receipts.has_pending_request(request_id));
+        assert!(!requester
+            .receipts
+            .has_pending_request(&link_id(), request_id));
     }
 
     #[test]
@@ -1834,7 +1841,9 @@ mod seam_tests {
             last.assembled.is_empty(),
             "the settle replaces the ResourceAssembled journal for a response chain",
         );
-        assert!(!requester.receipts.has_pending_request(request_id));
+        assert!(!requester
+            .receipts
+            .has_pending_request(&link_id(), request_id));
         assert!(requester.incoming_resources.is_empty());
         assert!(requester
             .incoming_assemblies
@@ -1948,7 +1957,9 @@ mod seam_tests {
                 ))),
             ),
         ));
-        assert!(!requester.receipts.has_pending_request(request_id));
+        assert!(!requester
+            .receipts
+            .has_pending_request(&link_id(), request_id));
     }
 
     #[test]
@@ -2110,7 +2121,9 @@ mod seam_tests {
                 at + 500,
             );
         }
-        assert!(!requester.receipts.has_pending_request(request_id));
+        assert!(!requester
+            .receipts
+            .has_pending_request(&link_id(), request_id));
         assert!(requester.incoming_resources.is_empty());
     }
 

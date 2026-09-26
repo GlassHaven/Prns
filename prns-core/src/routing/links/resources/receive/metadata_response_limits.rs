@@ -103,7 +103,7 @@ fn check_file(body: ResourceBody<'_>, limit: ByteLimit) {
         (responses, settlements),
         (expected_responses, std::vec![(CommandId(42), expected)])
     );
-    assert!(!receiver.receipts.has_pending_request(request));
+    assert!(!receiver.receipts.has_pending_request(&link_id(), request));
     assert!(receiver.incoming_resources.is_empty());
     assert!(receiver.pending_resource_offers.is_empty());
     for (_, frame) in &served.frames {
@@ -231,7 +231,7 @@ fn assert_capacity_refusal<S: StorageLayout>(mut receiver: EngineState<S>, metad
     assert_eq!(receiver.incoming_resources.active_buffer_bytes(), 0);
     assert!(receiver.incoming_resources.is_empty());
     assert!(receiver.pending_resource_offers.is_empty());
-    assert!(!receiver.receipts.has_pending_request(request));
+    assert!(!receiver.receipts.has_pending_request(&link_id(), request));
 }
 
 #[test]
@@ -282,7 +282,7 @@ fn metadata_does_not_bypass_the_uncompressed_stream_ceiling() {
         assert!(receiver.incoming_resources.is_empty());
         assert!(receiver.pending_resource_offers.is_empty());
         // Policy-declined offers allocate nothing; the request keeps its normal deadline.
-        assert!(receiver.receipts.has_pending_request(request));
+        assert!(receiver.receipts.has_pending_request(&link_id(), request));
     }
 }
 
@@ -326,7 +326,7 @@ fn malformed_metadata_cannot_turn_framing_into_a_successful_empty_response() {
                 )]
             )
         );
-        assert!(!receiver.receipts.has_pending_request(request));
+        assert!(!receiver.receipts.has_pending_request(&link_id(), request));
         assert!(receiver.incoming_resources.is_empty());
         assert!(receiver.pending_resource_offers.is_empty());
     }
@@ -393,7 +393,7 @@ fn split_file_segments_are_literal_data() {
             )],
         )
     );
-    assert!(!receiver.receipts.has_pending_request(request));
+    assert!(!receiver.receipts.has_pending_request(&link_id(), request));
     assert!(receiver.incoming_resources.is_empty());
     assert_eq!(receiver.incoming_assemblies.original_hash(&link_id()), None);
 }

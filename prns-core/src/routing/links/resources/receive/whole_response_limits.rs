@@ -39,7 +39,7 @@ fn encoded(request: RequestId, body: &[u8], envelope: Envelope) -> std::vec::Vec
 }
 
 fn assert_retired(receiver: &EngineState<TestStorageLayout>, request: RequestId) {
-    assert!(!receiver.receipts.has_pending_request(request));
+    assert!(!receiver.receipts.has_pending_request(&link_id(), request));
     assert!(receiver.incoming_resources.is_empty());
     assert!(receiver.pending_resource_offers.is_empty());
 }

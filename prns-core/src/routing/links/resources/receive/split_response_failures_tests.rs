@@ -92,7 +92,7 @@ fn expected_failure(hash: ResourceHash, cause: ResourceFailureCause) -> Delivery
 }
 
 fn assert_retired(receiver: &EngineState<TestStorageLayout>, request: RequestId) {
-    assert!(!receiver.receipts.has_pending_request(request));
+    assert!(!receiver.receipts.has_pending_request(&link_id(), request));
     assert!(receiver.incoming_resources.is_empty());
     assert_eq!(receiver.incoming_resources.active_buffer_bytes(), 0);
     assert!(receiver.pending_resource_offers.is_empty());
@@ -372,7 +372,7 @@ fn failed_whole_resource_preserves_a_different_split_assembly_waiting_on_the_lin
             Some(previous)
         );
         assert!(receiver.incoming_resources.is_empty());
-        assert!(!receiver.receipts.has_pending_request(request));
+        assert!(!receiver.receipts.has_pending_request(&link_id(), request));
     }
 }
 

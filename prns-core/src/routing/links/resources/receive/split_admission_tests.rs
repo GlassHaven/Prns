@@ -99,7 +99,10 @@ impl SplitResponse {
                 ..InboundCapture::default()
             }
         );
-        assert!(!self.receiver.receipts.has_pending_request(self.request));
+        assert!(!self
+            .receiver
+            .receipts
+            .has_pending_request(&link_id(), self.request));
         assert!(self.receiver.incoming_resources.is_empty());
         assert!(self.receiver.pending_resource_offers.is_empty());
         assert_eq!(
@@ -127,7 +130,7 @@ fn a_continuation_cannot_rewrite_the_original_segment_count() {
         let deadline = response
             .receiver
             .receipts
-            .pending_request_deadline(response.request);
+            .pending_request_deadline(&link_id(), response.request);
         let changed = rewrite_advertisement(&response.continuation, |ad| {
             ad.total_segments = changed_total;
         });
@@ -141,7 +144,7 @@ fn a_continuation_cannot_rewrite_the_original_segment_count() {
             response
                 .receiver
                 .receipts
-                .pending_request_deadline(response.request),
+                .pending_request_deadline(&link_id(), response.request),
             deadline,
             "a refused advertisement does not claim or extend the request"
         );
@@ -185,7 +188,7 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
         let deadline = response
             .receiver
             .receipts
-            .pending_request_deadline(response.request);
+            .pending_request_deadline(&link_id(), response.request);
         assert_eq!(
             feed(&mut response.receiver, &response.continuation, 2_400),
             InboundCapture::default()
@@ -280,7 +283,7 @@ fn queued_continuations_are_revalidated_before_allocating_or_claiming_the_reques
                     response
                         .receiver
                         .receipts
-                        .pending_request_deadline(response.request),
+                        .pending_request_deadline(&link_id(), response.request),
                     deadline
                 );
             }

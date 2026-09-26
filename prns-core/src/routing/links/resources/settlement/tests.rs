@@ -119,7 +119,7 @@ fn admission_failure_settles_the_request_without_a_receipt() {
     assert_eq!(
         engine
             .receipts
-            .pending_request_command(RequestId::of_request_data(REQUEST)),
+            .pending_request_command(&link_id(), RequestId::of_request_data(REQUEST)),
         Some(COMMAND)
     );
     assert_eq!(
@@ -196,9 +196,11 @@ fn receipt_timeout_wins_a_later_rejection_or_upload_watchdog() {
 fn upload_watchdog_failure_retires_its_still_pending_response() {
     let mut engine = active_engine::<TestStorageLayout>();
     let _ = start(&mut engine);
-    engine
-        .receipts
-        .arm_request_timeout(RequestId::of_request_data(REQUEST), InstantMillis(200_000));
+    engine.receipts.arm_request_timeout(
+        &link_id(),
+        RequestId::of_request_data(REQUEST),
+        InstantMillis(200_000),
+    );
     engine.outgoing_resources.state_mut(0).retries_left = 0;
     let mut settled = Vec::new();
     engine.fire_due_resource_deadlines(
@@ -342,7 +344,7 @@ fn resource_receipt_eviction_settles_the_displaced_request() {
     assert_eq!(
         engine
             .receipts
-            .pending_request_command(RequestId::of_request_data(REQUEST)),
+            .pending_request_command(&link_id(), RequestId::of_request_data(REQUEST)),
         Some(COMMAND)
     );
 }
@@ -423,7 +425,7 @@ fn a_transfer_failure_cannot_remove_another_commands_receipt() {
             None
         );
         assert_eq!(
-            engine.receipts.pending_request_command(request),
+            engine.receipts.pending_request_command(&link_id(), request),
             Some(COMMAND)
         );
     }
@@ -535,7 +537,7 @@ fn accepting_a_response_preserves_an_unrelated_upload() {
                 engine.outgoing_resources.len(),
                 engine.outgoing_resources.hash_at(0),
                 engine.outgoing_resources.state(0).command_id,
-                engine.receipts.pending_request_command(request),
+                engine.receipts.pending_request_command(&link, request),
                 engine.receipts.earliest_timeout_at()
             ),
             (1, Some(&hash), COMMAND, Some(command), None)

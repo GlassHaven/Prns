@@ -103,6 +103,24 @@ continuation resumes normally. No retained fields, capacities or wire formats ch
 
 See [verification evidence](../../validation/simulation/measurements/split-continuation-admission.md).
 
+## Completed link-ownership prerequisite
+
+Request receipt lookup now requires both the authenticated link and the request
+ID. Previously, another link could name a live request and deliver a packet
+response, claim its timeout through a Resource offer, or settle it as failed.
+All receipt reads, claims, timeout changes and settlements now share this
+link-scoped lookup, including delayed Resource completion and pending offers.
+The receipt already stores the owning link; no retained fields, capacities or
+wire formats change. Public receipt methods now require `&LinkId`; there is no
+ID-only compatibility alias. All in-repository callers have been migrated.
+
+Fixed/heap receipt tests cover both lookup-key components, colliding IDs on
+separate links, whole policy snapshots and exact settlement. Core-engine tests
+use two authenticated links and prove that wrong-link packets, offers and late
+cancellations leave the other request able to complete. This is cross-link
+isolation, not yet same-link split-chain correlation or cumulative accounting.
+See [verification evidence](../../validation/simulation/measurements/response-link-ownership.md).
+
 ## Remaining segmented scope
 
 Extend the delivered-value byte-counting contract to segmented Resource forms.

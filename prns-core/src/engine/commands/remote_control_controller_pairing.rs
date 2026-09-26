@@ -1035,7 +1035,9 @@ mod tests {
         let request_id =
             RequestId::of_packet(&PacketHash::of_wire_packet(&request_frame.unwrap()).unwrap());
         assert_eq!(
-            engine.receipts.pending_request_intent(request_id),
+            engine
+                .receipts
+                .pending_request_intent(&link_id(), request_id),
             Some(SendRequestIntent::RemoteControlControllerPairing),
         );
         (controller, request_id)
@@ -1298,7 +1300,7 @@ mod tests {
         );
         assert_eq!(confirmation, Some(attempt_id));
         assert_eq!(application_responses, 0);
-        assert!(!engine.receipts.has_pending_request(request_id));
+        assert!(!engine.receipts.has_pending_request(&link_id(), request_id));
         assert!(matches!(
             engine.remote_control_controller_pairing.view(),
             RemoteControlControllerPairingView::AwaitingApproval(view)
@@ -1339,7 +1341,7 @@ mod tests {
             engine.remote_control_controller_pairing.view(),
             RemoteControlControllerPairingView::Idle,
         );
-        assert!(!engine.receipts.has_pending_request(request_id));
+        assert!(!engine.receipts.has_pending_request(&link_id(), request_id));
     }
 
     #[test]
@@ -1391,7 +1393,7 @@ mod tests {
             engine.remote_control_controller_pairing.view(),
             RemoteControlControllerPairingView::Idle,
         );
-        assert!(!engine.receipts.has_pending_request(request_id));
+        assert!(!engine.receipts.has_pending_request(&link_id(), request_id));
     }
 
     #[test]
@@ -1436,7 +1438,7 @@ mod tests {
             engine.remote_control_controller_pairing.view(),
             RemoteControlControllerPairingView::Idle,
         );
-        assert!(!engine.receipts.has_pending_request(request_id));
+        assert!(!engine.receipts.has_pending_request(&link_id(), request_id));
     }
 
     #[test]

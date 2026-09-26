@@ -53,7 +53,7 @@ fn check_limit(body: &[u8], limit: ByteLimit, accepted: bool) {
         )
     };
     assert_eq!((capture.responses, capture.settlements), expected);
-    assert!(!receiver.receipts.has_pending_request(request));
+    assert!(!receiver.receipts.has_pending_request(&link_id(), request));
 
     // A fresh IV bypasses packet deduplication: the retired receipt, not the
     // dedup cache, must prevent another delivery or terminal settlement.
@@ -79,7 +79,7 @@ fn check_limit(body: &[u8], limit: ByteLimit, accepted: bool) {
             std::vec![(CommandId(43), delivered())],
         )
     );
-    assert!(!receiver.receipts.has_pending_request(next));
+    assert!(!receiver.receipts.has_pending_request(&link_id(), next));
 }
 
 #[test]

@@ -27,8 +27,8 @@ impl<S: StorageLayout> EngineState<S> {
     /// An authenticated response demonstrates upload completion even if its proof
     /// was lost. The response transfer now owns the request's failure deadline.
     pub(crate) fn claim_resource_response(&mut self, link: &LinkId, request: RequestId) {
-        self.receipts.claim_request_for_transfer(request);
-        let Some(command) = self.receipts.pending_request_command(request) else {
+        self.receipts.claim_request_for_transfer(link, request);
+        let Some(command) = self.receipts.pending_request_command(link, request) else {
             return;
         };
         for index in (0..self.outgoing_resources.len()).rev() {

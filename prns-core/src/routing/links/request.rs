@@ -6,6 +6,8 @@
 
 #[cfg(test)]
 mod response_limits;
+#[cfg(test)]
+mod response_link_tests;
 
 use crate::crypto::sha256;
 use crate::engine::{
@@ -1350,7 +1352,9 @@ mod tests {
                 Settlement::SendRequest(Err(SendRequestFailure::ResponseTooLarge)),
             )],
         );
-        assert!(!receiver.receipts.has_pending_request(request_id));
+        assert!(!receiver
+            .receipts
+            .has_pending_request(&link_id(), request_id));
     }
 
     #[test]
@@ -1394,7 +1398,9 @@ mod tests {
             capture.settlements.as_slice(),
             [(CommandId(42), Settlement::SendRequest(Ok(_)))]
         ));
-        assert!(!receiver.receipts.has_pending_request(request_id));
+        assert!(!receiver
+            .receipts
+            .has_pending_request(&link_id(), request_id));
     }
 
     #[test]

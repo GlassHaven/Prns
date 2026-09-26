@@ -797,7 +797,9 @@ impl<S: StorageLayout> EngineState<S> {
         let Ok((request_id, response_data)) = parse_response_plaintext(plaintext) else {
             return IngestPacketOutcome::Ignored(IgnoreReason::Malformed);
         };
-        let Some(maximum_response_bytes) = self.receipts.pending_request_response_limit(request_id)
+        let Some(maximum_response_bytes) = self
+            .receipts
+            .pending_request_response_limit(&link_id, request_id)
         else {
             return IngestPacketOutcome::Ignored(IgnoreReason::Superseded);
         };
@@ -805,7 +807,7 @@ impl<S: StorageLayout> EngineState<S> {
         // binary header. Only parse_response_plaintext's outer envelope is gone.
         let response_size = response_data.len() as u64;
         if !maximum_response_bytes.allows(response_size) {
-            let Some(proven) = self.receipts.settle_by_request_id(request_id) else {
+            let Some(proven) = self.receipts.settle_by_request_id(&link_id, request_id) else {
                 return IngestPacketOutcome::Ignored(IgnoreReason::Superseded);
             };
             self.links.note_inbound(&link_id, arrived_at);
@@ -816,7 +818,7 @@ impl<S: StorageLayout> EngineState<S> {
                 request_id,
             };
         }
-        let Some(proven) = self.receipts.settle_by_request_id(request_id) else {
+        let Some(proven) = self.receipts.settle_by_request_id(&link_id, request_id) else {
             return IngestPacketOutcome::Ignored(IgnoreReason::Superseded);
         };
         self.links.note_inbound(&link_id, arrived_at);
