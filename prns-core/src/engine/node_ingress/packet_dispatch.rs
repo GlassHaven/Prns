@@ -645,6 +645,9 @@ impl<S: StorageLayout> EngineState<S> {
                             self.emit_resource_pull(&link_id, &hash, now, fill_random, sink);
                         }
                         AcceptedResourceAdmission::Pending => {}
+                        AcceptedResourceAdmission::SupersededResponse { link_id, hash } => {
+                            self.reject_offered_resource(&link_id, &hash, now, fill_random, sink);
+                        }
                         AcceptedResourceAdmission::CapacityRejected {
                             link_id,
                             hash,
@@ -702,6 +705,9 @@ impl<S: StorageLayout> EngineState<S> {
             }
             IngestPacketOutcome::ResourceAdmissionPending => {
                 wake_schedule_changes.resource_deadlines = self.resource_deadlines_wake();
+            }
+            IngestPacketOutcome::ResourceResponseSuperseded { link_id, hash } => {
+                self.reject_offered_resource(&link_id, &hash, now, fill_random, sink);
             }
             IngestPacketOutcome::ResourceCapacityRejected {
                 link_id,

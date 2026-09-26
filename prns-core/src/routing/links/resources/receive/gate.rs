@@ -8,7 +8,7 @@ use crate::routing::dedup::{PacketHash, PacketHashHistory, RememberPacketOutcome
 use crate::routing::ingress::{DataPacket, IgnoreReason, IngestPacketOutcome};
 use crate::routing::links::data::{link_data_frame_ceiling, write_link_packet};
 use crate::routing::links::resources::advertisement::ResourceAdvertisement;
-use crate::routing::links::resources::assembly::SegmentFit;
+use crate::routing::links::resources::assembly::{AssemblyCorrelation, SegmentFit};
 use crate::routing::links::resources::control::write_cancel_plaintext;
 use crate::routing::links::resources::pending::{
     PendingResourceOffer, PendingResourceOfferError, QueuePendingResourceOfferOutcome,
@@ -31,6 +31,10 @@ pub(crate) enum AcceptedResourceAdmission {
         hash: ResourceHash,
     },
     Pending,
+    SupersededResponse {
+        link_id: LinkId,
+        hash: ResourceHash,
+    },
     CapacityRejected {
         link_id: LinkId,
         hash: ResourceHash,
@@ -46,6 +50,9 @@ impl<'packet> From<AcceptedResourceAdmission> for IngestPacketOutcome<'packet> {
                 Self::OwesResourcePull { link_id, hash }
             }
             AcceptedResourceAdmission::Pending => Self::ResourceAdmissionPending,
+            AcceptedResourceAdmission::SupersededResponse { link_id, hash } => {
+                Self::ResourceResponseSuperseded { link_id, hash }
+            }
             AcceptedResourceAdmission::CapacityRejected {
                 link_id,
                 hash,
@@ -61,6 +68,22 @@ impl<'packet> From<AcceptedResourceAdmission> for IngestPacketOutcome<'packet> {
 }
 
 impl<S: StorageLayout> EngineState<S> {
+    pub(super) fn whole_response_is_superseded(
+        &self,
+        link_id: &LinkId,
+        total_segments: u64,
+        correlation: ResourceCorrelation,
+    ) -> bool {
+        total_segments == 1
+            && match correlation {
+                ResourceCorrelation::Response(id) => {
+                    self.incoming_assemblies.correlation(link_id)
+                        == Some(AssemblyCorrelation::Response(id))
+                }
+                ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => false,
+            }
+    }
+
     pub(crate) fn ingest_set_resource_strategy(
         &mut self,
         id: CommandId,
@@ -150,6 +173,12 @@ impl<S: StorageLayout> EngineState<S> {
             (false, true, Some(id)) => ResourceCorrelation::Response(id),
             _ => ResourceCorrelation::Unsolicited,
         };
+        if self.whole_response_is_superseded(&link_id, advertisement.total_segments, correlation) {
+            return IngestPacketOutcome::ResourceResponseSuperseded {
+                link_id,
+                hash: advertisement.hash,
+            };
+        }
         // Refuse a retargeted continuation before policy can settle the request
         // it names. Admission repeats this check after application/queue waits.
         let multi_segment = advertisement.total_segments > 1;
@@ -335,6 +364,16 @@ impl<S: StorageLayout> EngineState<S> {
         accepted: AcceptedResource<'_>,
         arrived_at: InstantMillis,
     ) -> AcceptedResourceAdmission {
+        if self.whole_response_is_superseded(
+            &link_id,
+            accepted.total_segment_count,
+            accepted.correlation,
+        ) {
+            return AcceptedResourceAdmission::SupersededResponse {
+                link_id,
+                hash: accepted.hash,
+            };
+        }
         match self.incoming_resources.admission_for(&link_id, accepted) {
             IncomingResourceAdmission::Available | IncomingResourceAdmission::AlreadyReceiving => {
                 self.admit_accepted_resource(link_id, original_hash, accepted, arrived_at)
@@ -427,6 +466,9 @@ impl<S: StorageLayout> EngineState<S> {
         let correlation = accepted.correlation;
         let segment_index = accepted.segment_index;
         let total_segment_count = accepted.total_segment_count;
+        if self.whole_response_is_superseded(&link_id, total_segment_count, correlation) {
+            return AcceptedResourceAdmission::SupersededResponse { link_id, hash };
+        }
         // Admission can follow an application decision or a queue wait. Neither
         // reserves the split assembly, so recheck before allocating or claiming.
         if total_segment_count > 1

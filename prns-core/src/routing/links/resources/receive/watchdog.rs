@@ -31,6 +31,13 @@ impl<S: StorageLayout> EngineState<S> {
             .offers()
             .iter()
             .map(|offer| {
+                if self.whole_response_is_superseded(
+                    &offer.link_id(),
+                    offer.accepted().total_segment_count,
+                    offer.correlation(),
+                ) {
+                    return InstantMillis(0);
+                }
                 if !matches!(
                     self.links.phase_for(&offer.link_id()),
                     Some(LinkPhase::Active { .. })
@@ -90,6 +97,13 @@ impl<S: StorageLayout> EngineState<S> {
                         return Some((index, PendingOfferDueAction::Drop));
                     }
                     let accepted = offer.accepted();
+                    if self.whole_response_is_superseded(
+                        &offer.link_id(),
+                        accepted.total_segment_count,
+                        accepted.correlation,
+                    ) {
+                        return Some((index, PendingOfferDueAction::Reject));
+                    }
                     if accepted.total_segment_count > 1
                         && accepted.segment_index > 1
                         && self.incoming_assemblies.fit(
@@ -228,6 +242,9 @@ impl<S: StorageLayout> EngineState<S> {
                 super::gate::AcceptedResourceAdmission::Pending
                 | super::gate::AcceptedResourceAdmission::CapacityRejected { .. }
                 | super::gate::AcceptedResourceAdmission::Ignored(_) => {}
+                super::gate::AcceptedResourceAdmission::SupersededResponse { link_id, hash } => {
+                    self.reject_offered_resource(&link_id, &hash, now, fill_random, sink);
+                }
             }
         }
     }

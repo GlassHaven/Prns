@@ -1,5 +1,6 @@
 use super::tests_support::*;
 use crate::routing::links::resources::assembly::AssemblyBytes;
+mod competing_whole;
 mod refusal;
 use crate::engine::test_support::{filled_frame, TestStorageLayout};
 use crate::engine::{
@@ -88,9 +89,13 @@ impl SplitResponse {
     }
 
     fn complete(&mut self, pull: &[u8]) {
-        let mut completed = serve_pull(&mut self.sender, &mut self.receiver, pull, 3_000);
+        self.complete_at(pull, 3_000);
+    }
+
+    fn complete_at(&mut self, pull: &[u8], at: u64) {
+        let mut completed = serve_pull(&mut self.sender, &mut self.receiver, pull, at);
         for (_, proof) in completed.frames.drain(..) {
-            feed(&mut self.sender, &proof, 3_100);
+            feed(&mut self.sender, &proof, at + 100);
         }
         assert_eq!(
             completed,
@@ -99,7 +104,7 @@ impl SplitResponse {
                 settlements: std::vec![(
                     REQUEST,
                     Settlement::SendRequest(Ok(PacketReceiptDelivered {
-                        rtt: RttMillis::new(1_200),
+                        rtt: RttMillis::new(at - 1_800),
                         evidence: DeliveryEvidence::Response,
                     }))
                 )],

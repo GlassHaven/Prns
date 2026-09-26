@@ -333,18 +333,11 @@ fn a_cancelled_split_response_releases_its_assembly_and_settles_once() {
 }
 
 #[test]
-fn failed_whole_resource_still_settles_without_erasing_a_split_chain_for_the_same_request() {
+fn preadmitted_whole_failure_still_settles_without_erasing_a_later_split_chain() {
     for opening in [Opening::Uncompressed, Opening::Inflated] {
         let mut receiver = engine_with_active_link();
         let request = track_pending_request(&mut receiver, CommandId(42), 1_800, 20_000);
         let previous = ResourceHash::new([0x31; 32]);
-        receiver.incoming_assemblies.begin(
-            link_id(),
-            previous,
-            2,
-            256,
-            AssemblyCorrelation::Response(request),
-        );
         let mut sender = engine_with_active_link();
         let body = [0xFF; 128];
         let advertisement = advertise_response_segment_from(
@@ -359,6 +352,15 @@ fn failed_whole_resource_still_settles_without_erasing_a_split_chain_for_the_sam
         let advertisement =
             rewrite_advertisement(&advertisement, |ad| ad.flags.has_metadata = true);
         let pull = feed(&mut receiver, &advertisement, 2_000);
+        // Already-admitted whole transfers remain a separate completion-time
+        // ownership case; this fixture deliberately predates the split owner.
+        receiver.incoming_assemblies.begin(
+            link_id(),
+            previous,
+            2,
+            256,
+            AssemblyCorrelation::Response(request),
+        );
         let hash = receiver
             .incoming_resources
             .first_hash_for_link(&link_id())

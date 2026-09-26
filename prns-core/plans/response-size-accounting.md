@@ -263,4 +263,10 @@ also establish that the normal responder API refuses a competing whole Resource
 locally as `LinkBusy`. With explicit spare test storage, a separate link completes
 a whole response while the original split waits, then the original completes and
 both runtimes recover. This verifies sender exclusion, not rejection of a whole
-offer emitted by an inconsistent peer; receiver-side overlap remains open.
+offer emitted by an inconsistent peer. The
+[competing-whole-offer slice](../../validation/simulation/measurements/competing-whole-offer.md)
+now cancels fresh and queued whole offers when a matching split assembly owns the
+request, before policy refusal or queue expiry can settle it. These are deterministic
+core-engine reproductions, not yet mixed-runtime inconsistent-peer injections.
+Whole transfers admitted before the split owner appeared remain a separate
+completion-time arbitration gap.
