@@ -258,3 +258,9 @@ now prevents a response packet from publishing or settling a request already own
 by a matching admitted split assembly. Its simulator reproduction pauses continuation
 advertisements after the first verified segment, injects the competing packet, then
 proves exact original completion and same-link recovery in both runtime directions.
+The [sender-exclusion scenarios](../../validation/simulation/measurements/whole-response-sender-exclusion.md)
+also establish that the normal responder API refuses a competing whole Resource
+locally as `LinkBusy`. With explicit spare test storage, a separate link completes
+a whole response while the original split waits, then the original completes and
+both runtimes recover. This verifies sender exclusion, not rejection of a whole
+offer emitted by an inconsistent peer; receiver-side overlap remains open.

@@ -10,11 +10,13 @@ use personal_rns::storage::{DisplayedStorageLimits, GrowableHeap, StorageCapacit
 pub(super) const TRANSFER_WINDOW_BYTES: usize = 512;
 const PARTS: usize = max_part_count(TRANSFER_WINDOW_BYTES);
 
-// Single transfer/assembly slots expose reuse; receipt capacity is explicit so
-// pressure scenarios can displace a request without changing shipping profiles.
-pub(super) struct SegmentedStorage<const RECEIPTS: usize>;
+// Assembly and transfer pressure are test-local. Ordinary scenarios use one
+// transfer slot; overlap scenarios reserve room for a second link's transfer.
+pub(super) struct SegmentedStorage<const RECEIPTS: usize, const TRANSFERS: usize = 1>;
 
-impl<const RECEIPTS: usize> StorageLayout for SegmentedStorage<RECEIPTS> {
+impl<const RECEIPTS: usize, const TRANSFERS: usize> StorageLayout
+    for SegmentedStorage<RECEIPTS, TRANSFERS>
+{
     const LIMITS: DisplayedStorageLimits = DisplayedStorageLimits {
         resource_transfer_bytes: StorageCapacity::Fixed(TRANSFER_WINDOW_BYTES),
         receipts: StorageCapacity::Fixed(RECEIPTS),
@@ -52,12 +54,12 @@ impl<const RECEIPTS: usize> StorageLayout for SegmentedStorage<RECEIPTS> {
     type TransportedLinks = <GrowableHeap as StorageLayout>::TransportedLinks;
     type Links = <GrowableHeap as StorageLayout>::Links;
     type OutgoingResources =
-        FixedResourceTable<OutgoingResourceState, 1, TRANSFER_WINDOW_BYTES, PARTS>;
+        FixedResourceTable<OutgoingResourceState, TRANSFERS, TRANSFER_WINDOW_BYTES, PARTS>;
     type IncomingResources =
-        FixedResourceTable<IncomingResourceState, 1, TRANSFER_WINDOW_BYTES, PARTS>;
+        FixedResourceTable<IncomingResourceState, TRANSFERS, TRANSFER_WINDOW_BYTES, PARTS>;
     type PendingResourceOffers = <GrowableHeap as StorageLayout>::PendingResourceOffers;
     type IncomingAssemblies = FixedIncomingAssemblyTable<1>;
-    type OutgoingAssemblies = FixedStaticOutgoingAssemblyTable<1>;
+    type OutgoingAssemblies = FixedStaticOutgoingAssemblyTable<TRANSFERS>;
     type Channels = <GrowableHeap as StorageLayout>::Channels;
     type DirtyInterfaces = <GrowableHeap as StorageLayout>::DirtyInterfaces;
 }

@@ -10,7 +10,7 @@ use prns_simulation::{Reachability, TopologyMutation};
 mod active_culling;
 mod buffered_interruption;
 mod capacity;
-mod competing_packet;
+mod competing_responses;
 mod culled;
 mod interrupted;
 mod stalled;
@@ -190,6 +190,21 @@ fn scenario_with_receipts<const RECEIPTS: usize>(
         [LinkId; 2],
     ),
 ) {
+    scenario_with_capacity::<RECEIPTS, 1>(embedded_endpoint, desktop_endpoint, trace_capacity, run);
+}
+
+fn scenario_with_capacity<const RECEIPTS: usize, const TRANSFERS: usize>(
+    embedded_endpoint: Endpoint,
+    desktop_endpoint: Endpoint,
+    trace_capacity: usize,
+    run: impl FnOnce(
+        &mut EmbassyTasks<'_>,
+        &VirtualBleLab,
+        &ResourceNode,
+        &tokio_node::TokioNode,
+        [LinkId; 2],
+    ),
+) {
     let clock = ClockLease::acquire();
     let lab = VirtualBleLab::new(
         BleMediumConfig::new(
@@ -215,7 +230,7 @@ fn scenario_with_receipts<const RECEIPTS: usize>(
         embedded_endpoint,
         [destination(EMBASSY_ADDRESS)],
         personal_rns::request_endpoints![Echo, files::FileReply],
-        SegmentedStorage::<RECEIPTS>,
+        SegmentedStorage::<RECEIPTS, TRANSFERS>,
     );
     let mut desktop = tokio_node::with_storage(
         &mut tasks,
@@ -224,7 +239,7 @@ fn scenario_with_receipts<const RECEIPTS: usize>(
         desktop_endpoint,
         [destination(TOKIO_ADDRESS)],
         personal_rns::request_endpoints![Echo, files::FileReply],
-        SegmentedStorage::<RECEIPTS>,
+        SegmentedStorage::<RECEIPTS, TRANSFERS>,
     );
     assert_eq!(
         lab.set_reachability(EMBASSY_RADIO, TOKIO_RADIO, Reachability::Reachable),
