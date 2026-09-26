@@ -128,3 +128,77 @@ proptest! {
         check_limit(&body, ByteLimit::Maximum(maximum), retained <= maximum);
     }
 }
+
+#[test]
+fn an_admitted_split_response_owns_only_its_matching_packet_response() {
+    use crate::routing::links::resources::assembly::AssemblyCorrelation;
+    use crate::routing::links::resources::receive::tests_support::InboundCapture;
+    use crate::routing::links::resources::ResourceHash;
+
+    enum Owner {
+        SameRequest,
+        OtherRequest,
+        OtherLink,
+    }
+    for limit in [ByteLimit::Maximum(1), ByteLimit::Maximum(3)] {
+        for owner in [Owner::SameRequest, Owner::OtherRequest, Owner::OtherLink] {
+            let mut receiver = engine_with_active_link();
+            let request = track_pending_request_with_limit(
+                &mut receiver,
+                CommandId(42),
+                1_800,
+                20_000,
+                limit,
+            );
+            let owner_request = match owner {
+                Owner::SameRequest | Owner::OtherLink => request,
+                Owner::OtherRequest => RequestId([0xF3; 16]),
+            };
+            let owner_link = match owner {
+                Owner::OtherLink => crate::routing::links::LinkId::new([0xF4; 16]),
+                Owner::SameRequest | Owner::OtherRequest => link_id(),
+            };
+            let hash = ResourceHash::new([0xAB; 32]);
+            receiver.incoming_assemblies.begin(
+                owner_link,
+                hash,
+                2,
+                256,
+                AssemblyCorrelation::Response(owner_request),
+            );
+            let capture = feed(&mut receiver, &frame(request, b"abc", 1), 2_000);
+            if matches!(owner, Owner::SameRequest) {
+                assert_eq!(capture, InboundCapture::default());
+                assert!(receiver.receipts.has_pending_request(&link_id(), request));
+            } else {
+                assert_eq!(
+                    capture,
+                    if limit.allows(3) {
+                        InboundCapture {
+                            responses: std::vec![(CommandId(42), request, b"abc".to_vec())],
+                            settlements: std::vec![(CommandId(42), delivered())],
+                            ..InboundCapture::default()
+                        }
+                    } else {
+                        InboundCapture {
+                            settlements: std::vec![(
+                                CommandId(42),
+                                Settlement::SendRequest(Err(SendRequestFailure::ResponseTooLarge))
+                            )],
+                            ..InboundCapture::default()
+                        }
+                    }
+                );
+                assert!(!receiver.receipts.has_pending_request(&link_id(), request));
+            }
+            assert_eq!(
+                receiver.incoming_assemblies.original_hash(&owner_link),
+                Some(hash)
+            );
+            assert_eq!(
+                receiver.incoming_assemblies.correlation(&owner_link),
+                Some(AssemblyCorrelation::Response(owner_request))
+            );
+        }
+    }
+}

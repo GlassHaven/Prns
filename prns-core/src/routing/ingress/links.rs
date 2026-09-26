@@ -23,6 +23,7 @@ use crate::routing::links::maintenance::{KEEPALIVE_ECHO, KEEPALIVE_REQUEST};
 use crate::routing::links::request::{
     parse_request_plaintext, parse_response_plaintext, RequestId,
 };
+use crate::routing::links::resources::assembly::AssemblyCorrelation;
 use crate::routing::links::table::{LinkPhase, LinkRole};
 use crate::routing::links::transported::{
     extra_link_proof_timeout_ms, TrackTransportedLinkError, TransportSwitch, TransportedLink,
@@ -797,6 +798,11 @@ impl<S: StorageLayout> EngineState<S> {
         let Ok((request_id, response_data)) = parse_response_plaintext(plaintext) else {
             return IngestPacketOutcome::Ignored(IgnoreReason::Malformed);
         };
+        if self.incoming_assemblies.correlation(&link_id)
+            == Some(AssemblyCorrelation::Response(request_id))
+        {
+            return IngestPacketOutcome::Ignored(IgnoreReason::Superseded);
+        }
         let Some(maximum_response_bytes) = self
             .receipts
             .pending_request_response_limit(&link_id, request_id)

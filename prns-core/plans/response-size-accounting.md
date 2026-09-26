@@ -199,7 +199,7 @@ overrun, and requires exact equality at the final segment, using the existing
 stream counter. The [size-identity slice](../../validation/simulation/measurements/split-stream-size-identity.md)
 now retains the first size declaration and requires it at admission, queued
 promotion/expiry, completion, advancement and failure cleanup. The distinct
-delivered-value budget is still unfinished.
+delivered-value budget was completed in the following slices.
 The [value-accounting slice](../../validation/simulation/measurements/split-value-accounting.md)
 adds separate verified-value progress and cumulative checks before chunk delivery.
 That slice retained conservative admission: a trial relaxation exposed missing
@@ -251,5 +251,10 @@ while queued. Stale queued continuations are discarded before they can fail a
 replacement chain. These new refusal cases have core-engine reproductions, not
 yet mixed-runtime simulator injections. Segment counts and request correlation are now stable across the
 chain; validate advertised stream totals before loosening admission. Arbitration
-between a whole response and an overlapping split response naming the same request
-is not addressed by the split-chain ownership checks.
+between a whole Resource response and an overlapping split response naming the same
+request remains open. The
+[competing-packet slice](../../validation/simulation/measurements/competing-packet-response.md)
+now prevents a response packet from publishing or settling a request already owned
+by a matching admitted split assembly. Its simulator reproduction pauses continuation
+advertisements after the first verified segment, injects the competing packet, then
+proves exact original completion and same-link recovery in both runtime directions.

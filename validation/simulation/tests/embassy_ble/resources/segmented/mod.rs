@@ -10,6 +10,7 @@ use prns_simulation::{Reachability, TopologyMutation};
 mod active_culling;
 mod buffered_interruption;
 mod capacity;
+mod competing_packet;
 mod culled;
 mod interrupted;
 mod stalled;
