@@ -192,6 +192,12 @@ as expiry. A one-receipt simulator profile proves that the replacement request
 still completes, and another link can subsequently use the single assembly slot.
 
 Extend the delivered-value byte-counting contract to segmented Resource forms.
+The [cumulative stream-size prerequisite](../../validation/simulation/measurements/split-stream-size-validation.md)
+now checks verified stream bytes against each admitted segment's size declaration
+before proving or delivering that segment. It rejects cumulative overflow or
+overrun, and requires exact equality at the final segment, using the existing
+stream counter. This does not yet bind the first size declaration across all
+continuations or enforce the distinct delivered-value budget.
 Separate early allocation protection from final delivered-payload validation;
 loosening an advertisement check alone would admit oversized legacy raw bodies.
 Keep the authoritative accounting in shared core, with host completion buffers

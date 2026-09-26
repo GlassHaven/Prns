@@ -28,7 +28,7 @@ use crate::routing::links::resources::streamed_open::{
 use crate::routing::links::resources::table::{IncomingResourceState, IncomingResourceStatus};
 use crate::routing::links::resources::{
     ResourceCompression, ResourceCorrelation, ResourceFailureCause, ResourceHash, ResourceProof,
-    DECOMPRESSION_GRACE_MS, OPEN_VERDICT_GRACE_MS,
+    ResourceSegment, DECOMPRESSION_GRACE_MS, OPEN_VERDICT_GRACE_MS,
 };
 use crate::routing::links::table::{LinkPhase, LinkRole};
 use crate::routing::links::LinkId;
@@ -225,6 +225,23 @@ impl<S: StorageLayout> EngineState<S> {
                     }
                 }
             };
+            let verified = verified.and_then(|verified| {
+                if multi_segment
+                    && !self.incoming_assemblies.fits_stream_size(
+                        link_id,
+                        ResourceSegment {
+                            index: state.segment_index,
+                            total_segments: state.total_segments,
+                            total_data_bytes: state.uncompressed_data_bytes,
+                        },
+                        verified.stream_byte_len,
+                    )
+                {
+                    Err(ResourceFailureCause::TransferCorrupt)
+                } else {
+                    Ok(verified)
+                }
+            });
             match verified {
                 Err(cause) => Err(cause),
                 Ok(verified) => {
@@ -522,6 +539,27 @@ impl<S: StorageLayout> EngineState<S> {
             wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
             return wake_schedule_changes;
         };
+        if is_split
+            && !self.incoming_assemblies.fits_stream_size(
+                &link_id,
+                ResourceSegment {
+                    index: state.segment_index,
+                    total_segments: state.total_segments,
+                    total_data_bytes: state.uncompressed_data_bytes,
+                },
+                plaintext.len() as u64,
+            )
+        {
+            self.fail_retired_incoming_resource(
+                &link_id,
+                &hash,
+                &state,
+                ResourceFailureCause::TransferCorrupt,
+                sink,
+            );
+            wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
+            return wake_schedule_changes;
+        }
         let Ok((metadata, data)) = split_metadata_block(&state, plaintext) else {
             self.fail_retired_incoming_resource(
                 &link_id,

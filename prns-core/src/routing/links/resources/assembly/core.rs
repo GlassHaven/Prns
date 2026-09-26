@@ -1,7 +1,7 @@
 use super::AssemblyCorrelation;
 use crate::engine::CommandId;
 use crate::routing::links::request::RequestId;
-use crate::routing::links::resources::ResourceHash;
+use crate::routing::links::resources::{ResourceHash, ResourceSegment};
 use crate::routing::links::LinkId;
 
 pub trait IncomingAssemblyTable {
@@ -128,6 +128,27 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
     pub fn original_hash(&self, link_id: &LinkId) -> Option<ResourceHash> {
         self.index_of(link_id)
             .map(|index| self.table.original_hashes()[index])
+    }
+
+    /// Stream bytes include metadata and response framing. Chain identity is
+    /// checked separately; this validates the next segment's size declaration.
+    pub(crate) fn fits_stream_size(
+        &self,
+        link_id: &LinkId,
+        segment: ResourceSegment,
+        segment_bytes: u64,
+    ) -> bool {
+        let Some(index) = self.index_of(link_id) else {
+            return false;
+        };
+        let Some(total) = self.table.received_totals()[index].checked_add(segment_bytes) else {
+            return false;
+        };
+        self.table.total_segments()[index] == segment.total_segments
+            && self.table.segments_received()[index].checked_add(1) == Some(segment.index)
+            && segment.index <= segment.total_segments
+            && total <= segment.total_data_bytes
+            && (segment.index < segment.total_segments || total == segment.total_data_bytes)
     }
 
     pub fn correlation(&self, link_id: &LinkId) -> Option<AssemblyCorrelation> {
@@ -490,6 +511,55 @@ mod tests {
             None
         );
         assert_eq!(assemblies.original_hash(&link(1)), None);
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn stream_size_checks_are_overflow_safe_and_do_not_mutate_progress(
+            received in proptest::prelude::any::<u64>(),
+            bytes in proptest::prelude::any::<u64>(),
+            advertised in proptest::prelude::any::<u64>(),
+        ) {
+            for index in [2, 3] {
+                let mut assemblies = table();
+                assemblies.begin(link(1), hash(0xA), 3, AssemblyCorrelation::Unsolicited);
+                assemblies.table.set_progress(0, index - 1, received);
+                let segment = ResourceSegment { index, total_segments: 3, total_data_bytes: advertised };
+                let total = u128::from(received) + u128::from(bytes);
+                let expected = total <= u128::from(advertised) && (index < 3 || total == u128::from(advertised));
+                proptest::prop_assert_eq!(assemblies.fits_stream_size(&link(1), segment, bytes), expected);
+                proptest::prop_assert!(!assemblies.fits_stream_size(&link(2), segment, bytes));
+                proptest::prop_assert_eq!(
+                    (assemblies.table.segments_received(), assemblies.table.received_totals()),
+                    (&[index - 1][..], &[received][..])
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn stream_size_refuses_overflow_even_with_the_largest_advertised_total() {
+        let mut assemblies = table();
+        assemblies.begin(link(1), hash(0xA), 2, AssemblyCorrelation::Unsolicited);
+        assemblies.table.set_progress(0, 1, u64::MAX);
+        assert!(!assemblies.fits_stream_size(
+            &link(1),
+            ResourceSegment {
+                index: 2,
+                total_segments: 2,
+                total_data_bytes: u64::MAX,
+            },
+            1
+        ));
+        assert!(assemblies.fits_stream_size(
+            &link(1),
+            ResourceSegment {
+                index: 2,
+                total_segments: 2,
+                total_data_bytes: u64::MAX,
+            },
+            0
+        ));
     }
 
     #[test]
