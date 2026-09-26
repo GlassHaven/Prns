@@ -71,7 +71,7 @@ fn correlation_matrix<C: IncomingAssemblyTable + Default>(first: RequestId, seco
                         total_segments: 2,
                         total_data_bytes: 42
                     },
-                    900,
+                    11,
                     offered
                 ),
                 None

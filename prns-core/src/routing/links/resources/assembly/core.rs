@@ -98,8 +98,8 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
         }
     }
 
-    /// Commit only the next segment of the named chain, even if another transfer
-    /// was admitted or completed since this segment's admission.
+    /// Commit only the next segment of the named chain with a valid cumulative
+    /// stream size. A refused transition leaves all progress unchanged.
     pub fn advance(
         &mut self,
         link_id: &LinkId,
@@ -113,7 +113,7 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
         }
         let index = self.index_of(link_id)?;
         let segments_received = segment.index;
-        let received_total = self.table.received_totals()[index].saturating_add(segment_bytes);
+        let received_total = self.next_stream_total(index, segment, segment_bytes)?;
         self.table
             .set_progress(index, segments_received, received_total);
         if segments_received >= self.table.total_segments()[index] {
@@ -141,15 +141,24 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
         let Some(index) = self.index_of(link_id) else {
             return false;
         };
-        let Some(total) = self.table.received_totals()[index].checked_add(segment_bytes) else {
-            return false;
-        };
-        self.table.total_segments()[index] == segment.total_segments
+        self.next_stream_total(index, segment, segment_bytes)
+            .is_some()
+    }
+
+    fn next_stream_total(
+        &self,
+        index: usize,
+        segment: ResourceSegment,
+        segment_bytes: u64,
+    ) -> Option<u64> {
+        let total = self.table.received_totals()[index].checked_add(segment_bytes)?;
+        (self.table.total_segments()[index] == segment.total_segments
             && self.table.stream_sizes()[index] == segment.total_data_bytes
             && self.table.segments_received()[index].checked_add(1) == Some(segment.index)
             && segment.index <= segment.total_segments
             && total <= segment.total_data_bytes
-            && (segment.index < segment.total_segments || total == segment.total_data_bytes)
+            && (segment.index < segment.total_segments || total == segment.total_data_bytes))
+            .then_some(total)
     }
 
     pub fn correlation(&self, link_id: &LinkId) -> Option<AssemblyCorrelation> {
@@ -338,11 +347,11 @@ mod tests {
                     total_segments: 3,
                     total_data_bytes: 1_000
                 },
-                50,
+                800,
                 AssemblyCorrelation::Unsolicited
             ),
             Some(AssemblyProgress::Complete {
-                total_size_bytes: 250
+                total_size_bytes: 1_000
             })
         );
     }
@@ -477,7 +486,7 @@ mod tests {
                 total_segments: 3,
                 total_data_bytes: 1_000,
             },
-            100,
+            800,
             AssemblyCorrelation::Unsolicited,
         );
         assert_eq!(
@@ -551,7 +560,7 @@ mod tests {
         fn advancement_commits_only_the_exact_chain_position(
             total in 2u64..=u64::MAX,
             received in proptest::prelude::any::<u64>(),
-            bytes in proptest::prelude::any::<u64>(),
+            bytes in 0u64..=963,
         ) {
             let next = received.wrapping_add(1);
             for (offered_hash, offered_index, offered_total) in [
@@ -563,12 +572,13 @@ mod tests {
                 let mut assemblies = table();
                 assemblies.begin(link(1), hash(0xA), total, 1_000, AssemblyCorrelation::Unsolicited);
                 assemblies.table.set_progress(0, received, 37);
+                let received_total = 37u128 + u128::from(bytes);
                 let matches = offered_hash == hash(0xA) && offered_index == next
-                    && offered_total == total && received < total;
-                let received_total = 37u64.saturating_add(bytes);
+                    && offered_total == total && received < total
+                    && received_total <= 1_000 && (next < total || received_total == 1_000);
                 let expected = if matches {
                     Some(if next == total {
-                        AssemblyProgress::Complete { total_size_bytes: received_total }
+                        AssemblyProgress::Complete { total_size_bytes: received_total as u64 }
                     } else {
                         AssemblyProgress::Assembling
                     })
@@ -579,7 +589,7 @@ mod tests {
                         assemblies.table.segments_received(), assemblies.table.received_totals()),
                     (Some(hash(0xA)), &[total][..],
                         &[if matches { next } else { received }][..],
-                        &[if matches { received_total } else { 37 }][..])
+                        &[if matches { received_total as u64 } else { 37 }][..])
                 );
             }
         }

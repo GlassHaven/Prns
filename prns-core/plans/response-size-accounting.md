@@ -200,6 +200,9 @@ stream counter. The [size-identity slice](../../validation/simulation/measuremen
 now retains the first size declaration and requires it at admission, queued
 promotion/expiry, completion, advancement and failure cleanup. The distinct
 delivered-value budget is still unfinished.
+The [atomic progress follow-up](../../validation/simulation/measurements/atomic-stream-progress.md)
+also makes advancement enforce that same checked stream total before mutating
+the assembly, rather than trusting callers and using saturating addition.
 Separate early allocation protection from final delivered-payload validation;
 loosening an advertisement check alone would admit oversized legacy raw bodies.
 Keep the authoritative accounting in shared core, with host completion buffers
