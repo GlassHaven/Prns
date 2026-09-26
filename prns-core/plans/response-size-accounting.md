@@ -91,6 +91,18 @@ consumers must wait for successful final settlement before publishing the value.
 No stored fields, capacities, wire formats or response-size admission bounds change.
 See [verification evidence](../../validation/simulation/measurements/split-response-failures.md).
 
+## Completed continuation-admission prerequisite
+
+The assembly's stored segment count now constrains every continuation, alongside
+its original hash and next index. Completed chains admit no extra segment, and
+index comparison cannot wrap at `u64::MAX`. Admission rechecks this same contract
+after a queue wait or application decision, before allocating transfer buffers or
+claiming a response receipt. A stale queued continuation is removed without
+changing the current assembly or settling its request; a still-valid queued
+continuation resumes normally. No retained fields, capacities or wire formats change.
+
+See [verification evidence](../../validation/simulation/measurements/split-continuation-admission.md).
+
 ## Remaining segmented scope
 
 Extend the delivered-value byte-counting contract to segmented Resource forms.
@@ -115,4 +127,7 @@ publishing a changed limit contract; do not introduce a transport-specific fix.
 
 Include assembly cleanup when a request expires between segments or a continuation
 is refused before admission; the split-failure prerequisite handles admitted
-transfers only. Validate stable chain totals/correlation before loosening admission.
+transfers only. Segment counts are now stable at admission; validate advertised
+stream totals and request correlation across the chain before loosening admission.
+Overlapping admitted chains on the same link also need conclusion-time ownership
+validation: admission checks alone do not reserve the assembly through completion.

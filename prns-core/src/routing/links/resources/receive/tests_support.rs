@@ -198,6 +198,7 @@ pub(crate) fn advertise_from<S: StorageLayout>(
     frame.expect("the sender advertises")
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct InboundCapture {
     pub(crate) frames: std::vec::Vec<(InterfaceId, std::vec::Vec<u8>)>,
     pub(crate) settlements: std::vec::Vec<(CommandId, Settlement)>,

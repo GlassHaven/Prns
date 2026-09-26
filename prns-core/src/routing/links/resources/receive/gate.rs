@@ -249,6 +249,7 @@ impl<S: StorageLayout> EngineState<S> {
                 &link_id,
                 &advertisement.original_hash,
                 advertisement.segment_index,
+                advertisement.total_segments,
             ) == SegmentFit::Unexpected
         {
             return IngestPacketOutcome::Ignored(IgnoreReason::Malformed);
@@ -414,6 +415,19 @@ impl<S: StorageLayout> EngineState<S> {
         let correlation = accepted.correlation;
         let segment_index = accepted.segment_index;
         let total_segment_count = accepted.total_segment_count;
+        // Admission can follow an application decision or a queue wait. Neither
+        // reserves the split assembly, so recheck before allocating or claiming.
+        if total_segment_count > 1
+            && segment_index > 1
+            && self.incoming_assemblies.fit(
+                &link_id,
+                &original_hash,
+                segment_index,
+                total_segment_count,
+            ) == SegmentFit::Unexpected
+        {
+            return AcceptedResourceAdmission::Ignored(IgnoreReason::Malformed);
+        }
         let inherited = match self.links.phase_for(&link_id) {
             Some(LinkPhase::Active {
                 last_resource_window,

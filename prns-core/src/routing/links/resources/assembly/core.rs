@@ -40,7 +40,8 @@ pub struct IncomingAssemblies<C: IncomingAssemblyTable> {
 }
 
 impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
-    /// Open a chain on `link_id`; any prior chain is replaced. A link reassembles one transfer at a time, the same one-resource-per-link invariant [`IncomingResources`](super::super::table::IncomingResources) keeps.
+    /// Open a chain on `link_id`, replacing any prior chain. Assembly tracking
+    /// retains one split chain per link, independently of admitted transfer rows.
     pub fn begin(&mut self, link_id: LinkId, original_hash: ResourceHash, total_segments: u64) {
         if let Some(index) = self.index_of(&link_id) {
             self.table.swap_remove(index);
@@ -50,15 +51,20 @@ impl<C: IncomingAssemblyTable> IncomingAssemblies<C> {
         }
     }
 
+    /// A continuation must preserve the original count and name the next segment
+    /// of the live chain. A completed chain cannot admit another segment.
     pub fn fit(
         &self,
         link_id: &LinkId,
         original_hash: &ResourceHash,
         segment_index: u64,
+        total_segments: u64,
     ) -> SegmentFit {
         let matches = self.index_of(link_id).is_some_and(|index| {
             self.table.original_hashes()[index] == *original_hash
-                && segment_index == self.table.segments_received()[index] + 1
+                && total_segments == self.table.total_segments()[index]
+                && segment_index <= total_segments
+                && Some(segment_index) == self.table.segments_received()[index].checked_add(1)
         });
         if matches {
             SegmentFit::Expected
@@ -247,19 +253,74 @@ mod tests {
         assemblies.begin(link(1), hash(0xA), 3);
         assemblies.advance(&link(1), 100);
         assert_eq!(
-            assemblies.fit(&link(1), &hash(0xA), 2),
+            assemblies.fit(&link(1), &hash(0xA), 2, 3),
             SegmentFit::Expected
         );
         assert_eq!(
-            assemblies.fit(&link(1), &hash(0xA), 3),
+            assemblies.fit(&link(1), &hash(0xA), 3, 3),
             SegmentFit::Unexpected
         );
         assert_eq!(
-            assemblies.fit(&link(1), &hash(0xB), 2),
+            assemblies.fit(&link(1), &hash(0xB), 2, 3),
             SegmentFit::Unexpected
         );
         assert_eq!(
-            assemblies.fit(&link(2), &hash(0xA), 2),
+            assemblies.fit(&link(2), &hash(0xA), 2, 3),
+            SegmentFit::Unexpected
+        );
+    }
+
+    #[test]
+    fn fit_rejects_changed_counts_and_segments_after_completion() {
+        let mut assemblies = table();
+        assemblies.begin(link(1), hash(0xA), 3);
+        assemblies.advance(&link(1), 100);
+        for total in [0, 1, 2, 4, u64::MAX] {
+            assert_eq!(
+                assemblies.fit(&link(1), &hash(0xA), 2, total),
+                SegmentFit::Unexpected
+            );
+        }
+        assemblies.advance(&link(1), 100);
+        assemblies.advance(&link(1), 100);
+        assert_eq!(
+            assemblies.fit(&link(1), &hash(0xA), 4, 3),
+            SegmentFit::Unexpected
+        );
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn fit_matches_the_complete_chain_position(
+            total in 2u64..=u64::MAX,
+            received in proptest::prelude::any::<u64>(),
+            offered_total in proptest::prelude::any::<u64>(),
+        ) {
+            let mut assemblies = table();
+            assemblies.begin(link(1), hash(0xA), total);
+            assemblies.table.set_progress(0, received, 0);
+            let next = received.wrapping_add(1);
+            for offered in [total, offered_total] {
+                let expected = if offered == total && received < total {
+                    SegmentFit::Expected
+                } else {
+                    SegmentFit::Unexpected
+                };
+                proptest::prop_assert_eq!(
+                    assemblies.fit(&link(1), &hash(0xA), next, offered),
+                    expected
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fit_does_not_wrap_the_segment_index_at_the_integer_limit() {
+        let mut assemblies = table();
+        assemblies.begin(link(1), hash(0xA), u64::MAX);
+        assemblies.table.set_progress(0, u64::MAX, 0);
+        assert_eq!(
+            assemblies.fit(&link(1), &hash(0xA), 0, u64::MAX),
             SegmentFit::Unexpected
         );
     }
