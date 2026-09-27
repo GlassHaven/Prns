@@ -305,3 +305,9 @@ holds a real continuation send until cancellation, then proves stale-link teardo
 and recovery on ESP32/Apple and nRF52/BlueZ runtime pairings. It exposed missing
 receipt/channel/pairing wake updates from shared-core link-deadline teardown.
 This is not independent conflicting-response injection.
+
+The [Tokio late-continuation follow-up](../../validation/simulation/measurements/tokio-late-continuation.md)
+reverses those runtime roles. Tokio retains the held send beyond Embassy's request
+timeout, so releasing it proves a real late advertisement is harmless and both
+request slots and original links remain reusable. Independent conflicting-peer
+injection remains unimplemented.

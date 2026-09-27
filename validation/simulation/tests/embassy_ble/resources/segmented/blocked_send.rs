@@ -7,7 +7,7 @@ fn expire_while_send_is_blocked(
     trace: ResponseTrace,
     gate: &WireGate,
     link: LinkId,
-) {
+) -> CommandId {
     let header = buffered_interruption::advertisement_header(link);
     gate.arm(header, NonZeroUsize::new(2).unwrap());
     let command = requester
@@ -48,15 +48,24 @@ fn expire_while_send_is_blocked(
         ]
     );
     tasks.settle();
-    assert!(gate.is_idle());
     assert!(
         trace.is_empty(),
-        "cancelled advertisement must not revive the request"
+        "timeout must leave no duplicate response or settlement"
     );
+    command
 }
 
 #[test]
 fn blocked_continuation_sends_close_stale_links_and_refresh_request_wakes() {
+    exercise(Requester::Tokio);
+}
+
+#[test]
+fn held_tokio_continuation_arrives_after_embassy_timeout_without_reviving_it() {
+    exercise(Requester::Embassy);
+}
+
+fn exercise(requester: Requester) {
     for (embedded_endpoint, desktop_endpoint) in [
         (
             Endpoint::Esp32(Esp32Host::Esp32),
@@ -72,33 +81,66 @@ fn blocked_continuation_sends_close_stale_links_and_refresh_request_wakes() {
             desktop_endpoint,
             INTERRUPTION_TRACE_CAPACITY,
             |tasks, lab, embedded, desktop, links| {
-                expire_while_send_is_blocked(
-                    tasks,
-                    &desktop.handle,
-                    desktop.responses.clone(),
-                    &embedded.wire,
-                    links[1],
-                );
-                assert_eq!(
-                    response_settlements(embedded),
-                    [Settlement::Respond(Err(RespondFailure::Resource(
-                        SendResourceFailure::Timeout
-                    )))]
-                );
-                let handle = embedded.handle;
-                let result = complete(tasks, async move {
-                    handle
-                        .request(
+                match requester {
+                    Requester::Tokio => {
+                        expire_while_send_is_blocked(
+                            tasks,
+                            &desktop.handle,
+                            desktop.responses.clone(),
+                            &embedded.wire,
+                            links[1],
+                        );
+                        assert!(embedded.wire.is_idle());
+                        assert_eq!(
+                            response_settlements(embedded),
+                            [Settlement::Respond(Err(RespondFailure::Resource(
+                                SendResourceFailure::Timeout
+                            )))]
+                        );
+                        let handle = embedded.handle;
+                        let result = complete(tasks, async move {
+                            handle
+                                .request(
+                                    links[0],
+                                    RequestPathHash::of(crate::echo::QUERY_PATH),
+                                    b"pending during stale-link close",
+                                )
+                                .await
+                        });
+                        assert_eq!(
+                            result,
+                            Err(SendError::Failed(SendRequestFailure::LinkClosed))
+                        );
+                    }
+                    Requester::Embassy => {
+                        let command = expire_while_send_is_blocked(
+                            tasks,
+                            &embedded.handle,
+                            embedded.responses.clone(),
+                            &desktop.wire,
                             links[0],
-                            RequestPathHash::of(crate::echo::QUERY_PATH),
-                            b"pending during stale-link close",
-                        )
-                        .await
-                });
-                assert_eq!(
-                    result,
-                    Err(SendError::Failed(SendRequestFailure::LinkClosed))
-                );
+                        );
+                        assert_eq!(
+                            embedded.take_settled(),
+                            [(
+                                command,
+                                Settlement::SendRequest(Err(SendRequestFailure::Timeout))
+                            )]
+                        );
+                        let gate = desktop.wire.clone();
+                        assert_eq!(
+                            complete(tasks, async move { gate.held().await }),
+                            buffered_interruption::advertisement_header(links[0])
+                        );
+                        desktop.wire.release();
+                        tasks.settle();
+                        assert!(desktop.wire.is_idle());
+                        assert!(embedded.responses.is_empty());
+                        reuse_both_embassy_request_slots(tasks, embedded, links[0]);
+                        reassemble(tasks, lab, embedded, desktop, links);
+                        return;
+                    }
+                }
                 converge(tasks, lab, embedded, &desktop.handle);
                 let mut expected: Vec<_> = links
                     .into_iter()
