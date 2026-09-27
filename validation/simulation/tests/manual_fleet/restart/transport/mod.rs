@@ -22,6 +22,7 @@ use crate::scenario::{
 };
 
 mod fixture;
+mod inflight;
 mod topology;
 mod traffic;
 use fixture::{assert_empty_routes, hash, rebuild, with_fleet, LiveNode};

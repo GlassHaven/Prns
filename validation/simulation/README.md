@@ -276,6 +276,13 @@ out exactly while fresh links and the unaffected side's original link work.
 This verifies host recovery after explicit rediscovery, not automatic application
 retry, persisted routes, alternate-route selection or physical power loss.
 
+The [in-flight follow-up](measurements/transport-inflight-restart.md) stops either
+forwarder immediately after a real request or response is queued at its ingress,
+before that node can consume it. Positive controls resume from the same boundary
+and complete normally; teardown cases time out exactly while unrelated traffic
+and subsequent fresh links work. A lost response means the server already
+processed the request: timeout is not proof that an operation never happened.
+
 ### Routed multi-hop coordination
 
 The same test target also runs a 20-node transport topology: 16 clients, two
