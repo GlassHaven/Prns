@@ -60,6 +60,7 @@ impl<S: StorageLayout> EngineState<S> {
     }
 
     /// RNS 1.4.2 `Resource.assemble` + `prove`
+    #[inline(never)]
     pub(crate) fn conclude_resource(
         &mut self,
         link_id: &LinkId,
@@ -370,6 +371,32 @@ impl<S: StorageLayout> EngineState<S> {
         now: InstantMillis,
         sink: &mut impl FnMut(EngineReaction<'_, Work>),
     ) {
+        let original_hash = segment.original_hash;
+        match self.settle_split_assembly(link_id, segment, link_rtt, now) {
+            SplitAssemblyConclusion::NoDelivery => {}
+            SplitAssemblyConclusion::Resource { total_size_bytes } => {
+                sink(EngineReaction::Journaled(Journaled::ResourceAssembled {
+                    link_id: *link_id,
+                    original_hash,
+                    total_size_bytes,
+                }));
+            }
+            SplitAssemblyConclusion::Response { id, delivered } => {
+                sink(EngineReaction::Journaled(Journaled::CommandSettled {
+                    id,
+                    settlement: Settlement::SendRequest(Ok(delivered)),
+                }));
+            }
+        }
+    }
+
+    fn settle_split_assembly(
+        &mut self,
+        link_id: &LinkId,
+        segment: ConcludedSegment,
+        link_rtt: RttMillis,
+        now: InstantMillis,
+    ) -> SplitAssemblyConclusion {
         let ConcludedSegment {
             original_hash,
             segment_index,
@@ -396,21 +423,17 @@ impl<S: StorageLayout> EngineState<S> {
                     }
                     ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => None,
                 };
+                self.incoming_assemblies.clear(link_id);
                 match settled {
-                    Some(proven) => sink(EngineReaction::Journaled(Journaled::CommandSettled {
+                    Some(proven) => SplitAssemblyConclusion::Response {
                         id: proven.command_id,
-                        settlement: Settlement::SendRequest(Ok(PacketReceiptDelivered {
+                        delivered: PacketReceiptDelivered {
                             rtt: RttMillis::measured_between(proven.sent_at, now),
                             evidence: DeliveryEvidence::Response,
-                        })),
-                    })),
-                    None => sink(EngineReaction::Journaled(Journaled::ResourceAssembled {
-                        link_id: *link_id,
-                        original_hash,
-                        total_size_bytes,
-                    })),
+                        },
+                    },
+                    None => SplitAssemblyConclusion::Resource { total_size_bytes },
                 }
-                self.incoming_assemblies.clear(link_id);
             }
             Some(AssemblyProgress::Assembling) => {
                 if let ResourceCorrelation::Response(id) = correlation {
@@ -420,8 +443,9 @@ impl<S: StorageLayout> EngineState<S> {
                         InstantMillis(now.0.saturating_add(request_response_timeout_ms(link_rtt))),
                     );
                 }
+                SplitAssemblyConclusion::NoDelivery
             }
-            None => {}
+            None => SplitAssemblyConclusion::NoDelivery,
         }
     }
 
@@ -830,11 +854,12 @@ pub(super) fn response_application_data<'a>(
 
 /// Correlated deliveries expose the body, not the metadata block. Metadata still
 /// distinguishes raw file responses from enveloped response values.
+#[inline(never)]
 fn deliver_single_segment<C: ReceiptTable, Work>(
     receipts: &mut Receipts<C>,
     segment: AssembledSingleSegment<'_>,
     now: InstantMillis,
-    sink: &mut impl FnMut(EngineReaction<'_, Work>),
+    sink: &mut dyn FnMut(EngineReaction<'_, Work>),
 ) {
     let AssembledSingleSegment {
         destination,
@@ -935,6 +960,17 @@ fn request_is_permitted<C: crate::routing::request_handlers::RequestHandlerTable
         return false;
     };
     handlers.permits(&destination, &parsed.path_hash, requester.as_ref())
+}
+
+enum SplitAssemblyConclusion {
+    NoDelivery,
+    Resource {
+        total_size_bytes: u64,
+    },
+    Response {
+        id: CommandId,
+        delivered: PacketReceiptDelivered,
+    },
 }
 
 struct ConcludedSegment {
