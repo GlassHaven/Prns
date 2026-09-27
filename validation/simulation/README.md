@@ -584,6 +584,13 @@ local future cancellation separately from protocol retirement, including reuse
 of both bounded Embassy completion slots and the runtimes' different orphan
 completion routing. All use bounded observers and ordinary responder APIs.
 
+The [partial-response cancellation matrix](measurements/abandoned-segmented-responses.md)
+drops callers after one or two verified file segments, then either resumes the
+transfer or lets it time out. It checks exact orphan suffix/settlement routing,
+concurrent waiter reuse and reclamation of the one assembly slot by another
+link. Sender and receiver timeout observations are distinguished explicitly;
+Tokio's private timeout cleanup is checked within a bounded virtual-time window.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/reset/flash/sleep

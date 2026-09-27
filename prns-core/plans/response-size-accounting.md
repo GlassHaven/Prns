@@ -350,3 +350,11 @@ Late completion cannot contaminate a fresh segmented request or prevent reuse of
 both Embassy completion slots. It explicitly checks Tokio's private consumption
 and Embassy's unawaited application delivery rather than assuming cancellation
 semantics are identical across adapters.
+
+The [partial-response cancellation matrix](../../validation/simulation/measurements/abandoned-segmented-responses.md)
+then drops those callers after one or two verified segments. Successful orphan
+completion exposes only Embassy's unconsumed suffix; timeout emits no extra
+segments. Both adapters permit concurrent waiter reuse and later spare-link
+assembly reuse. A targeted timeout-cleanup omission breaks both runtime tests.
+Tokio's private receiver timeout is bounded by an observation window, not
+misrepresented as the responder's independently observed settlement instant.

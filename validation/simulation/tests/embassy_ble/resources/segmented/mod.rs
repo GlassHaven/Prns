@@ -8,6 +8,7 @@ use personal_rns::interfaces::bluetooth_auto::BleAddress;
 use prns_simulation::{Reachability, TopologyMutation};
 
 mod abandoned_request;
+mod abandoned_segments;
 mod active_culling;
 mod blocked_send;
 mod buffered_competition;
@@ -262,6 +263,8 @@ fn scenario_with_capacity<const RECEIPTS: usize, const TRANSFERS: usize>(
     assert!(desktop.responses.is_empty());
     assert!(embedded.requests.is_idle());
     assert!(desktop.requests.is_idle());
+    assert!(embedded.responded.is_idle());
+    assert!(desktop.responded.is_idle());
     assert!(embedded.wire.is_idle());
     assert!(desktop.wire.is_idle());
     drop(tasks);

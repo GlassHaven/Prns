@@ -31,6 +31,7 @@ use super::clock::EmbassyTasks;
 use super::echo::{self, Echo};
 use super::fixture::{RadioFixture, RawMutex, MAX_PEERS};
 use super::request_probe::RequestProbe;
+use super::respond_probe::RespondProbe;
 use super::response_trace::ResponseTrace;
 use super::wire_gate::WireGate;
 
@@ -83,6 +84,7 @@ pub(super) struct NodeFixture<const RESPONSE_BYTES: usize, const REQUEST_BYTES: 
     pub status: BluetoothAutoStatus<MAX_PEERS>,
     pub responses: ResponseTrace,
     pub requests: RequestProbe,
+    pub responded: RespondProbe,
     pub wire: WireGate,
     received: Rc<RefCell<Vec<Received>>>,
     settled: Rc<RefCell<Vec<(CommandId, Settlement)>>>,
@@ -181,6 +183,8 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
         let closed_events = closed.clone();
         let responses = ResponseTrace::new();
         let requests = RequestProbe::new();
+        let responded = RespondProbe::new();
+        let respond_events = responded.clone();
         let request_events = requests.clone();
         let response_events = responses.clone();
         let entropy = Box::leak(Box::new(
@@ -198,6 +202,7 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             on_event: move |event, _: &NoRemoteControlHostControls| {
                 response_events.observe(&event);
                 request_events.observe(&event);
+                respond_events.observe(&event);
                 match event {
                     PrnsEvent::Diagnostic(Diagnostic::LinkClosed { link_id, reason }) => {
                         let mut events = closed_events.borrow_mut();
@@ -256,6 +261,7 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             status,
             responses,
             requests,
+            responded,
             wire,
             received,
             settled,
