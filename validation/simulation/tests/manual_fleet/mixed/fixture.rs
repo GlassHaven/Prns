@@ -99,6 +99,7 @@ pub(super) fn shutdown(
     nodes: [Node; 3],
     frames: &VirtualMedium,
     ble: &VirtualBleLab,
+    expected_attachments_per_medium: usize,
 ) {
     let expected: BTreeMap<_, _> = nodes
         .into_iter()
@@ -135,7 +136,7 @@ pub(super) fn shutdown(
     }
     attached.sort();
     detached.sort();
-    assert_eq!(attached.len(), 2);
+    assert_eq!(attached.len(), expected_attachments_per_medium);
     assert_eq!(attached, detached);
     let trace = ble.trace();
     assert_eq!(trace.discarded_events, 0);
@@ -151,6 +152,6 @@ pub(super) fn shutdown(
     }
     attached.sort();
     detached.sort();
-    assert_eq!(attached.len(), 2);
+    assert_eq!(attached.len(), expected_attachments_per_medium);
     assert_eq!(attached, detached);
 }

@@ -18,6 +18,7 @@ use prns_simulation::ble::{
 use prns_simulation::{ManualTaskId, VirtualInterface};
 
 mod fixture;
+mod recovery;
 use fixture::{boot, supervisor, Ports};
 
 const BRIDGE: usize = 1;
@@ -257,5 +258,5 @@ fn a_real_transport_bridges_frames_and_ble_on_one_clock_through_frame_partition(
         echo(&mut runner, &nodes, node, link, 0x73);
     }
     echo(&mut runner, &nodes, BRIDGE, local, 0x84);
-    fixture::shutdown(&mut runner, nodes, &frames, &ble);
+    fixture::shutdown(&mut runner, nodes, &frames, &ble, 2);
 }

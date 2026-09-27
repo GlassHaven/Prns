@@ -168,6 +168,13 @@ leaves all three timelines untouched. [Mixed-medium evidence](measurements/mixed
 includes a real transport bridging the two interfaces, exact request timeouts
 during frame partition, continued BLE traffic and recovery on the original links.
 
+The [mixed-bridge recovery follow-up](measurements/mixed-bridge-recovery.md)
+distinguishes short BLE partition/radio disable from bridge process restart.
+Radio-only interruptions preserve frame-local traffic and allow existing logical
+links to resume after reconnection. Bridge restart loses forwarding state and
+requires fresh links. Both CoreBluetooth/BlueZ profile assignments run repeated
+cycles, with exact timeouts, membership, clock origins and cleanup assertions.
+
 ### Wake-driven scenario actors
 
 `ManualTaskRunner` borrows a manual driver for the entire lifetime of a bounded
