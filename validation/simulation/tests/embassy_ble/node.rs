@@ -30,6 +30,7 @@ use prns_simulation::ble::VirtualBleLab;
 use super::clock::EmbassyTasks;
 use super::echo::{self, Echo};
 use super::fixture::{RadioFixture, RawMutex, MAX_PEERS};
+use super::request_probe::RequestProbe;
 use super::response_trace::ResponseTrace;
 use super::wire_gate::WireGate;
 
@@ -81,6 +82,7 @@ pub(super) struct NodeFixture<const RESPONSE_BYTES: usize, const REQUEST_BYTES: 
     pub handle: Handle<RESPONSE_BYTES>,
     pub status: BluetoothAutoStatus<MAX_PEERS>,
     pub responses: ResponseTrace,
+    pub requests: RequestProbe,
     pub wire: WireGate,
     received: Rc<RefCell<Vec<Received>>>,
     settled: Rc<RefCell<Vec<(CommandId, Settlement)>>>,
@@ -178,6 +180,8 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
         let settled_events = settled.clone();
         let closed_events = closed.clone();
         let responses = ResponseTrace::new();
+        let requests = RequestProbe::new();
+        let request_events = requests.clone();
         let response_events = responses.clone();
         let entropy = Box::leak(Box::new(
             SharedRuntimeEntropy::<RawMutex, _>::try_new(TestEntropy(address)).unwrap(),
@@ -193,6 +197,7 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             persistence: NoPersistence,
             on_event: move |event, _: &NoRemoteControlHostControls| {
                 response_events.observe(&event);
+                request_events.observe(&event);
                 match event {
                     PrnsEvent::Diagnostic(Diagnostic::LinkClosed { link_id, reason }) => {
                         let mut events = closed_events.borrow_mut();
@@ -250,6 +255,7 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             handle,
             status,
             responses,
+            requests,
             wire,
             received,
             settled,

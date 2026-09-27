@@ -22,6 +22,7 @@ mod fixture;
 mod interop;
 mod node;
 mod packet_limits;
+mod request_probe;
 mod resources;
 mod response_trace;
 mod tokio_node;

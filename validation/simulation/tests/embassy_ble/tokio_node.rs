@@ -20,6 +20,7 @@ use tokio::sync::oneshot;
 use super::clock::EmbassyTasks;
 use super::echo::{self, Echo};
 use super::fixture::{backend, MAX_PEERS};
+use super::request_probe::RequestProbe;
 use super::response_trace::ResponseTrace;
 use super::wire_gate::{GatedBackend, WireGate};
 
@@ -28,6 +29,7 @@ const CLOSURE_CAPACITY: usize = 4;
 pub(super) struct TokioNode {
     pub handle: PrnsNodeHandle,
     pub responses: ResponseTrace,
+    pub requests: RequestProbe,
     pub wire: WireGate,
     closed: Rc<RefCell<Vec<(LinkId, LinkClosedReason)>>>,
 }
@@ -101,6 +103,8 @@ pub(super) fn with_storage<
     let closed = Rc::new(RefCell::new(Vec::with_capacity(CLOSURE_CAPACITY)));
     let closed_events = closed.clone();
     let responses = ResponseTrace::new();
+    let requests = RequestProbe::new();
+    let request_events = requests.clone();
     let response_events = responses.clone();
     tasks.insert(async move {
         let node = PrnsNode::new(PrnsNodeRecipe {
@@ -116,6 +120,7 @@ pub(super) fn with_storage<
             persistence: NoPersistence,
             on_event: move |event, _| {
                 response_events.observe(&event);
+                request_events.observe(&event);
                 if let PrnsEvent::Diagnostic(Diagnostic::LinkClosed { link_id, reason }) = event {
                     let mut events = closed_events.borrow_mut();
                     assert!(events.len() < CLOSURE_CAPACITY, "bounded closure inventory");
@@ -128,6 +133,7 @@ pub(super) fn with_storage<
             .send(TokioNode {
                 handle: node.handle(),
                 responses,
+                requests,
                 wire,
                 closed
             })

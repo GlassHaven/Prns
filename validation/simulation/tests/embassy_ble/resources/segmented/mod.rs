@@ -9,6 +9,7 @@ use prns_simulation::{Reachability, TopologyMutation};
 
 mod active_culling;
 mod blocked_send;
+mod buffered_competition;
 mod buffered_interruption;
 mod capacity;
 mod competing_responses;
@@ -256,6 +257,8 @@ fn scenario_with_capacity<const RECEIPTS: usize, const TRANSFERS: usize>(
     assert!(embedded.take_received().is_empty());
     assert!(embedded.responses.is_empty());
     assert!(desktop.responses.is_empty());
+    assert!(embedded.requests.is_idle());
+    assert!(desktop.requests.is_idle());
     assert!(embedded.wire.is_idle());
     assert!(desktop.wire.is_idle());
     drop(tasks);

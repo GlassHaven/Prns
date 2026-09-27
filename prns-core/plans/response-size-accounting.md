@@ -329,3 +329,10 @@ returns to real mixed-runtime traffic: after a continuation data part is observe
 being dropped, a competing response packet cannot replace or settle the original
 split request. Both directions and compatibility profile pairs retain exact
 completion and same-link recovery. Independent whole-Resource peers remain open.
+
+The [buffered-competition matrix](../../validation/simulation/measurements/buffered-response-competition.md)
+now exercises the normal Tokio and Embassy buffered APIs before the first segment,
+between segments and during continuation reception. Each preserves exact file
+bytes, concurrent same-link progress and subsequent request-slot reuse. Disabling
+the existing shared guard makes both adapters complete prematurely in all three
+phases; the guard remains unchanged in this assurance-only slice.
