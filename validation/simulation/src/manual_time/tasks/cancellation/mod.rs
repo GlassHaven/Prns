@@ -7,6 +7,20 @@ pub enum ManualTaskCancellation {
     NotLive,
 }
 
+impl<T> Drop for ManualTaskRunner<'_, T> {
+    fn drop(&mut self) {
+        // Disable every wake before any actor destructor can wake a sibling.
+        {
+            let mut ready = ReadyTasks::lock(&self.ready);
+            for &id in self.tasks.keys() {
+                ready.retire(id);
+            }
+        }
+        let _entered = self.driver.runtime.enter();
+        self.tasks.clear();
+    }
+}
+
 impl<T> ManualTaskRunner<'_, T> {
     /// Removes one actor without polling it or advancing time. IDs belong to
     /// their admitting runner; a cancelled ID is never reassigned by that runner.

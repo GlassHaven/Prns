@@ -240,6 +240,12 @@ impl VirtualMedium {
         self.lock_state().trace.snapshot()
     }
 
+    /// Inspects retained events without copying frames. The callback runs under
+    /// the medium lock: it must not call this medium, poll actors, or block.
+    pub fn inspect_trace<R>(&self, inspect: impl FnOnce(crate::TraceView<'_>) -> R) -> R {
+        inspect(self.lock_state().trace.view())
+    }
+
     pub(crate) fn transmit(&self, from: EndpointId, frame: Vec<u8>) -> Result<(), TransmitError> {
         let mut state = self.lock_state();
         if !state.endpoints.contains_key(&from) {

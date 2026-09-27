@@ -99,7 +99,7 @@ fn selective_node_restart_loses_an_inflight_request_but_preserves_other_nodes_an
         let original = link(runner, nodes, 0, RESTARTED);
         let survivor = link(runner, nodes, 2, 3);
         echo(runner, nodes, 0, original, b"before teardown");
-        let history_start = medium.trace().events.len();
+        let history_start = medium.inspect_trace(|trace| trace.events().len());
         let handle = nodes[0].control.handle.clone();
         let request_task = runner
             .insert(async move {
@@ -124,15 +124,18 @@ fn selective_node_restart_loses_an_inflight_request_but_preserves_other_nodes_an
                 runner.poll_next().ok(),
                 Some(ManualTaskPoll::Pending { .. })
             ));
-            sent = medium.trace().events[history_start..].iter().any(|event| {
-                let MediumEvent::TransmissionAccepted { from, frame, .. } = event else {
-                    return false;
-                };
-                *from == source
-                    && WirePacketHeader::parse(frame).is_ok_and(|(header, _)| {
-                        header.context == WireContext::Request
-                            && header.address == original.to_address()
-                    })
+            sent = medium.inspect_trace(|trace| {
+                assert_eq!(trace.discarded_events, 0);
+                trace.events().skip(history_start).any(|event| {
+                    let MediumEvent::TransmissionAccepted { from, frame, .. } = event else {
+                        return false;
+                    };
+                    *from == source
+                        && WirePacketHeader::parse(frame).is_ok_and(|(header, _)| {
+                            header.context == WireContext::Request
+                                && header.address == original.to_address()
+                        })
+                })
             });
             if sent {
                 break;

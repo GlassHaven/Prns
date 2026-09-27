@@ -57,6 +57,44 @@ fn cancel<T>(runner: &mut ManualTaskRunner<'_, T>, task: ManualTaskId) -> Manual
 
 struct Dropped(Rc<Cell<usize>>);
 
+#[test]
+fn dropping_runner_retires_all_wakes_and_preserves_destructor_runtime_context() {
+    let mut driver = driver(medium());
+    let mut runner = ManualTaskRunner::new(&mut driver, capacity(2));
+    let ready = runner.ready.clone();
+    let mut observations = Vec::new();
+    for _ in 0..2 {
+        let saved = Rc::new(RefCell::new(None));
+        let dropped_at = Rc::new(Cell::new(None));
+        let guard = WakeOnDrop {
+            saved: saved.clone(),
+            dropped_at: dropped_at.clone(),
+        };
+        let captured = saved.clone();
+        let task = admit(&mut runner, async move {
+            let _guard = guard;
+            poll_fn(move |cx| {
+                *captured.borrow_mut() = Some(cx.waker().clone());
+                Poll::<()>::Pending
+            })
+            .await;
+        });
+        assert_eq!(poll(&mut runner), ManualTaskPoll::Pending { task });
+        observations.push((saved, dropped_at));
+    }
+    let expected_at = {
+        let _entered = runner.driver.runtime.enter();
+        tokio::time::Instant::now()
+    };
+    drop(runner);
+    for (saved, dropped_at) in observations {
+        assert_eq!(dropped_at.get(), Some(expected_at));
+        saved.borrow().as_ref().unwrap().wake_by_ref();
+    }
+    assert_eq!(ReadyTasks::lock(&ready).counts(), (0, 0));
+    assert!(driver.snapshot().is_ok());
+}
+
 impl Drop for Dropped {
     fn drop(&mut self) {
         self.0.set(self.0.get() + 1);

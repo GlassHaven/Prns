@@ -249,6 +249,9 @@ Selective actor teardown is also available through `ManualTaskRunner::cancel`:
 it drops one actor in the paused runtime's context without polling graceful
 shutdown, retires its wake ownership, and returns its capacity. IDs are not
 reused. This runs Rust destructors; it is not a physical-power-loss model.
+Dropping the entire runner also retires all wakes and destroys its actors in
+their runtime context. [Review repairs](measurements/review-lifecycle-trace.md)
+cover this teardown boundary and borrowed trace inspection for packet observers.
 
 Two four-node [restart scenarios](measurements/selective-node-restart.md) exercise
 that seam with real production nodes. A delayed frame cannot cross into a new

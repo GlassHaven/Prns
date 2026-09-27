@@ -34,7 +34,7 @@ pub use seeded::{
 pub use stepping::MediumSchedule;
 pub use time::{AdvanceError, AdvanceReport, SimulationDurationInTicks, SimulationTick};
 pub use topology::{Reachability, TopologyConfig, TopologyError, TopologyMutation};
-pub use trace::{DeliveryCopy, MediumEvent, ReceptionDropReason, TraceSnapshot};
+pub use trace::{DeliveryCopy, MediumEvent, ReceptionDropReason, TraceSnapshot, TraceView};
 
 #[cfg(test)]
 mod tests;

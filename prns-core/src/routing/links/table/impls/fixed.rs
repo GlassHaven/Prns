@@ -152,8 +152,14 @@ mod tests {
             [Option<InstantMillis>; 32],
             [LinkPhase; 32],
         );
+        let per_row_saving = core::mem::size_of::<Option<InstantMillis>>()
+            - core::mem::size_of::<InstantMillis>()
+            - core::mem::size_of::<bool>();
+        let alignment_slack = core::mem::align_of::<PreviousColumns>() - 1;
+        let minimum_saving = (32 * per_row_saving).saturating_sub(alignment_slack);
+        assert!(minimum_saving > 0);
         assert!(
-            core::mem::size_of::<FixedLinkTable<32>>() + 224
+            core::mem::size_of::<FixedLinkTable<32>>() + minimum_saving
                 <= core::mem::size_of::<PreviousColumns>()
         );
     }

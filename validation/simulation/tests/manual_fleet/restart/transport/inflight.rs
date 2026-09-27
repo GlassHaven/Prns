@@ -63,37 +63,42 @@ fn stop_at_ingress(
             runner.poll_next().ok(),
             Some(ManualTaskPoll::Pending { .. })
         ));
-        let trace = medium.trace();
-        assert_eq!(trace.discarded_events, 0);
-        let events = &trace.events[history_start..];
-        let accepted = events.iter().find_map(|event| {
-            let MediumEvent::TransmissionAccepted {
-                ordinal,
-                from,
-                frame,
-                ..
-            } = event
-            else {
-                return None;
-            };
-            (*from == ingress.sender
-                && WirePacketHeader::parse(frame).is_ok_and(|(header, _)| {
-                    header.context == boundary.context() && header.address == link.to_address()
-                }))
-            .then_some(*ordinal)
-        });
-        let Some(ordinal) = accepted else {
-            continue;
-        };
-        assert!(events.iter().any(|event| {
-            *event
-                == MediumEvent::ReceptionQueued {
+        let at = tick(now(runner));
+        let reached = medium.inspect_trace(|trace| {
+            assert_eq!(trace.discarded_events, 0);
+            let accepted = trace.events().skip(history_start).find_map(|event| {
+                let MediumEvent::TransmissionAccepted {
                     ordinal,
-                    to: ingress.receiver,
-                    copy: DeliveryCopy::Original,
-                    at: tick(now(runner)),
-                }
-        }));
+                    from,
+                    frame,
+                    ..
+                } = event
+                else {
+                    return None;
+                };
+                (*from == ingress.sender
+                    && WirePacketHeader::parse(frame).is_ok_and(|(header, _)| {
+                        header.context == boundary.context() && header.address == link.to_address()
+                    }))
+                .then_some(*ordinal)
+            });
+            let Some(ordinal) = accepted else {
+                return false;
+            };
+            assert!(trace.events().skip(history_start).any(|event| {
+                *event
+                    == MediumEvent::ReceptionQueued {
+                        ordinal,
+                        to: ingress.receiver,
+                        copy: DeliveryCopy::Original,
+                        at,
+                    }
+            }));
+            true
+        });
+        if !reached {
+            continue;
+        }
         // One actor poll accepted and queued the frame. The receiving node
         // has not been polled again, so cancellation cuts a known boundary.
         return;
@@ -109,7 +114,7 @@ fn exercise_boundary(side: Side, boundary: Boundary) {
         let mut crossing = establish(runner, nodes, CLIENT, SERVER);
         for _ in 0..RESTARTS {
             let ingress = Ingress::new(nodes, side, boundary);
-            let history = medium.trace().events.len();
+            let history = medium.inspect_trace(|trace| trace.events().len());
             let control = request(
                 runner,
                 CLIENT,
@@ -131,7 +136,7 @@ fn exercise_boundary(side: Side, boundary: Boundary) {
             );
 
             let started = now(runner);
-            let history = medium.trace().events.len();
+            let history = medium.inspect_trace(|trace| trace.events().len());
             let pending = timeouts(runner, nodes, &[(CLIENT, crossing)]);
             stop_at_ingress(runner, medium, &ingress, boundary, crossing, history);
             let before = runner
