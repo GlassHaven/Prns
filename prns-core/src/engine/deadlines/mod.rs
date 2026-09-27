@@ -24,6 +24,8 @@ use crate::wire::{BROADCAST_MTU, TRUNCATED_HASH_BYTE_LEN};
 #[cfg(test)]
 mod link_teardown_tests;
 #[cfg(test)]
+mod pairing_teardown_tests;
+#[cfg(test)]
 mod receipt_expiry_tests;
 
 impl<S: StorageLayout> EngineState<S> {

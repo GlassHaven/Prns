@@ -317,3 +317,9 @@ directly exercises an outstanding channel send and request through stale-link
 expiry, checks cached versus recomputed schedules, and rejects duplicate
 settlements at their former deadlines. This is shared-core fixture coverage of
 the earlier simulator-discovered wake issue, not a new mixed-runtime scenario.
+
+The [pairing-wake follow-up](../../validation/simulation/measurements/link-teardown-pairing-wakes.md)
+adds a live controller awaiting-offer attempt to stale-link expiry. Matching-link
+teardown clears it; unrelated-link teardown preserves its complete state and
+deadline. This is direct engine-fixture assurance for the third wake family,
+not coverage of a full pairing exchange or its persistence phases.
