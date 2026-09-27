@@ -246,6 +246,9 @@ impl<S: StorageLayout> EngineState<S> {
         WakeSchedules {
             link_deadlines: self.link_deadlines_wake(),
             resource_deadlines: self.resource_deadlines_wake(),
+            receipt_timeouts: self.receipt_timeouts_wake(),
+            channel_timeouts: self.channel_timeouts_wake(),
+            remote_control_pairing: self.remote_control_pairing_wake(),
             ..WakeSchedules::UNCHANGED
         }
     }

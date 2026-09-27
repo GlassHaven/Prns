@@ -299,3 +299,9 @@ after success. The
 drives real transfer deadlines while a copied or detached tail is held: the
 continuation exhausts retries, the worker times out, and late returns remain inert.
 Mixed-runtime inconsistent-peer injections remain separate coverage work.
+
+The [blocked-send runtime follow-up](../../validation/simulation/measurements/blocked-send-link-wakes.md)
+holds a real continuation send until cancellation, then proves stale-link teardown
+and recovery on ESP32/Apple and nRF52/BlueZ runtime pairings. It exposed missing
+receipt/channel/pairing wake updates from shared-core link-deadline teardown.
+This is not independent conflicting-response injection.
