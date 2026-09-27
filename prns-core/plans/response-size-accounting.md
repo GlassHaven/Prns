@@ -291,5 +291,8 @@ than publishing it as an unsolicited Resource. Its direct and decompression
 cases are core-engine fixtures. The
 [ended-claim whole-worker follow-up](../../validation/simulation/measurements/whole-response-ended-worker.md)
 also checks opened, pre-digested and unavailable-worker verdicts after success or
-expiry, including stale replay. Ended-claim streamed/detached worker variants and
-mixed-runtime inconsistent-peer injections remain separate coverage work.
+expiry, including stale replay. The
+[ended-claim streamed-worker follow-up](../../validation/simulation/measurements/whole-response-ended-stream.md)
+covers first-span return after success/expiry and copied or detached tail return
+after success. Timeout with a detached tail and continuation in flight, plus
+mixed-runtime inconsistent-peer injections, remain separate coverage work.

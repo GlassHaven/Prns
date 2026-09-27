@@ -12,77 +12,84 @@ pub(super) enum SplitBoundary {
     Expired,
 }
 
-pub(super) fn reach_split_boundary(response: &mut SplitResponse, boundary: &SplitBoundary) -> u64 {
+pub(super) fn reach_split_boundary<S: crate::storage::StorageLayout>(
+    response: &mut SplitResponse<S>,
+    boundary: &SplitBoundary,
+) -> u64 {
     match boundary {
         SplitBoundary::Active => 2_400,
         SplitBoundary::Completed => {
             let pull = feed(&mut response.receiver, &response.continuation, 2_500);
             assert_eq!(pull.frames.len(), 1);
-            let mut completed = serve_pull(
-                &mut response.sender,
-                &mut response.receiver,
-                &pull.frames[0].1,
-                3_000,
-            );
-            assert_eq!(completed.frames.len(), 1);
-            for (_, proof) in completed.frames.drain(..) {
-                feed(&mut response.sender, &proof, 3_100);
-            }
-            assert_eq!(
-                completed,
-                InboundCapture {
-                    response_segments: std::vec![(REQUEST, response.request, 2, LAST.to_vec())],
-                    settlements: std::vec![(
-                        REQUEST,
-                        Settlement::SendRequest(Ok(PacketReceiptDelivered {
-                            rtt: RttMillis::new(1_200),
-                            evidence: DeliveryEvidence::Response,
-                        }))
-                    )],
-                    ..InboundCapture::default()
-                }
-            );
-            assert_eq!(
-                response
-                    .receiver
-                    .incoming_assemblies
-                    .original_hash(&link_id()),
-                None
-            );
-            3_200
+            complete_admitted_split(response, &pull.frames[0].1)
         }
-        SplitBoundary::Expired => {
-            let deadline = response
-                .receiver
-                .receipts
-                .pending_request_deadline(&link_id(), response.request)
-                .unwrap();
-            let mut settled = std::vec::Vec::new();
-            response
-                .receiver
-                .settle_timed_out_receipts(deadline, &mut |reaction| match reaction {
-                    EngineReaction::Journaled(Journaled::CommandSettled { id, settlement }) => {
-                        settled.push((id, settlement))
-                    }
-                    _ => panic!("expiry must only settle the request"),
-                });
-            assert_eq!(
-                settled,
-                std::vec![(
-                    REQUEST,
-                    Settlement::SendRequest(Err(crate::engine::SendRequestFailure::Timeout))
-                )]
-            );
-            assert_eq!(
-                response
-                    .receiver
-                    .incoming_assemblies
-                    .original_hash(&link_id()),
-                None
-            );
-            deadline.0 + 100
-        }
+        SplitBoundary::Expired => expire_split(response),
     }
+}
+
+pub(super) fn complete_admitted_split<S: crate::storage::StorageLayout>(
+    response: &mut SplitResponse<S>,
+    pull: &[u8],
+) -> u64 {
+    let mut completed = serve_pull(&mut response.sender, &mut response.receiver, pull, 3_000);
+    assert_eq!(completed.frames.len(), 1);
+    for (_, proof) in completed.frames.drain(..) {
+        feed(&mut response.sender, &proof, 3_100);
+    }
+    assert_eq!(
+        completed,
+        InboundCapture {
+            response_segments: std::vec![(REQUEST, response.request, 2, LAST.to_vec())],
+            settlements: std::vec![(
+                REQUEST,
+                Settlement::SendRequest(Ok(PacketReceiptDelivered {
+                    rtt: RttMillis::new(1_200),
+                    evidence: DeliveryEvidence::Response,
+                }))
+            )],
+            ..InboundCapture::default()
+        }
+    );
+    assert_eq!(
+        response
+            .receiver
+            .incoming_assemblies
+            .original_hash(&link_id()),
+        None
+    );
+    3_200
+}
+
+fn expire_split<S: crate::storage::StorageLayout>(response: &mut SplitResponse<S>) -> u64 {
+    let deadline = response
+        .receiver
+        .receipts
+        .pending_request_deadline(&link_id(), response.request)
+        .unwrap();
+    let mut settled = std::vec::Vec::new();
+    response
+        .receiver
+        .settle_timed_out_receipts(deadline, &mut |reaction| match reaction {
+            EngineReaction::Journaled(Journaled::CommandSettled { id, settlement }) => {
+                settled.push((id, settlement))
+            }
+            _ => panic!("expiry must only settle the request"),
+        });
+    assert_eq!(
+        settled,
+        std::vec![(
+            REQUEST,
+            Settlement::SendRequest(Err(crate::engine::SendRequestFailure::Timeout))
+        )]
+    );
+    assert_eq!(
+        response
+            .receiver
+            .incoming_assemblies
+            .original_hash(&link_id()),
+        None
+    );
+    deadline.0 + 100
 }
 
 #[test]

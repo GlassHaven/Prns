@@ -1,3 +1,4 @@
+use super::completion::{complete_admitted_split, reach_split_boundary, SplitBoundary};
 use super::*;
 use crate::engine::test_support::routable_descriptor;
 use crate::engine::{
@@ -17,6 +18,42 @@ struct PendingSpan {
 enum SplitPhase {
     BetweenSegments,
     ReceivingContinuation,
+    CompletedBeforeFirstReturn,
+    ExpiredBeforeFirstReturn,
+    CompletedBeforeTailReturn,
+}
+
+#[test]
+fn delayed_streamed_open_cannot_revive_a_completed_request() {
+    check_streamed_overlap::<TestStorageLayout>(
+        SplitPhase::CompletedBeforeFirstReturn,
+        TailWorkspace::Copied,
+    );
+}
+
+#[test]
+fn delayed_streamed_open_cannot_revive_an_expired_request() {
+    check_streamed_overlap::<TestStorageLayout>(
+        SplitPhase::ExpiredBeforeFirstReturn,
+        TailWorkspace::Copied,
+    );
+}
+
+#[test]
+fn copied_streamed_tail_cannot_revive_a_completed_request() {
+    check_streamed_overlap::<TestStorageLayout>(
+        SplitPhase::CompletedBeforeTailReturn,
+        TailWorkspace::Copied,
+    );
+}
+
+#[cfg(all(feature = "resource-work-offload", feature = "alloc"))]
+#[test]
+fn detached_streamed_tail_cannot_revive_a_completed_request() {
+    check_streamed_overlap::<crate::storage::GrowableHeap>(
+        SplitPhase::CompletedBeforeTailReturn,
+        TailWorkspace::Detached,
+    );
 }
 
 enum TailWorkspace {
@@ -103,12 +140,26 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
     assert_eq!(pending.residence, ResourceOpenSpanResidence::Resident);
     let mut response = SplitResponse::from_pending(receiver, request);
     let mut continuation = None;
-    if let SplitPhase::ReceivingContinuation = phase {
+    if matches!(
+        phase,
+        SplitPhase::ReceivingContinuation | SplitPhase::CompletedBeforeTailReturn
+    ) {
         let pull = feed(&mut response.receiver, &response.continuation, 2_350);
         assert_eq!(pull.frames.len(), 1);
         continuation = Some(pull.frames[0].1.clone());
     }
-    let deadline = response
+    let mut at = match phase {
+        SplitPhase::CompletedBeforeFirstReturn => {
+            reach_split_boundary(&mut response, &SplitBoundary::Completed)
+        }
+        SplitPhase::ExpiredBeforeFirstReturn => {
+            reach_split_boundary(&mut response, &SplitBoundary::Expired)
+        }
+        SplitPhase::BetweenSegments
+        | SplitPhase::ReceivingContinuation
+        | SplitPhase::CompletedBeforeTailReturn => 2_400,
+    };
+    let mut deadline = response
         .receiver
         .receipts
         .pending_request_deadline(&link_id(), request);
@@ -166,6 +217,10 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
                 OpenedResourceSpan::Returned(&pending.bytes)
             }
         };
+        if completions == 2 && matches!(phase, SplitPhase::CompletedBeforeTailReturn) {
+            at = complete_admitted_split(&mut response, continuation.as_ref().unwrap());
+            deadline = None;
+        }
         let mut next = None;
         response.receiver.resume_resource_open(
             ResourceOpenCompleted {
@@ -176,7 +231,7 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
                 opened,
                 residence: pending.residence,
             },
-            InstantMillis(2_400 + completions),
+            InstantMillis(at + completions),
             &mut |bytes| bytes.fill(0xC9),
             &mut |reaction| match reaction {
                 EngineReaction::Directive(Directive::Fulfill(OwedWork::ResourceOpen(owed))) => {
@@ -204,11 +259,13 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
     assert_eq!(
         completions,
         match phase {
-            SplitPhase::BetweenSegments => 1,
-            SplitPhase::ReceivingContinuation => 2,
+            SplitPhase::BetweenSegments
+            | SplitPhase::CompletedBeforeFirstReturn
+            | SplitPhase::ExpiredBeforeFirstReturn => 1,
+            SplitPhase::ReceivingContinuation | SplitPhase::CompletedBeforeTailReturn => 2,
         }
     );
-    assert_cancelled(&mut competitor, capture, 2_450);
+    assert_cancelled(&mut competitor, capture, at + 50);
     assert_eq!(
         response
             .receiver
@@ -216,6 +273,19 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
             .pending_request_deadline(&link_id(), request),
         deadline
     );
+    if matches!(
+        phase,
+        SplitPhase::CompletedBeforeFirstReturn
+            | SplitPhase::ExpiredBeforeFirstReturn
+            | SplitPhase::CompletedBeforeTailReturn
+    ) {
+        assert!(response.receiver.incoming_resources.is_empty());
+        assert_eq!(
+            response.receiver.incoming_resources.active_buffer_bytes(),
+            0
+        );
+        return;
+    }
     let pull = match continuation {
         Some(pull) => pull,
         None => {
