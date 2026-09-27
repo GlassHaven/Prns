@@ -20,6 +20,7 @@ use super::scenario::{
     NodeSpec, POLL_BUDGET, QUERY_PATH,
 };
 
+mod ble;
 mod fixture;
 use fixture::{connect, destination_hash, echo, link, restart, with_fleet};
 

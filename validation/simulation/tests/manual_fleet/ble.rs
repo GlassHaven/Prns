@@ -37,7 +37,10 @@ const PAYLOAD_BYTES: usize = 256;
 const TRACE_CAPACITY: usize = 262_144;
 
 #[track_caller]
-fn advance_until(runner: &mut ManualTaskRunner<'_, Completion>, ready: impl Fn() -> bool) {
+pub(super) fn advance_until(
+    runner: &mut ManualTaskRunner<'_, Completion>,
+    ready: impl Fn() -> bool,
+) {
     let deadline = runner
         .snapshot()
         .unwrap_or_else(|error| unreachable!("coordinated BLE time: {error}"))
@@ -67,7 +70,7 @@ fn advance_until(runner: &mut ManualTaskRunner<'_, Completion>, ready: impl Fn()
     )
 }
 
-fn member_inventory(handle: &PrnsNodeHandle) -> Vec<(InterfaceId, ConnectionState)> {
+pub(super) fn member_inventory(handle: &PrnsNodeHandle) -> Vec<(InterfaceId, ConnectionState)> {
     let mut members: Vec<_> = handle
         .interfaces()
         .into_iter()

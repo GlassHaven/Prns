@@ -258,6 +258,14 @@ Replacement and surviving nodes retain coordinated elapsed clocks, with distinct
 boot origins. Flash recovery, persistent identity provisioning and BLE controller
 reset remain outside this host-node lifecycle slice.
 
+The [BLE restart follow-up](measurements/ble-node-restart.md) rebuilds a Tokio
+node and its real BLE supervisor at the same address and identity, three times
+per CoreBluetooth/BlueZ profile case. Membership recovers without duplicates,
+obsolete Reticulum links cannot answer new requests, and an unrelated pair
+keeps its existing link. Separate backend tests cover stale queued sightings,
+blocked control sends, queued frames and partial reassembly across replacement.
+These are host-node/backend lifecycles, not native controller or firmware resets.
+
 ### Routed multi-hop coordination
 
 The same test target also runs a 20-node transport topology: 16 clients, two

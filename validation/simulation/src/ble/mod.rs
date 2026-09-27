@@ -33,6 +33,8 @@ pub use radio_id::BleRadioId;
 pub use trace::{BleObservationDropReason, BleSimulationEvent, BleTraceSnapshot};
 
 #[cfg(test)]
+mod backend_restart_tests;
+#[cfg(test)]
 mod backend_tests;
 #[cfg(test)]
 mod connection_tests;
