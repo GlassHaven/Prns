@@ -47,6 +47,9 @@ pub enum Completion {
     TimedOut {
         node: usize,
     },
+    RoutesChecked {
+        node: usize,
+    },
     Clock {
         node: usize,
         elapsed: DurationMillis,

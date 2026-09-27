@@ -22,6 +22,7 @@ use super::scenario::{
 
 mod ble;
 mod fixture;
+mod transport;
 use fixture::{connect, destination_hash, echo, link, restart, with_fleet};
 
 const RESTARTED: usize = 1;

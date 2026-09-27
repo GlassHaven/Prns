@@ -266,6 +266,16 @@ keeps its existing link. Separate backend tests cover stale queued sightings,
 blocked control sends, queued frames and partial reassembly across replacement.
 These are host-node/backend lifecycles, not native controller or firmware resets.
 
+The [transport restart follow-up](measurements/transport-node-restart.md) uses
+four leaves and two forwarding nodes on five isolated segments. Either transport
+is rebuilt twice while the other five nodes stay live. Its route table starts
+empty; explicit announcements restore the expected paths and fresh links work
+in both directions. Unlike reconnecting the same transport connection, restarting
+the forwarder does not restore obsolete link mappings: old-link requests time
+out exactly while fresh links and the unaffected side's original link work.
+This verifies host recovery after explicit rediscovery, not automatic application
+retry, persisted routes, alternate-route selection or physical power loss.
+
 ### Routed multi-hop coordination
 
 The same test target also runs a 20-node transport topology: 16 clients, two
