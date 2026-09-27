@@ -22,11 +22,12 @@ pub(super) struct VerifiedSplitSegment<'a> {
 
 /// Responses expose only verified value bytes, charged before publication.
 /// Other correlations retain the ordinary Resource delivery lane.
+#[inline(never)]
 pub(super) fn deliver_split_segment<C: ReceiptTable, A: IncomingAssemblyTable, Work>(
     receipts: &Receipts<C>,
     assemblies: &IncomingAssemblies<A>,
     segment: VerifiedSplitSegment<'_>,
-    sink: &mut impl FnMut(EngineReaction<'_, Work>),
+    sink: &mut dyn FnMut(EngineReaction<'_, Work>),
 ) -> Result<u64, SplitDeliveryFailure> {
     let VerifiedSplitSegment {
         link_id,
