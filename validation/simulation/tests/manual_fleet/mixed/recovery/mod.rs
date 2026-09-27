@@ -2,6 +2,7 @@ use super::*;
 use prns_interfaces_tokio::bluetooth_auto::BluetoothAutoStatus;
 
 mod lab;
+mod overlapping;
 mod restart;
 mod traffic;
 use lab::{converge, with_bridge, Controls, Profile};
@@ -67,6 +68,7 @@ fn exercise(interruption: Interruption) {
     for profile in [Profile::AppleBridge, Profile::BluezBridge] {
         with_bridge(
             profile,
+            prns_simulation::ManualTaskScheduling::Cyclic,
             2,
             |runner, frames, ble, controls, nodes, frame_id| {
                 converge(runner, ble, nodes);

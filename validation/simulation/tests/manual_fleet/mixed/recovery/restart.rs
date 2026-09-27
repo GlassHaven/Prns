@@ -6,6 +6,7 @@ fn mixed_bridge_restart_loses_both_interface_paths_without_restarting_the_endpoi
     for profile in [Profile::AppleBridge, Profile::BluezBridge] {
         with_bridge(
             profile,
+            prns_simulation::ManualTaskScheduling::Cyclic,
             2 + CYCLES,
             |runner, frames, ble, controls, nodes, frame_id| {
                 converge(runner, ble, nodes);

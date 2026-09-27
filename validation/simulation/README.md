@@ -88,7 +88,8 @@ remain outside this control. This models the characteristic-value boundary, not
 native controller scheduling or OS Bluetooth APIs. L2CAP is explicitly
 unavailable; capability advertisement reports GATT support and the configured
 frame limit. Wi-Fi, flash, physical reset, sleep, automatic deadline discovery, and
-multi-medium time coordination remain future work.
+additional medium models remain future work. Frame/BLE time coordination is
+available through the manual bridge below.
 
 ## Event-aware stepping
 
@@ -661,6 +662,12 @@ Optional [seeded actor scheduling](measurements/seeded-actor-scheduling.md) adds
 reproducible alternative cyclic actor orders, with 128-node restart coverage.
 The default remains admission order; this does not seed production entropy or
 provide complete packet replay.
+
+The [overlapping bridge outage matrix](measurements/overlapping-bridge-outages.md)
+uses those alternative actor orders to isolate frame and BLE paths together,
+then restore them in either order. Local traffic resumes on the restored side
+while end-to-end traffic remains blocked until both media recover. Concurrent
+requests then reuse the original links without restarting any node.
 
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete

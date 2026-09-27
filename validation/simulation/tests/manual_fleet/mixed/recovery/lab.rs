@@ -13,6 +13,7 @@ pub(super) enum Profile {
 
 pub(super) fn with_bridge(
     profile: Profile,
+    scheduling: prns_simulation::ManualTaskScheduling,
     expected_attachments_per_medium: usize,
     run: impl FnOnce(
         &mut ManualTaskRunner<'_, Completion>,
@@ -95,7 +96,7 @@ pub(super) fn with_bridge(
         Duration::from_millis(1),
     )
     .unwrap_or_else(|error| unreachable!("driver: {error}"));
-    let mut runner = ManualTaskRunner::new(&mut driver, nonzero(8));
+    let mut runner = ManualTaskRunner::new_with_scheduling(&mut driver, nonzero(8), scheduling);
     let mut nodes = [
         boot(&mut runner, 0, Ports::Frames(first)),
         boot(
