@@ -376,6 +376,15 @@ the 20-node transport scenario adds routed multi-hop and partition recovery.
 Thousands of production nodes remain a scale-test milestone, not demonstrated
 capacity or a promised limit. BLE now also has a coordinated 16-node ring.
 
+The [128-node churn slice](measurements/full-node-restart-waves.md) adds simultaneous
+32-node restart waves across 64 isolated pairs, in both cohort orders. Unaffected
+pairs keep their original links while lost and obsolete-link requests time out
+exactly. A whole-fleet abort case drops all nodes plus 64 pending requests, then
+rebuilds on the same clock. These are concurrent Tokio production nodes with
+inline crypto over the frame medium, not routed/BLE fleet scaling or firmware
+power-loss evidence. Capacity refusal, per-node clock origins, pair isolation
+and complete attachment cleanup are checked explicitly.
+
 - Run production nodes on a shared asynchronous runner, without requiring a
   hardware-emulator process per node or substituting simplified protocol nodes.
 - Model explicit, sparse reachability for chains, clusters, bridges, and network
