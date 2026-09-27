@@ -87,7 +87,7 @@ replay is not yet deterministic, and wall-clock boot timestamps and OS entropy
 remain outside this control. This models the characteristic-value boundary, not
 native controller scheduling or OS Bluetooth APIs. L2CAP is explicitly
 unavailable; capability advertisement reports GATT support and the configured
-frame limit. Wi-Fi, flash, reset, sleep, automatic deadline discovery, and
+frame limit. Wi-Fi, flash, physical reset, sleep, automatic deadline discovery, and
 multi-medium time coordination remain future work.
 
 ## Event-aware stepping
@@ -242,6 +242,21 @@ coverage, total per-node memory cost, throughput, or a maximum fleet size.
 ```console
 cargo test --locked -p prns-simulation --features controlled-time --test manual_fleet
 ```
+
+### Selective host-node restart
+
+Selective actor teardown is also available through `ManualTaskRunner::cancel`:
+it drops one actor in the paused runtime's context without polling graceful
+shutdown, retires its wake ownership, and returns its capacity. IDs are not
+reused. This runs Rust destructors; it is not a physical-power-loss model.
+
+Two four-node [restart scenarios](measurements/selective-node-restart.md) exercise
+that seam with real production nodes. A delayed frame cannot cross into a new
+node instance sharing the old interface identity; a request queued at the
+receiver's teardown times out exactly while unrelated nodes keep exchanging.
+Replacement and surviving nodes retain coordinated elapsed clocks, with distinct
+boot origins. Flash recovery, persistent identity provisioning and BLE controller
+reset remain outside this host-node lifecycle slice.
 
 ### Routed multi-hop coordination
 
@@ -593,7 +608,7 @@ Tokio's private timeout cleanup is checked within a bounded virtual-time window.
 
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
-byte-for-byte replay, thousands of production nodes and Wi-Fi/reset/flash/sleep
+byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep
 models remain separate milestones. The response-assurance work does not imply
 those broader simulator capabilities are complete.
 

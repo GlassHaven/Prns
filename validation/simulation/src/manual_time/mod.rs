@@ -13,7 +13,10 @@ use crate::{AdvanceReport, MediumSchedule, SimulationTick, VirtualMedium};
 mod error;
 mod tasks;
 pub use error::ManualTimeError;
-pub use tasks::{ManualTaskAdmissionError, ManualTaskId, ManualTaskPoll, ManualTaskRunner};
+pub use tasks::{
+    ManualTaskAdmissionError, ManualTaskCancellation, ManualTaskId, ManualTaskPoll,
+    ManualTaskRunner,
+};
 
 pub enum ManualMedium {
     Frames(VirtualMedium),

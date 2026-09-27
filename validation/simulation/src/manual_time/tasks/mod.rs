@@ -9,7 +9,9 @@ use std::task::{Context, Poll, Waker};
 use super::{ManualAdvance, ManualTimeDriver, ManualTimeError, ManualTimeSnapshot};
 use crate::SimulationTick;
 
+mod cancellation;
 mod ready;
+pub use cancellation::ManualTaskCancellation;
 use ready::{ReadyTasks, TaskWake};
 
 /// An admission ordinal scoped to one runner. Ordinals are never reused within that runner.

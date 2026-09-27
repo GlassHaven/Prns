@@ -16,6 +16,7 @@ use prns_simulation::{
 };
 
 mod ble;
+mod restart;
 mod routing;
 mod scenario;
 use scenario::{
