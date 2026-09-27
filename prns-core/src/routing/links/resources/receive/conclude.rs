@@ -38,6 +38,27 @@ use crate::units::RttMillis;
 use crate::wire::{PacketType, WireContext};
 
 impl<S: StorageLayout> EngineState<S> {
+    fn whole_response_lacks_delivery_claim(
+        &self,
+        link_id: &LinkId,
+        state: &IncomingResourceState,
+    ) -> bool {
+        if state.total_segments != 1 {
+            return false;
+        }
+        match state.correlation {
+            ResourceCorrelation::Response(id) => {
+                !self.receipts.has_pending_request(link_id, id)
+                    || self.whole_response_is_superseded(
+                        link_id,
+                        state.total_segments,
+                        state.correlation,
+                    )
+            }
+            ResourceCorrelation::Request { .. } | ResourceCorrelation::Unsolicited => false,
+        }
+    }
+
     /// RNS 1.4.2 `Resource.assemble` + `prove`
     pub(crate) fn conclude_resource(
         &mut self,
@@ -191,8 +212,7 @@ impl<S: StorageLayout> EngineState<S> {
 
         let multi_segment = state.total_segments > 1;
         let original_hash = state.original_hash;
-        let superseded =
-            self.whole_response_is_superseded(link_id, state.total_segments, state.correlation);
+        let superseded = self.whole_response_lacks_delivery_claim(link_id, &state);
 
         let delivery = {
             let (transfer, streamed) = self
@@ -608,7 +628,7 @@ impl<S: StorageLayout> EngineState<S> {
             wake_schedule_changes.receipt_timeouts = self.receipt_timeouts_wake();
             return wake_schedule_changes;
         };
-        if self.whole_response_is_superseded(&link_id, state.total_segments, state.correlation) {
+        if self.whole_response_lacks_delivery_claim(&link_id, &state) {
             self.reject_offered_resource(&link_id, &hash, now, fill_random, sink);
             wake_schedule_changes.link_deadlines = self.link_deadlines_wake();
             return wake_schedule_changes;
