@@ -11,8 +11,10 @@ use crate::SimulationTick;
 
 mod cancellation;
 mod ready;
+mod scheduling;
 pub use cancellation::ManualTaskCancellation;
 use ready::{ReadyTasks, TaskWake};
+pub use scheduling::{ManualTaskScheduling, SEEDED_TASK_SCHEDULING_ALGORITHM_VERSION};
 
 /// An admission ordinal scoped to one runner. Ordinals are never reused within that runner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -56,7 +58,7 @@ struct Task<T> {
 }
 
 /// Bounded, wake-driven futures borrowing one manual clock driver for their entire lifetime.
-/// Each call polls at most one ready future, in cyclic admission order. Futures may be non-Send,
+/// Each call polls at most one ready future, in cyclic admission order by default. Futures may be non-Send,
 /// but must cooperate by returning from each poll and obey the manual driver's restrictions.
 /// The caller owns the overall poll budget and supplies known runtime deadline boundaries.
 pub struct ManualTaskRunner<'driver, T> {
@@ -69,12 +71,22 @@ pub struct ManualTaskRunner<'driver, T> {
 
 impl<'driver, T> ManualTaskRunner<'driver, T> {
     pub fn new(driver: &'driver mut ManualTimeDriver, maximum: NonZeroUsize) -> Self {
+        Self::new_with_scheduling(driver, maximum, ManualTaskScheduling::Cyclic)
+    }
+
+    /// Select a fixed cyclic ordering of actor IDs. This does not seed actor entropy or
+    /// control externally concurrent wakes; reproducibility also requires the same inputs.
+    pub fn new_with_scheduling(
+        driver: &'driver mut ManualTimeDriver,
+        maximum: NonZeroUsize,
+        scheduling: ManualTaskScheduling,
+    ) -> Self {
         Self {
             driver,
             maximum,
             next_id: Some(0),
             tasks: BTreeMap::new(),
-            ready: Arc::new(Mutex::new(ReadyTasks::new())),
+            ready: Arc::new(Mutex::new(ReadyTasks::new(scheduling))),
         }
     }
 

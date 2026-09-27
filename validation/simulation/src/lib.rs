@@ -24,7 +24,8 @@ pub use interface::VirtualInterface;
 #[cfg(feature = "controlled-time")]
 pub use manual_time::{
     ManualAdvance, ManualMedium, ManualTaskAdmissionError, ManualTaskCancellation, ManualTaskId,
-    ManualTaskPoll, ManualTaskRunner, ManualTimeDriver, ManualTimeError, ManualTimeSnapshot,
+    ManualTaskPoll, ManualTaskRunner, ManualTaskScheduling, ManualTimeDriver, ManualTimeError,
+    ManualTimeSnapshot, SEEDED_TASK_SCHEDULING_ALGORITHM_VERSION,
 };
 pub use medium::{AttachError, EndpointId, VirtualMedium};
 pub use seeded::{

@@ -13,8 +13,8 @@ use personal_rns::units::DurationMillis;
 use personal_rns::wire::DestinationHash;
 use prns_simulation::{
     EndpointId, FaultPlan, ManualMedium, ManualTaskCancellation, ManualTaskId, ManualTaskRunner,
-    ManualTimeDriver, MediumEvent, Reachability, SimulationTick, TopologyConfig, TopologyMutation,
-    VirtualMedium, VirtualMediumConfig,
+    ManualTaskScheduling, ManualTimeDriver, MediumEvent, Reachability, SimulationSeed,
+    SimulationTick, TopologyConfig, TopologyMutation, VirtualMedium, VirtualMediumConfig,
 };
 
 use crate::scenario::{
@@ -68,14 +68,15 @@ fn now(runner: &ManualTaskRunner<'_, Completion>) -> u64 {
         .get()
 }
 
-fn exercise(waves: [Wave; 2]) {
+fn exercise(waves: [Wave; 2], scheduling: ManualTaskScheduling) {
     let medium = fixture::medium();
     let mut driver = ManualTimeDriver::new(
         ManualMedium::Frames(medium.clone()),
         Duration::from_millis(1),
     )
     .unwrap_or_else(|error| unreachable!("fleet driver: {error}"));
-    let mut runner = ManualTaskRunner::new(&mut driver, nonzero(ACTOR_CAPACITY));
+    let mut runner =
+        ManualTaskRunner::new_with_scheduling(&mut driver, nonzero(ACTOR_CAPACITY), scheduling);
     let mut nodes: Vec<_> = (0..NODES)
         .map(|index| start(&mut runner, &medium, index))
         .collect();
@@ -153,10 +154,33 @@ fn exercise(waves: [Wave; 2]) {
 
 #[test]
 fn full_node_restart_waves_preserve_unaffected_pairs_and_recover_all_members() {
-    exercise([Wave::EvenPairs, Wave::OddPairs]);
+    exercise(
+        [Wave::EvenPairs, Wave::OddPairs],
+        ManualTaskScheduling::Cyclic,
+    );
 }
 
 #[test]
 fn full_node_restart_waves_recover_with_reversed_cohort_order() {
-    exercise([Wave::OddPairs, Wave::EvenPairs]);
+    exercise(
+        [Wave::OddPairs, Wave::EvenPairs],
+        ManualTaskScheduling::Cyclic,
+    );
+}
+
+#[test]
+fn full_node_restart_waves_recover_under_seeded_actor_orders() {
+    for seed in [0, 7, u64::MAX] {
+        for waves in [
+            [Wave::EvenPairs, Wave::OddPairs],
+            [Wave::OddPairs, Wave::EvenPairs],
+        ] {
+            exercise(
+                waves,
+                ManualTaskScheduling::Seeded {
+                    seed: SimulationSeed::new(seed),
+                },
+            );
+        }
+    }
 }

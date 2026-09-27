@@ -657,6 +657,11 @@ concurrent waiter reuse and reclamation of the one assembly slot by another
 link. Sender and receiver timeout observations are distinguished explicitly;
 Tokio's private timeout cleanup is checked within a bounded virtual-time window.
 
+Optional [seeded actor scheduling](measurements/seeded-actor-scheduling.md) adds
+reproducible alternative cyclic actor orders, with 128-node restart coverage.
+The default remains admission order; this does not seed production entropy or
+provide complete packet replay.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

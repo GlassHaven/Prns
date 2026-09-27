@@ -3,20 +3,28 @@ use std::ops::Bound::{Excluded, Unbounded};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::task::Wake;
 
-use super::ManualTaskId;
+use super::{ManualTaskId, ManualTaskScheduling};
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct ReadyKey {
+    rank: u64,
+    task: ManualTaskId,
+}
 
 pub(super) struct ReadyTasks {
     live: BTreeSet<ManualTaskId>,
-    ready: BTreeSet<ManualTaskId>,
-    last_polled: Option<ManualTaskId>,
+    ready: BTreeSet<ReadyKey>,
+    last_polled: Option<ReadyKey>,
+    scheduling: ManualTaskScheduling,
 }
 
 impl ReadyTasks {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(scheduling: ManualTaskScheduling) -> Self {
         Self {
             live: BTreeSet::new(),
             ready: BTreeSet::new(),
             last_polled: None,
+            scheduling,
         }
     }
 
@@ -28,12 +36,12 @@ impl ReadyTasks {
 
     pub(super) fn insert(&mut self, id: ManualTaskId) {
         self.live.insert(id);
-        self.ready.insert(id);
+        self.ready.insert(self.key(id));
     }
 
     pub(super) fn retire(&mut self, id: ManualTaskId) {
         self.live.remove(&id);
-        self.ready.remove(&id);
+        self.ready.remove(&self.key(id));
     }
 
     pub(super) fn ready_count(&self) -> usize {
@@ -48,12 +56,19 @@ impl ReadyTasks {
             .copied()?;
         self.ready.remove(&next);
         self.last_polled = Some(next);
-        Some(next)
+        Some(next.task)
     }
 
     fn wake(&mut self, id: ManualTaskId) {
         if self.live.contains(&id) {
-            self.ready.insert(id);
+            self.ready.insert(self.key(id));
+        }
+    }
+
+    fn key(&self, task: ManualTaskId) -> ReadyKey {
+        ReadyKey {
+            rank: self.scheduling.rank(task.0),
+            task,
         }
     }
 

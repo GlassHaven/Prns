@@ -10,7 +10,7 @@ fn capacity(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).unwrap_or_else(|| unreachable!("nonzero test capacity"))
 }
 
-fn driver() -> ManualTimeDriver {
+pub(super) fn driver() -> ManualTimeDriver {
     let config = VirtualMediumConfig::new(
         TopologyConfig::FullyConnected,
         2,

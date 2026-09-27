@@ -16,7 +16,7 @@ pub use error::ManualTimeError;
 pub use medium::{ManualAdvance, ManualMedium};
 pub use tasks::{
     ManualTaskAdmissionError, ManualTaskCancellation, ManualTaskId, ManualTaskPoll,
-    ManualTaskRunner,
+    ManualTaskRunner, ManualTaskScheduling, SEEDED_TASK_SCHEDULING_ALGORITHM_VERSION,
 };
 
 #[derive(Debug, PartialEq, Eq)]
