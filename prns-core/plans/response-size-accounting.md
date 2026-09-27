@@ -311,3 +311,9 @@ reverses those runtime roles. Tokio retains the held send beyond Embassy's reque
 timeout, so releasing it proves a real late advertisement is harmless and both
 request slots and original links remain reusable. Independent conflicting-peer
 injection remains unimplemented.
+
+The [channel-wake teardown follow-up](../../validation/simulation/measurements/link-teardown-channel-wakes.md)
+directly exercises an outstanding channel send and request through stale-link
+expiry, checks cached versus recomputed schedules, and rejects duplicate
+settlements at their former deadlines. This is shared-core fixture coverage of
+the earlier simulator-discovered wake issue, not a new mixed-runtime scenario.
