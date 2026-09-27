@@ -323,3 +323,9 @@ adds a live controller awaiting-offer attempt to stale-link expiry. Matching-lin
 teardown clears it; unrelated-link teardown preserves its complete state and
 deadline. This is direct engine-fixture assurance for the third wake family,
 not coverage of a full pairing exchange or its persistence phases.
+
+The [active-continuation competition follow-up](../../validation/simulation/measurements/competing-packet-active-continuation.md)
+returns to real mixed-runtime traffic: after a continuation data part is observed
+being dropped, a competing response packet cannot replace or settle the original
+split request. Both directions and compatibility profile pairs retain exact
+completion and same-link recovery. Independent whole-Resource peers remain open.

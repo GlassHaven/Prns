@@ -118,7 +118,22 @@ impl WireGate {
         }
         assert!(*dropped < budget.get(), "wire loss budget exhausted");
         *dropped += 1;
+        self.0.reached.notify_one();
         Disposition::Drop
+    }
+
+    pub(super) async fn first_loss(&self) -> WirePacketHeader {
+        loop {
+            let reached = self.0.reached.notified();
+            match *self.state() {
+                State::Losing {
+                    header, dropped, ..
+                } if dropped > 0 => return header,
+                State::Losing { .. } => {}
+                _ => unreachable!("observe loss only while its rule is active"),
+            }
+            reached.await;
+        }
     }
 
     pub(super) async fn held(&self) -> WirePacketHeader {

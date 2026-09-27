@@ -3,10 +3,12 @@ use crate::wire_gate::WireGate;
 use personal_rns::engine::{Respond, RespondData, RespondPayload, SendResourceRejection};
 
 const WHOLE_RESPONSE_BYTES: usize = 128;
+const FIRST_SEGMENT_WIRE_PARTS: usize = 2;
 
-enum Competitor {
-    Packet,
-    WholeResource,
+enum Competition {
+    PacketBetweenSegments,
+    PacketDuringContinuation,
+    WholeResourceBetweenSegments,
 }
 
 fn compete(
@@ -16,14 +18,23 @@ fn compete(
     trace: ResponseTrace,
     gate: &WireGate,
     links: [LinkId; 2],
-    competitor: &Competitor,
+    competition: &Competition,
 ) -> [(CommandId, Settlement); 2] {
     let [link, other_link] = links;
-    gate.lose_after(
-        buffered_interruption::advertisement_header(link),
-        1,
-        NonZeroUsize::new(16).unwrap(),
-    );
+    let advertisement = buffered_interruption::advertisement_header(link);
+    let (loss_header, passes) = match competition {
+        Competition::PacketBetweenSegments | Competition::WholeResourceBetweenSegments => {
+            (advertisement, 1)
+        }
+        Competition::PacketDuringContinuation => (
+            personal_rns::wire::WirePacketHeader {
+                context: personal_rns::wire::WireContext::Resource,
+                ..advertisement
+            },
+            FIRST_SEGMENT_WIRE_PARTS,
+        ),
+    };
+    gate.lose_after(loss_header, passes, NonZeroUsize::new(16).unwrap());
     let started = tasks.snapshot().tick;
     let command = requester
         .issue(PrnsCommand::SendRequest(SendRequest {
@@ -46,15 +57,20 @@ fn compete(
         unreachable!("the split response must own the request before competing")
     };
     let request = *request;
+    let observer = gate.clone();
+    assert_eq!(
+        complete(tasks, async move { observer.first_loss().await }),
+        loss_header
+    );
     assert!(trace.is_empty());
     assert!(responder
         .issue(PrnsCommand::Respond(Respond {
             link_id: link,
             request_id: request,
-            payload: match competitor {
-                Competitor::Packet =>
+            payload: match competition {
+                Competition::PacketBetweenSegments | Competition::PacketDuringContinuation =>
                     RespondPayload::Packed(RespondData::from_slice(b"competing packet").unwrap()),
-                Competitor::WholeResource => RespondPayload::StaticFile {
+                Competition::WholeResourceBetweenSegments => RespondPayload::StaticFile {
                     name: "competitor.bin",
                     bytes: &[0xE7; WHOLE_RESPONSE_BYTES],
                 },
@@ -138,7 +154,7 @@ fn compete(
     ]
 }
 
-fn exercise(competitor: Competitor) {
+fn exercise(competition: Competition) {
     for (embedded_endpoint, desktop_endpoint) in [
         (
             Endpoint::Esp32(Esp32Host::Esp32),
@@ -162,14 +178,15 @@ fn exercise(competitor: Competitor) {
                     desktop.responses.clone(),
                     &embedded.wire,
                     [links[1], spare[1]],
-                    &competitor,
+                    &competition,
                 );
                 assert_eq!(
                     response_settlements(embedded),
                     [
-                        match competitor {
-                            Competitor::Packet => Settlement::Respond(Ok(())),
-                            Competitor::WholeResource =>
+                        match competition {
+                            Competition::PacketBetweenSegments
+                            | Competition::PacketDuringContinuation => Settlement::Respond(Ok(())),
+                            Competition::WholeResourceBetweenSegments =>
                                 Settlement::Respond(Err(RespondFailure::Resource(
                                     SendResourceFailure::Rejected(SendResourceRejection::LinkBusy)
                                 ))),
@@ -185,7 +202,7 @@ fn exercise(competitor: Competitor) {
                     embedded.responses.clone(),
                     &desktop.wire,
                     [links[0], spare[0]],
-                    &competitor,
+                    &competition,
                 );
                 assert_eq!(embedded.take_settled(), expected);
                 reassemble(tasks, lab, embedded, desktop, links);
@@ -196,10 +213,15 @@ fn exercise(competitor: Competitor) {
 
 #[test]
 fn packet_responses_cannot_replace_an_active_split_response() {
-    exercise(Competitor::Packet);
+    exercise(Competition::PacketBetweenSegments);
+}
+
+#[test]
+fn packet_responses_cannot_replace_a_split_response_during_continuation_reception() {
+    exercise(Competition::PacketDuringContinuation);
 }
 
 #[test]
 fn a_busy_split_sender_refuses_competing_whole_resources_but_serves_other_links() {
-    exercise(Competitor::WholeResource);
+    exercise(Competition::WholeResourceBetweenSegments);
 }

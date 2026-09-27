@@ -92,6 +92,37 @@ async fn exceeding_loss_budget_fails_instead_of_silently_forwarding() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn first_loss_is_observable_before_or_after_dispatch_and_resets_on_rearm() {
+    let gate = WireGate::new();
+    let header = advertisement(LinkId::new([1; 16]));
+    let bytes = frame(header);
+    let started = tokio::time::Instant::now();
+    for _ in 0..2 {
+        gate.lose_after(header, 1, NonZeroUsize::MIN);
+        let mut observation = Box::pin(gate.first_loss());
+        pending(observation.as_mut()).await;
+        passes(&gate, &[]).await;
+        passes(&gate, &frame(advertisement(LinkId::new([2; 16])))).await;
+        passes(&gate, &bytes).await;
+        pending(observation.as_mut()).await;
+        tokio::time::timeout(WAIT_BUDGET, async {
+            let (observed, disposition) = tokio::join!(
+                biased;
+                observation,
+                gate.before_send(&bytes),
+            );
+            assert_eq!((observed, disposition), (header, Disposition::Drop));
+        })
+        .await
+        .unwrap();
+        assert_eq!(gate.first_loss().await, header);
+        assert_eq!(gate.stop_loss(), 1);
+        assert!(gate.is_idle());
+    }
+    assert_eq!(started.elapsed(), Duration::ZERO);
+}
+
+#[tokio::test(start_paused = true)]
 async fn only_the_selected_occurrence_and_complete_header_hold_a_send() {
     let gate = WireGate::new();
     let header = advertisement(LinkId::new([1; 16]));
