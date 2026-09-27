@@ -16734,6 +16734,7 @@
           "ed25519-batch",
           "embassy-host",
           "flash",
+          "large-static-responses",
           "movable-frame-forwarding",
           "resource-work-offload",
           "rns-management-wire",
