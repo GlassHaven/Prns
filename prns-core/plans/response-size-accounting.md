@@ -294,5 +294,8 @@ also checks opened, pre-digested and unavailable-worker verdicts after success o
 expiry, including stale replay. The
 [ended-claim streamed-worker follow-up](../../validation/simulation/measurements/whole-response-ended-stream.md)
 covers first-span return after success/expiry and copied or detached tail return
-after success. Timeout with a detached tail and continuation in flight, plus
-mixed-runtime inconsistent-peer injections, remain separate coverage work.
+after success. The
+[in-flight watchdog follow-up](../../validation/simulation/measurements/whole-response-ended-watchdog.md)
+drives real transfer deadlines while a copied or detached tail is held: the
+continuation exhausts retries, the worker times out, and late returns remain inert.
+Mixed-runtime inconsistent-peer injections remain separate coverage work.

@@ -21,6 +21,24 @@ enum SplitPhase {
     CompletedBeforeFirstReturn,
     ExpiredBeforeFirstReturn,
     CompletedBeforeTailReturn,
+    ExpiredBeforeTailReturn,
+}
+
+#[test]
+fn copied_streamed_tail_cannot_revive_an_expired_request() {
+    check_streamed_overlap::<TestStorageLayout>(
+        SplitPhase::ExpiredBeforeTailReturn,
+        TailWorkspace::Copied,
+    );
+}
+
+#[cfg(all(feature = "resource-work-offload", feature = "alloc"))]
+#[test]
+fn detached_streamed_tail_cannot_revive_an_expired_request() {
+    check_streamed_overlap::<crate::storage::GrowableHeap>(
+        SplitPhase::ExpiredBeforeTailReturn,
+        TailWorkspace::Detached,
+    );
 }
 
 #[test]
@@ -142,7 +160,9 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
     let mut continuation = None;
     if matches!(
         phase,
-        SplitPhase::ReceivingContinuation | SplitPhase::CompletedBeforeTailReturn
+        SplitPhase::ReceivingContinuation
+            | SplitPhase::CompletedBeforeTailReturn
+            | SplitPhase::ExpiredBeforeTailReturn
     ) {
         let pull = feed(&mut response.receiver, &response.continuation, 2_350);
         assert_eq!(pull.frames.len(), 1);
@@ -157,7 +177,8 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
         }
         SplitPhase::BetweenSegments
         | SplitPhase::ReceivingContinuation
-        | SplitPhase::CompletedBeforeTailReturn => 2_400,
+        | SplitPhase::CompletedBeforeTailReturn
+        | SplitPhase::ExpiredBeforeTailReturn => 2_400,
     };
     let mut deadline = response
         .receiver
@@ -221,6 +242,10 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
             at = complete_admitted_split(&mut response, continuation.as_ref().unwrap());
             deadline = None;
         }
+        if completions == 2 && matches!(phase, SplitPhase::ExpiredBeforeTailReturn) {
+            at = exhaust_transfer_deadlines(&mut response, pending.hash);
+            deadline = None;
+        }
         let mut next = None;
         response.receiver.resume_resource_open(
             ResourceOpenCompleted {
@@ -232,7 +257,13 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
                 residence: pending.residence,
             },
             InstantMillis(at + completions),
-            &mut |bytes| bytes.fill(0xC9),
+            &mut |bytes| {
+                assert!(
+                    !matches!(phase, SplitPhase::ExpiredBeforeTailReturn),
+                    "retired worker results need no entropy"
+                );
+                bytes.fill(0xC9);
+            },
             &mut |reaction| match reaction {
                 EngineReaction::Directive(Directive::Fulfill(OwedWork::ResourceOpen(owed))) => {
                     assert!(next.is_none());
@@ -262,10 +293,16 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
             SplitPhase::BetweenSegments
             | SplitPhase::CompletedBeforeFirstReturn
             | SplitPhase::ExpiredBeforeFirstReturn => 1,
-            SplitPhase::ReceivingContinuation | SplitPhase::CompletedBeforeTailReturn => 2,
+            SplitPhase::ReceivingContinuation
+            | SplitPhase::CompletedBeforeTailReturn
+            | SplitPhase::ExpiredBeforeTailReturn => 2,
         }
     );
-    assert_cancelled(&mut competitor, capture, at + 50);
+    if matches!(phase, SplitPhase::ExpiredBeforeTailReturn) {
+        assert_eq!(capture, InboundCapture::default());
+    } else {
+        assert_cancelled(&mut competitor, capture, at + 50);
+    }
     assert_eq!(
         response
             .receiver
@@ -273,6 +310,22 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
             .pending_request_deadline(&link_id(), request),
         deadline
     );
+    if matches!(phase, SplitPhase::ExpiredBeforeTailReturn) {
+        assert!(response.receiver.incoming_resources.is_empty());
+        let late = serve_pull(
+            &mut response.sender,
+            &mut response.receiver,
+            continuation.as_ref().unwrap(),
+            at + 100,
+        );
+        assert_eq!(late, InboundCapture::default());
+        assert!(response.receiver.incoming_resources.is_empty());
+        assert_eq!(
+            response.receiver.incoming_resources.active_buffer_bytes(),
+            0
+        );
+        return;
+    }
     if matches!(
         phase,
         SplitPhase::CompletedBeforeFirstReturn
@@ -295,4 +348,96 @@ fn check_streamed_overlap<S: crate::storage::StorageLayout>(
         }
     };
     response.complete(&pull);
+}
+
+fn exhaust_transfer_deadlines<S: crate::storage::StorageLayout>(
+    response: &mut SplitResponse<S>,
+    whole_hash: ResourceHash,
+) -> u64 {
+    use crate::engine::SendRequestFailure;
+    use crate::routing::links::resources::ResourceFailureCause;
+
+    assert_eq!(
+        response
+            .receiver
+            .receipts
+            .pending_request_deadline(&link_id(), response.request),
+        None
+    );
+    assert!(response
+        .receiver
+        .receipts
+        .has_pending_request(&link_id(), response.request));
+    let continuation_hash = (0..response.receiver.incoming_resources.len())
+        .map(|index| *response.receiver.incoming_resources.hash_at(index))
+        .find(|hash| *hash != whole_hash)
+        .unwrap();
+    let mut observed = InboundCapture::default();
+    let mut at = 2_402;
+    let mut rounds = 0;
+    while !response.receiver.incoming_resources.is_empty() {
+        rounds += 1;
+        assert!(
+            rounds <= 32,
+            "watchdogs must exhaust their bounded retry budgets"
+        );
+        let due = response
+            .receiver
+            .incoming_resources
+            .earliest_timeout_at()
+            .unwrap();
+        assert!(due.0 >= at);
+        at = due.0;
+        response.receiver.fire_due_resource_deadlines(
+            due,
+            &mut |bytes| bytes.fill(0xCB),
+            &mut |reaction| match reaction {
+                EngineReaction::Directive(Directive::EmitFrame { fill, .. }) => {
+                    let frame = filled_frame(fill).unwrap();
+                    assert_eq!(
+                        WirePacketHeader::parse(&frame).unwrap().0.context,
+                        WireContext::ResourceRequest
+                    );
+                }
+                EngineReaction::Journaled(Journaled::ResourceFailed { hash, cause, .. }) => {
+                    observed.failed.push((hash, cause))
+                }
+                EngineReaction::Journaled(Journaled::CommandSettled { id, settlement }) => {
+                    observed.settlements.push((id, settlement))
+                }
+                _ => panic!("silent transfer expiry must only retry or fail"),
+            },
+        );
+    }
+    observed.failed.sort_by_key(|(hash, _)| *hash.as_bytes());
+    let mut expected_failures = std::vec![
+        (whole_hash, ResourceFailureCause::OpenTimedOut),
+        (continuation_hash, ResourceFailureCause::RetriesExhausted)
+    ];
+    expected_failures.sort_by_key(|(hash, _)| *hash.as_bytes());
+    assert_eq!(
+        observed,
+        InboundCapture {
+            failed: expected_failures,
+            settlements: std::vec![(
+                REQUEST,
+                Settlement::SendRequest(Err(SendRequestFailure::ResponseTransferFailed(
+                    ResourceFailureCause::RetriesExhausted
+                )))
+            )],
+            ..InboundCapture::default()
+        }
+    );
+    assert!(!response
+        .receiver
+        .receipts
+        .has_pending_request(&link_id(), response.request));
+    assert_eq!(
+        response
+            .receiver
+            .incoming_assemblies
+            .original_hash(&link_id()),
+        None
+    );
+    at + 100
 }
