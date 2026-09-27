@@ -336,3 +336,10 @@ between segments and during continuation reception. Each preserves exact file
 bytes, concurrent same-link progress and subsequent request-slot reuse. Disabling
 the existing shared guard makes both adapters complete prematurely in all three
 phases; the guard remains unchanged in this assurance-only slice.
+
+The [retired-response matrix](../../validation/simulation/measurements/retired-buffered-response.md)
+follows successful or timed-out buffered requests with a fresh segmented request
+on the same link. Newly emitted packets naming the retired ID cannot settle or
+contaminate the replacement across three reception phases, both runtimes and
+both profile pairs. Exact receipt identity matching is unchanged and is directly
+challenged by a targeted diagnostic mutation.
