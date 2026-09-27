@@ -343,3 +343,10 @@ on the same link. Newly emitted packets naming the retired ID cannot settle or
 contaminate the replacement across three reception phases, both runtimes and
 both profile pairs. Exact receipt identity matching is unchanged and is directly
 challenged by a targeted diagnostic mutation.
+
+The [abandoned-waiter follow-up](../../validation/simulation/measurements/abandoned-request-waiters.md)
+separates dropping a local buffered future from retiring its protocol receipt.
+Late completion cannot contaminate a fresh segmented request or prevent reuse of
+both Embassy completion slots. It explicitly checks Tokio's private consumption
+and Embassy's unawaited application delivery rather than assuming cancellation
+semantics are identical across adapters.

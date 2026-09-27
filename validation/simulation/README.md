@@ -567,10 +567,28 @@ queue, and cancellation releases its ownership. It is confined to this test
 binary, with no shipping runtime or general simulator-library changes. See
 [buffered interruption evidence](measurements/buffered-resource-interruption.md).
 
-These interruption cases establish reuse after old-link retirement, not assembly
-reclamation while an old link stays alive. Cumulative response-value accounting
-and inconsistent-peer injection remain open; inconsistent-peer cases still have
-core-engine reproductions only.
+Those original interruption cases establish reuse after old-link retirement.
+Subsequent scenarios also exercise same-link assembly reclamation, receipt
+pressure, late continuations and exact cumulative response-value limits. The
+[response accounting plan](../../prns-core/plans/response-size-accounting.md)
+tracks the shared-core corrections and distinguishes mixed-runtime reproductions
+from direct engine fixtures.
+
+The [buffered competition matrix](measurements/buffered-response-competition.md)
+tests both real requester APIs before the first verified segment, between
+segments and during continuation reception. The
+[retired-response matrix](measurements/retired-buffered-response.md) adds late
+packets after success or timeout while a fresh request uses the same link.
+The [abandoned-waiter follow-up](measurements/abandoned-request-waiters.md) checks
+local future cancellation separately from protocol retirement, including reuse
+of both bounded Embassy completion slots and the runtimes' different orphan
+completion routing. All use bounded observers and ordinary responder APIs.
+
+Independent conflicting whole-Resource peers still have direct core-engine
+fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
+byte-for-byte replay, thousands of production nodes and Wi-Fi/reset/flash/sleep
+models remain separate milestones. The response-assurance work does not imply
+those broader simulator capabilities are complete.
 
 ```console
 cargo test --locked -p prns-simulation --features controlled-time --test embassy_ble segmented

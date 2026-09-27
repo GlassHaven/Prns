@@ -16,6 +16,7 @@ pub(super) enum Phase {
 pub(super) enum ResponseClaim {
     Current,
     Retired(RequestId),
+    Abandoned(RequestId),
 }
 
 pub(super) struct Competition {
@@ -23,7 +24,7 @@ pub(super) struct Competition {
     pub claim: ResponseClaim,
 }
 
-const COMPETING_BYTES: &[u8] = b"not the requested file";
+pub(super) const COMPETING_BYTES: &[u8] = b"not the requested file";
 const FIRST_SEGMENT_WIRE_PARTS: usize = 2;
 
 pub(super) async fn compete<T>(
@@ -59,7 +60,7 @@ pub(super) async fn compete<T>(
             assert_eq!(observed_link, link);
             let request_id = match competition.claim {
                 ResponseClaim::Current => request_id,
-                ResponseClaim::Retired(retired) => {
+                ResponseClaim::Retired(retired) | ResponseClaim::Abandoned(retired) => {
                     assert_ne!(
                         retired, request_id,
                         "replacement must have a fresh request identity"
