@@ -7,58 +7,17 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::time::Instant;
 
-use crate::ble::{BleAdvanceReport, VirtualBleLab};
-use crate::{AdvanceReport, MediumSchedule, SimulationTick, VirtualMedium};
+use crate::{MediumSchedule, SimulationTick};
 
 mod error;
+mod medium;
 mod tasks;
 pub use error::ManualTimeError;
+pub use medium::{ManualAdvance, ManualMedium};
 pub use tasks::{
     ManualTaskAdmissionError, ManualTaskCancellation, ManualTaskId, ManualTaskPoll,
     ManualTaskRunner,
 };
-
-pub enum ManualMedium {
-    Frames(VirtualMedium),
-    Ble(VirtualBleLab),
-}
-
-impl ManualMedium {
-    fn schedule(&self) -> MediumSchedule {
-        match self {
-            Self::Frames(medium) => medium.schedule(),
-            Self::Ble(lab) => lab.schedule(),
-        }
-    }
-
-    fn advance(&self, not_after: SimulationTick) -> Result<ManualAdvance, ManualTimeError> {
-        match self {
-            Self::Frames(medium) => medium
-                .advance_to_next_event(not_after)
-                .map(ManualAdvance::Frames)
-                .map_err(ManualTimeError::Frames),
-            Self::Ble(lab) => lab
-                .advance_to_next_event(not_after)
-                .map(ManualAdvance::Ble)
-                .map_err(ManualTimeError::Ble),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum ManualAdvance {
-    Frames(AdvanceReport),
-    Ble(BleAdvanceReport),
-}
-
-impl ManualAdvance {
-    fn bounds(&self) -> (SimulationTick, SimulationTick) {
-        match self {
-            Self::Frames(report) => (report.from, report.to),
-            Self::Ble(report) => (report.from, report.to),
-        }
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ManualTimeSnapshot {
@@ -66,7 +25,7 @@ pub struct ManualTimeSnapshot {
     pub runtime_elapsed: Duration,
 }
 
-/// A private paused runtime for explicitly polled futures and one medium.
+/// A private paused runtime for explicitly polled futures and coordinated media.
 /// The caller supplies known runtime deadlines as advancement boundaries and owns poll/work budgets.
 /// Futures must not spawn tasks, perform blocking work, export runtime handles, or alter Tokio time.
 /// Medium handles must not be mutated concurrently. This is not a general-purpose Tokio executor.
@@ -101,7 +60,7 @@ impl ManualTimeDriver {
             let _entered = runtime.enter();
             Instant::now()
         };
-        let origin_tick = medium.schedule().now;
+        let origin_tick = medium.schedule()?.now;
         Ok(Self {
             runtime,
             medium,
@@ -195,7 +154,7 @@ impl ManualTimeDriver {
                 observed: observed.saturating_duration_since(self.origin_instant),
             });
         }
-        let schedule = self.medium.schedule();
+        let schedule = self.medium.schedule()?;
         if schedule.now != self.tick {
             return Err(ManualTimeError::MediumDrift {
                 expected: self.tick,
@@ -213,5 +172,7 @@ fn outside_runtime() -> Result<(), ManualTimeError> {
     Ok(())
 }
 
+#[cfg(test)]
+mod mixed_tests;
 #[cfg(test)]
 mod tests;

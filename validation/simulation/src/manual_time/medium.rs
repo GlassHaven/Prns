@@ -1,0 +1,94 @@
+use super::ManualTimeError;
+use crate::ble::{BleAdvanceReport, VirtualBleLab};
+use crate::{AdvanceReport, MediumSchedule, SimulationTick, VirtualMedium};
+
+pub enum ManualMedium {
+    Frames(VirtualMedium),
+    Ble(VirtualBleLab),
+    /// Both media must start at the same tick. Neither may be advanced outside
+    /// the driver; same-tick effects settle before any actor is polled again.
+    FramesAndBle {
+        frames: VirtualMedium,
+        ble: VirtualBleLab,
+    },
+}
+
+impl ManualMedium {
+    pub(super) fn schedule(&self) -> Result<MediumSchedule, ManualTimeError> {
+        match self {
+            Self::Frames(medium) => Ok(medium.schedule()),
+            Self::Ble(lab) => Ok(lab.schedule()),
+            Self::FramesAndBle { frames, ble } => {
+                let frames = frames.schedule();
+                let ble = ble.schedule();
+                if frames.now != ble.now {
+                    return Err(ManualTimeError::MediaDisagree {
+                        frames: frames.now,
+                        ble: ble.now,
+                    });
+                }
+                Ok(MediumSchedule {
+                    now: frames.now,
+                    next_event_at: frames
+                        .next_event_at
+                        .into_iter()
+                        .chain(ble.next_event_at)
+                        .min(),
+                })
+            }
+        }
+    }
+
+    pub(super) fn advance(
+        &self,
+        not_after: SimulationTick,
+    ) -> Result<ManualAdvance, ManualTimeError> {
+        match self {
+            Self::Frames(medium) => medium
+                .advance_to_next_event(not_after)
+                .map(ManualAdvance::Frames)
+                .map_err(ManualTimeError::Frames),
+            Self::Ble(lab) => lab
+                .advance_to_next_event(not_after)
+                .map(ManualAdvance::Ble)
+                .map_err(ManualTimeError::Ble),
+            Self::FramesAndBle { frames, ble } => {
+                let schedule = self.schedule()?;
+                if not_after < schedule.now {
+                    return Err(ManualTimeError::BeforeCurrent {
+                        current: schedule.now,
+                        requested: not_after,
+                    });
+                }
+                let target = schedule.target_not_after(not_after);
+                // BLE validates its emission budget before mutation. After that
+                // succeeds, frame advance can only refuse backwards time, which
+                // the common schedule already excluded. Concurrent medium
+                // mutation is forbidden by the driver's ownership contract.
+                let ble = ble.advance_to(target).map_err(ManualTimeError::Ble)?;
+                let frames = frames.advance_to(target).map_err(ManualTimeError::Frames)?;
+                Ok(ManualAdvance::FramesAndBle { frames, ble })
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ManualAdvance {
+    Frames(AdvanceReport),
+    Ble(BleAdvanceReport),
+    FramesAndBle {
+        frames: AdvanceReport,
+        ble: BleAdvanceReport,
+    },
+}
+
+impl ManualAdvance {
+    pub(super) fn bounds(&self) -> (SimulationTick, SimulationTick) {
+        match self {
+            Self::Frames(report) => (report.from, report.to),
+            Self::Ble(report) => (report.from, report.to),
+            Self::FramesAndBle { frames, .. } => (frames.from, frames.to),
+        }
+    }
+}

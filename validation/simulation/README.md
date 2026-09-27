@@ -123,15 +123,15 @@ cargo test --locked -p prns-simulation --lib stepping
 
 The opt-in `controlled-time` feature provides `ManualTimeDriver`, which owns one
 paused, current-thread Tokio runtime for an explicitly polled scenario. It binds
-either a frame medium or a BLE lab to an explicit nonzero whole-millisecond tick
+either a frame medium, a BLE lab, or both to an explicit nonzero whole-millisecond tick
 duration. Nonzero medium origins are supported. Merely polling a pending future
-never advances time; snapshots validate both clocks instead of silently
+never advances time; snapshots validate all participating clocks instead of silently
 resynchronizing them.
 
 An advance stops at the next medium event or the caller's boundary. Medium
 effects settle first, then Tokio time moves to that same instant, before the
 caller next polls its futures. Emission-budget, backward-time, and clock-range
-refusals leave both clocks unchanged. Timers must be constructed inside the
+refusals leave all clocks unchanged. Timers must be constructed inside the
 polled futures, and creation, use, and destruction of the driver are synchronous
 operations outside any other Tokio runtime.
 
@@ -152,14 +152,21 @@ the production BLE supervisor's exact 10-second handshake timeout through
 `Fleet::detached`, and emission-budget refusal followed by retry. They also cover
 nonzero origins, duration validation, clock overflow, external drift, and spawned
 task rejection. This is not a general-purpose full-node executor: nodes must use
-paths that do not spawn background work. It does not coordinate multiple media
-or change shipping runtime behavior. The registered simulation suite enables
+paths that do not spawn background work. It does not change shipping runtime
+behavior. The registered simulation suite enables
 the feature; focused commands are:
 
 ```console
 cargo test --locked -p prns-simulation --features controlled-time --lib manual_time
 cargo test --locked -p prns-simulation --features controlled-time --test manual_time
 ```
+
+`ManualMedium::FramesAndBle` coordinates one frame medium and one BLE lab with
+matching origins. It selects their earliest event, settles BLE then frame effects,
+and advances the runtime only after both complete. BLE emission-budget refusal
+leaves all three timelines untouched. [Mixed-medium evidence](measurements/mixed-medium-clock.md)
+includes a real transport bridging the two interfaces, exact request timeouts
+during frame partition, continued BLE traffic and recovery on the original links.
 
 ### Wake-driven scenario actors
 

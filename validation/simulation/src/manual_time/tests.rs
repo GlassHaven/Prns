@@ -6,8 +6,8 @@ use personal_rns::manifold::tokio::TokioClock;
 
 use super::*;
 use crate::{
-    FaultPlan, SimulationDurationInTicks, TopologyConfig, TransmissionOrdinal, TransmissionRule,
-    VirtualMediumConfig,
+    AdvanceReport, FaultPlan, SimulationDurationInTicks, TopologyConfig, TransmissionOrdinal,
+    TransmissionRule, VirtualMedium, VirtualMediumConfig,
 };
 
 fn checked<T>(value: Result<T, ManualTimeError>) -> T {
