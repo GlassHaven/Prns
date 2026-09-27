@@ -288,5 +288,8 @@ refusal of duplicate buffer take/dispatch. The
 [ended-claim follow-up](../../validation/simulation/measurements/whole-response-ended-claim.md)
 also rejects late whole completion after split success or request expiry, rather
 than publishing it as an unsolicited Resource. Its direct and decompression
-cases are core-engine fixtures; ended-claim worker variants and mixed-runtime
-inconsistent-peer injections remain separate coverage work.
+cases are core-engine fixtures. The
+[ended-claim whole-worker follow-up](../../validation/simulation/measurements/whole-response-ended-worker.md)
+also checks opened, pre-digested and unavailable-worker verdicts after success or
+expiry, including stale replay. Ended-claim streamed/detached worker variants and
+mixed-runtime inconsistent-peer injections remain separate coverage work.

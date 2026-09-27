@@ -6,13 +6,13 @@ enum Completion {
     DeferredInflate,
 }
 
-enum SplitBoundary {
+pub(super) enum SplitBoundary {
     Active,
     Completed,
     Expired,
 }
 
-fn end_split(response: &mut SplitResponse, boundary: &SplitBoundary) -> u64 {
+pub(super) fn reach_split_boundary(response: &mut SplitResponse, boundary: &SplitBoundary) -> u64 {
     match boundary {
         SplitBoundary::Active => 2_400,
         SplitBoundary::Completed => {
@@ -125,7 +125,7 @@ fn preadmitted_whole_completion_cannot_publish_over_a_split_response() {
                 );
             }
             let mut response = SplitResponse::from_pending(receiver, request);
-            let at = end_split(&mut response, &boundary);
+            let at = reach_split_boundary(&mut response, &boundary);
             let deadline = response
                 .receiver
                 .receipts

@@ -1,3 +1,4 @@
+use super::completion::{reach_split_boundary, SplitBoundary};
 use super::*;
 use crate::engine::test_support::routable_descriptor;
 use crate::engine::{
@@ -17,6 +18,20 @@ enum WorkerResult {
 
 #[test]
 fn delayed_whole_open_verdicts_preserve_split_ownership_and_retire_the_reservation() {
+    check_delayed_whole_open(SplitBoundary::Active);
+}
+
+#[test]
+fn delayed_whole_open_verdicts_cannot_revive_a_completed_request() {
+    check_delayed_whole_open(SplitBoundary::Completed);
+}
+
+#[test]
+fn delayed_whole_open_verdicts_cannot_revive_an_expired_request() {
+    check_delayed_whole_open(SplitBoundary::Expired);
+}
+
+fn check_delayed_whole_open(boundary: SplitBoundary) {
     for result in [
         WorkerResult::Opened,
         WorkerResult::OpenedAndDigested,
@@ -76,6 +91,7 @@ fn delayed_whole_open_verdicts_preserve_split_ownership_and_retire_the_reservati
         // Dispatch the split normally while retaining the already-issued job.
         receiver.resource_open_lane = ResourceOpenLane::EngineDirected;
         let mut response = SplitResponse::from_pending(receiver, request);
+        let at = reach_split_boundary(&mut response, &boundary);
         response.receiver.resource_open_lane = ResourceOpenLane::ExternalWhole;
         let deadline = response
             .receiver
@@ -97,7 +113,7 @@ fn delayed_whole_open_verdicts_preserve_split_ownership_and_retire_the_reservati
                     reservation,
                     outcome
                 },
-                InstantMillis(2_400),
+                InstantMillis(at),
                 &mut |bytes| bytes.fill(0xC9),
                 &mut |reaction| match reaction {
                     EngineReaction::Directive(Directive::EmitFrame { target, fill, .. }) =>
@@ -107,7 +123,7 @@ fn delayed_whole_open_verdicts_preserve_split_ownership_and_retire_the_reservati
             ),
             WholeResourceOpenLanding::Applied
         );
-        assert_cancelled(&mut competitor, capture, 2_450);
+        assert_cancelled(&mut competitor, capture, at + 50);
         assert_eq!(
             response
                 .receiver
@@ -126,12 +142,15 @@ fn delayed_whole_open_verdicts_preserve_split_ownership_and_retire_the_reservati
                     reservation,
                     outcome: WholeResourceOpenOutcome::Opened(plaintext)
                 },
-                InstantMillis(2_460),
+                InstantMillis(at + 60),
                 &mut |_| panic!("stale work needs no entropy"),
                 &mut |_| panic!("stale work must have no effect"),
             ),
             WholeResourceOpenLanding::Stale
         );
+        if !matches!(boundary, SplitBoundary::Active) {
+            continue;
+        }
         response.receiver.resource_open_lane = ResourceOpenLane::EngineDirected;
         let pull = feed(&mut response.receiver, &response.continuation, 2_500);
         assert_eq!(pull.frames.len(), 1);
