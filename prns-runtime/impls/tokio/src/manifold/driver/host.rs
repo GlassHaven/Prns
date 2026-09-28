@@ -1,4 +1,4 @@
-use std::{cell::RefCell, time::Duration};
+use std::time::Duration;
 
 use tokio::time::Instant;
 
@@ -131,27 +131,6 @@ fn seeded_runtime_entropy() -> OsRuntimeEntropy {
     OsRuntimeEntropy::try_new().expect("OS CSPRNG must provide the initial runtime seed")
 }
 
-std::thread_local! {
-    static THREAD_ENTROPY: RefCell<Option<OsRuntimeEntropy>> = const { RefCell::new(None) };
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct TokioEntropy;
-
-impl TokioEntropy {
-    pub(crate) fn fill(self, bytes: &mut [u8]) {
-        if bytes.is_empty() {
-            return;
-        }
-        THREAD_ENTROPY.with(|stream| {
-            stream
-                .borrow_mut()
-                .get_or_insert_with(seeded_runtime_entropy)
-                .fill_random(bytes);
-        });
-    }
-}
-
 impl TokioHost {
     #[must_use]
     pub fn new() -> Self {
@@ -196,11 +175,7 @@ impl Host for TokioHost {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::Cell,
-        rc::Rc,
-        sync::{Arc, Barrier},
-    };
+    use std::{cell::Cell, rc::Rc};
 
     use prns_core::entropy::{EntropySource, RuntimeEntropy};
 
@@ -298,39 +273,6 @@ mod tests {
             host.entropy.reseed_health(),
             prns_core::entropy::ReseedHealth::Healthy
         );
-    }
-
-    #[test]
-    fn thread_entropy_is_isolated_seeds_lazily_and_ignores_empty_requests() {
-        let first_seeded = Arc::new(Barrier::new(2));
-        let release_first = Arc::new(Barrier::new(2));
-        let first_thread = std::thread::spawn({
-            let first_seeded = Arc::clone(&first_seeded);
-            let release_first = Arc::clone(&release_first);
-            move || {
-                THREAD_ENTROPY.with(|stream| assert!(stream.borrow().is_none()));
-                TokioEntropy.fill(&mut [0u8; 1]);
-                THREAD_ENTROPY.with(|stream| assert!(stream.borrow().is_some()));
-                first_seeded.wait();
-                release_first.wait();
-            }
-        });
-
-        first_seeded.wait();
-        std::thread::spawn(|| {
-            THREAD_ENTROPY.with(|stream| assert!(stream.borrow().is_none()));
-            TokioEntropy.fill(&mut []);
-            THREAD_ENTROPY.with(|stream| assert!(stream.borrow().is_none()));
-
-            TokioEntropy.fill(&mut [0u8; 1]);
-            THREAD_ENTROPY.with(|stream| assert!(stream.borrow().is_some()));
-        })
-        .join()
-        .expect("second entropy test thread completes");
-        release_first.wait();
-        first_thread
-            .join()
-            .expect("first entropy test thread completes");
     }
 
     #[test]

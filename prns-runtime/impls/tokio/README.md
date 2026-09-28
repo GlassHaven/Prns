@@ -45,6 +45,22 @@ request, followed by a successful ordinary exchange on the same link.
 
 ## Process model
 
+Handle and interface randomness belongs to the node, not the executor thread.
+Handle clones, supervisors and attached interface seams share one synchronized,
+OS-seeded stream; cloning ownership never copies generator state. Independent
+nodes and detached fleets have independent owners. Standalone interface seams
+construct their own owner. Construction eagerly seeds the stream and refuses
+to proceed if the OS seed source fails; a poisoned stream also fails closed.
+The engine host retains its separate, unsynchronized owned stream. Both use
+the shared core generator and reseeding policy. Path-discovery identifiers
+still use their existing fallible direct OS call.
+
+This ownership boundary does not expose deterministic entropy in production
+and is not full replay support. It adds one shared allocation per owner and a
+short mutex hold per nonempty handle/interface draw; empty fills are inert.
+Tests cover clone continuity, thread transfer, concurrent block consumption,
+node isolation, actual attachment plumbing and core reseed semantics.
+
 The runtime supports ordinary process creation that starts a new program, including
 `std::process::Command`. Continuing to use an inherited runtime after a raw Unix `fork` is not
 supported. A forked child must execute a fresh program image before using Prns; continuing within

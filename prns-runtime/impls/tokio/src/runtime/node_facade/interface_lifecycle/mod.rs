@@ -173,6 +173,7 @@ impl PrnsNodeHandle {
             &self.commands,
             &self.iface_build,
             &self.manifold_wake,
+            &self.entropy,
             interface,
             InterfaceWiring {
                 descriptor,
@@ -365,7 +366,7 @@ impl PrnsNodeHandle {
             interfaces: self.interfaces.clone(),
             attachment_epochs: self.attachment_epochs.clone(),
             ifac,
-            entropy: self.entropy,
+            entropy: self.entropy.clone(),
         };
         let build: Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>> + Send> =
             Box::new(move || Box::pin(supervisor.run(fleet)));
@@ -517,6 +518,7 @@ fn attach_interface<I>(
     commands: &UnboundedSender<HostCommand>,
     iface_build: &UnboundedSender<DriverMsg>,
     manifold_wake: &ManifoldWakeSender,
+    entropy: &crate::manifold::driver::TokioEntropy,
     interface: I,
     wiring: InterfaceWiring,
 ) -> AttachedInterface
@@ -541,9 +543,15 @@ where
     let depth = lane_depth_for(slot_cap);
     let (in_producer, in_consumer) = tokio_grant_lane(slot_cap, depth);
     let (out_producer, out_consumer) = tokio_grant_lane(slot_cap, depth);
-    let seam = TokioInterfaceSeam::new(id, in_producer, manifold_wake.clone(), out_consumer)
-        .with_origin(placement.origin)
-        .with_commands(commands.clone());
+    let seam = TokioInterfaceSeam::new_with_entropy(
+        id,
+        in_producer,
+        manifold_wake.clone(),
+        out_consumer,
+        entropy.clone(),
+    )
+    .with_origin(placement.origin)
+    .with_commands(commands.clone());
     let build: Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>> + Send> =
         Box::new(move || Box::pin(interface.run(seam)));
     let _ = commands.send(HostCommand::AddInterface(Box::new(AddInterfaceCommand {
@@ -605,6 +613,7 @@ impl Fleet {
             &self.commands,
             &self.iface_build,
             &self.manifold_wake,
+            &self.entropy,
             interface,
             InterfaceWiring {
                 descriptor,
@@ -649,7 +658,7 @@ impl Fleet {
             interfaces: Arc::new(Mutex::new(HashMap::new())),
             attachment_epochs: Arc::new(AtomicU64::new(0)),
             ifac: None,
-            entropy: crate::manifold::driver::TokioEntropy,
+            entropy: crate::manifold::driver::TokioEntropy::new(),
         };
         let tail = DetachedFleet {
             _commands: commands_rx,
@@ -919,6 +928,8 @@ fn stop_supervised_members(
     }
 }
 
+#[cfg(test)]
+mod entropy_tests;
 #[cfg(test)]
 mod tests;
 

@@ -1,7 +1,9 @@
 use prns_core::entropy::{EntropySource, ReseedHealth, RuntimeEntropy};
+mod shared;
 use prns_core::remote_control::{
     RemoteControlNodeIdentitySecrets, RemoteControlNodeIdentitySecretsError,
 };
+pub(crate) use shared::TokioEntropy;
 
 pub(crate) struct OsEntropySource;
 

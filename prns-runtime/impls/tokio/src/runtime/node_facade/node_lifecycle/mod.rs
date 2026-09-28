@@ -453,7 +453,7 @@ where
             interfaces: Arc::new(Mutex::new(HashMap::new())),
             store: InterfaceStore::new(),
             resource_admission: super::resource_admission::ResourceAdmissionRegistry::default(),
-            entropy: crate::manifold::driver::TokioEntropy,
+            entropy: crate::manifold::driver::TokioEntropy::new(),
             timing_oracle: Arc::new(Mutex::new(None)),
             remote_control_controller_grants,
             remote_control_target_accesses,
