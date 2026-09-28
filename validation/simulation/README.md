@@ -23,6 +23,8 @@ The [embedded restore follow-up](measurements/embedded-restore-cuts.md) addition
 checks decoded group settings and logical time through the real persistence owner.
 The [queued-owner campaign](measurements/queued-persistence-cuts.md) adds torn
 append and compaction recovery through real admission and completion handling.
+The [grant-storage campaign](measurements/grant-persistence-cuts.md) checks whole
+authorization-table recovery across interrupted permission changes and revocation.
 
 The medium intentionally makes its limits and faults explicit:
 

@@ -142,6 +142,9 @@ expected values. No production clock change was needed.
    or completion is delivered, retaining only bytes for reboot.
    Every surviving image also supports another durable group change, with exact
    persisted compaction-cooldown refusal and resumption where needed.
+   Controller-grant storage now adds 3,376 abrupt cuts through operator permission
+   updates and revocation, with exact whole-table restore before/after commit.
+   This is the persistence boundary, not the pairing/management transaction.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,

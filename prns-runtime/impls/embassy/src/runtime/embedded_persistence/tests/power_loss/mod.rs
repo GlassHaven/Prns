@@ -2,6 +2,7 @@ use super::*;
 
 mod continuation;
 mod flash;
+mod grants;
 use flash::{Control, Cut, Flash, Operation};
 
 const WRITE_TIME: InstantMillis = InstantMillis(100);
