@@ -18,7 +18,7 @@ use personal_rns::runtime::request_endpoints::{
 use personal_rns::runtime::{
     CryptoPoolConfig, Diagnostic, NoPersistence, NoRemoteControlHostControls, NodeRunError,
     PreConfiguredDestination, PrnsEvent, PrnsNode, PrnsNodeHandle, PrnsNodeRecipe,
-    ServeMyRequestEndpoints,
+    ServeMyRequestEndpoints, TokioHandleEntropy,
 };
 use personal_rns::storage::GrowableHeap;
 use personal_rns::units::DurationMillis;
@@ -135,6 +135,25 @@ where
     E: EntropySource + 'static,
     H: FnOnce(InstantMillis) -> TokioHost<E> + 'static,
 {
+    add_node_with_sources(runner, spec, move |origin| {
+        (
+            host(origin),
+            TokioHandleEntropy::try_os()
+                .unwrap_or_else(|error| unreachable!("OS-backed fixture entropy: {error}")),
+        )
+    })
+}
+
+pub fn add_node_with_sources<F, E, H>(
+    runner: &mut ManualTaskRunner<'_, Completion>,
+    spec: NodeSpec<F>,
+    sources: H,
+) -> (ManualTaskId, oneshot::Receiver<NodeControl>)
+where
+    F: FnOnce(&PrnsNodeHandle) + 'static,
+    E: EntropySource + 'static,
+    H: FnOnce(InstantMillis) -> (TokioHost<E>, TokioHandleEntropy) + 'static,
+{
     let elapsed = runner
         .snapshot()
         .unwrap_or_else(|error| unreachable!("node admission clock: {error}"))
@@ -158,8 +177,9 @@ where
     let (shutdown, stopping) = oneshot::channel();
     let task = runner
         .insert(async move {
-            let node = PrnsNode::new_with_host(
-                PrnsNodeRecipe {
+            let (host, handle_entropy) = sources(timeline_origin);
+            let node = PrnsNode::new_with_entropy_sources(
+                |_| PrnsNodeRecipe {
                     remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
                     transport_identity: match role {
                         NodeRole::Endpoint => None,
@@ -193,7 +213,8 @@ where
                     interfaces: attach_interfaces,
                     persistence: NoPersistence,
                 },
-                host(timeline_origin),
+                host,
+                handle_entropy,
             )
             .with_crypto_pool(CryptoPoolConfig::Inline);
             let clock = node.clock();

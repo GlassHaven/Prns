@@ -13,6 +13,9 @@ This is a current-status guide, not another chronological list of test slices.
   entropy. That bounded scenario now also covers a receiver restart and the
   successful/failed host reseed boundary. This is not general BLE or
   path-discovery replay.
+- A bounded path-discovery/echo variant now supplies all three runtime entropy
+  providers and compares interface draws, handle draws, path IDs and packet
+  traces. Changing either shared-stream or path-source input changes output.
 - Correctness scenarios cover 128 frame nodes, 20 routed nodes and 16 BLE nodes.
   Backend-scale tests are not evidence for thousands of production nodes.
 - Tokio/Embassy scenarios exercise real requests, Resource transfers, failures
@@ -27,15 +30,15 @@ This is a current-status guide, not another chronological list of test slices.
 | Logical boot epoch | Tokio node lifecycle normally selects persistence or wall time; explicit-host construction carries a supplied timeline | Manual-fleet fixtures supply the host at construction, with a fixed epoch plus runtime elapsed time |
 | Monotonic time | `ManualTimeDriver` owns paused Tokio time and validates medium coordination | Observe Tokio clocks inside runner-polled actors; outside-runtime reads use host time |
 | Engine/inline-crypto entropy | `TokioHost<S>` owns shared-core `RuntimeEntropy<S>`; the default source is the OS | Explicit-host node constructors preserve the supplied source through real engine execution |
-| Handle/interface entropy | `TokioEntropy` now owns an eagerly OS-seeded, node-scoped shared stream; handle clones, fleets and interface seams retain that owner | Executor-thread consumption no longer couples unrelated nodes; deterministic source selection is still absent |
-| Path-discovery identifiers | `PrnsNodeHandle::request_path` uses a fallible `OsEntropySource` read through a private source seam | Failure-before-admission is tested; full-node replay still needs source ownership/selection for this path |
+| Handle/interface entropy | `TokioHandleEntropy` owns a branded stream; handle clones, fleets and interface seams share ownership | Full-node construction now accepts an explicit provider; ordinary constructors remain OS-backed |
+| Path-discovery identifiers | The same owner retains a separate fallible source; the public `request_path` API consumes it before admission | Explicit provider selection and failure-before-admission are tested, including successful path discovery in the simulator |
 | Boot identities | Manual-fleet destinations and transport identities use explicit fixture secrets | Stable in this fixture; not a promise for arbitrary provisioning paths |
 | Actor order | Manual task runner supports cyclic and versioned seeded scheduling | Does not determine branch selection inside futures or background-worker completion |
 | Container ordering | Node handles include standard `HashMap` inventories | Audit iteration consumers before treating larger multi-interface ordering as reproducible |
 | Process-command timestamps | Tokio process-command support reads `SystemTime` | Outside the current no-process scenario; do not call the entire runtime clock-controlled |
 
 Source owners: Tokio `manifold/driver/host/mod.rs`, `runtime/entropy/mod.rs`,
-`runtime/entropy/shared.rs`,
+`runtime/entropy/shared/mod.rs`,
 `runtime/node_facade/path_discovery/mod.rs`, `runtime/node_facade/node_lifecycle/mod.rs`,
 `runtime/node_facade/persistence/mod.rs`, and `runtime/process_commands.rs`.
 Shared entropy policy already belongs to core; do not duplicate its generator
@@ -72,10 +75,11 @@ expected values. No production clock change was needed.
 
 ## Next milestones, in order
 
-1. Finish explicit per-node entropy design across the already-owned host stream,
-   the now node-scoped handle/interface owner, and path-request IDs, including
-   source selection, restarts and reseeding. Keep OS entropy as the production
-   default; avoid a process-global seed switch or weak shipping RNG mode.
+1. Apply the now-complete three-provider construction seam to BLE and other
+   backend consumers, auditing randomness outside node-owned providers. Keep
+   OS entropy as the production default; no global seed switch or weak
+   shipping RNG mode exists. Host restart/reseed evidence must not be treated
+   as shared-source/backend lifecycle coverage without exercising those paths.
 2. Carry the bounded frame-echo replay approach to other transports once their
    exercised inputs are controlled. Receiver restart and successful/failed
    periodic reseeding now have focused packet evidence. Retain
@@ -110,3 +114,8 @@ The [restart/reseed follow-up](measurements/restart-reseed-replay.md) records
 source reads by node and boot incarnation. It retains whole packet traces
 through restart and drives the real core reseed policy at its byte boundary.
 These tests add no shipping behavior or new entropy-source implementation.
+
+The [owned-input follow-up](measurements/owned-entropy-inputs.md) completes source
+selection for the three audited node-owned providers and exercises their public
+consumers. It records the shared owner's dispatch/memory cost and the remaining
+limits before claiming broader replay.

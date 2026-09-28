@@ -1,6 +1,7 @@
 use super::*;
 
 mod fixture;
+mod inputs;
 mod source;
 
 use fixture::{run, Scenario};
@@ -103,7 +104,9 @@ fn node_packets_repeat_across_successful_and_failed_periodic_reseeding() {
         let outcome = match scenario {
             Scenario::ReseedSuccess { fresh_seed } => ReadOutcome::Bytes(fresh_seed),
             Scenario::ReseedFailure => ReadOutcome::Unavailable,
-            Scenario::Fresh | Scenario::Restart { .. } => unreachable!("reseed scenarios only"),
+            Scenario::Fresh | Scenario::Restart { .. } | Scenario::OwnedInputs { .. } => {
+                unreachable!("reseed scenarios only")
+            }
         };
         let mut calls = first.source_calls.clone();
         calls.sort_by_key(|read| (read.boot.node, read.attempt));
@@ -156,4 +159,84 @@ fn reseed_material_and_failure_are_observable_in_packets() {
     assert_eq!(first.responses, failed.responses);
     assert_ne!(first.trace, changed.trace);
     assert_ne!(first.trace, failed.trace);
+}
+
+#[test]
+fn handle_interface_and_path_sources_replay_through_real_nodes() {
+    let first = run(
+        0x31,
+        b"owned inputs",
+        Scenario::OwnedInputs {
+            shared_seed: 0x57,
+            path_seed: 0xA3,
+        },
+    );
+    let seed = 0x57;
+    let mut reference = prns_core::entropy::RuntimeEntropy::try_new(move |output: &mut [u8]| {
+        output.fill(seed);
+        Ok::<(), core::convert::Infallible>(())
+    })
+    .unwrap_or_else(|never| match never {});
+    let mut blocks = [[0; 64]; 2];
+    for block in &mut blocks {
+        reference.fill_random(block);
+    }
+    assert_eq!(
+        first.inputs,
+        vec![
+            inputs::Observation::Interface {
+                boot: BootId {
+                    node: 0,
+                    generation: 0
+                },
+                bytes: blocks[0]
+            },
+            inputs::Observation::Interface {
+                boot: BootId {
+                    node: 1,
+                    generation: 0
+                },
+                bytes: blocks[0]
+            },
+            inputs::Observation::Handle { bytes: blocks[1] },
+            inputs::Observation::Path {
+                boot: BootId {
+                    node: 0,
+                    generation: 0
+                },
+                bytes: vec![0xA3; personal_rns::engine::PATH_REQUEST_ID_LEN]
+            },
+        ]
+    );
+    assert_eq!(
+        first,
+        run(
+            0x31,
+            b"owned inputs",
+            Scenario::OwnedInputs {
+                shared_seed: 0x57,
+                path_seed: 0xA3
+            }
+        )
+    );
+    let changed_path = run(
+        0x31,
+        b"owned inputs",
+        Scenario::OwnedInputs {
+            shared_seed: 0x57,
+            path_seed: 0xB4,
+        },
+    );
+    let changed_shared = run(
+        0x31,
+        b"owned inputs",
+        Scenario::OwnedInputs {
+            shared_seed: 0x68,
+            path_seed: 0xA3,
+        },
+    );
+    assert_eq!(first.responses, changed_path.responses);
+    assert_ne!(first.trace, changed_path.trace);
+    assert_ne!(first.responses, changed_shared.responses);
+    assert_ne!(first.trace, changed_shared.trace);
 }

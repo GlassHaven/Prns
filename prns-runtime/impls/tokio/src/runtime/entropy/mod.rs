@@ -4,6 +4,7 @@ use prns_core::remote_control::{
     RemoteControlNodeIdentitySecrets, RemoteControlNodeIdentitySecretsError,
 };
 pub(crate) use shared::TokioEntropy;
+pub use shared::TokioHandleEntropy;
 
 /// The operating-system CSPRNG used to seed and reseed Tokio runtime streams.
 pub struct OsEntropySource;

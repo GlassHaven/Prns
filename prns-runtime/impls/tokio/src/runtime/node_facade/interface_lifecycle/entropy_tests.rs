@@ -71,13 +71,35 @@ async fn run_next(receiver: &mut UnboundedReceiver<DriverMsg>) {
 
 #[tokio::test]
 async fn handles_supervisors_and_interface_seams_share_only_their_node_entropy() {
-    let (commands, _commands_rx) = mpsc::unbounded_channel();
-    let mut handle = PrnsNodeHandle::over(commands);
-    handle.entropy = TokioEntropy::from_test_seed(0x57);
+    use crate::runtime::{
+        ManuallyAttached, NoPersistence, NoRemoteControlHostControls, PreConfiguredDestination,
+        PrnsNode, PrnsNodeRecipe,
+    };
+    let observations = Arc::new(Mutex::new(Vec::new()));
+    let node = PrnsNode::new_with_entropy_sources(
+        |handle| {
+            let mut first = [0; 64];
+            handle.fill_random(&mut first);
+            observations.lock().unwrap().push(first);
+            PrnsNodeRecipe {
+                transport_identity: None,
+                remote_control: crate::remote_control::RemoteControlService::Unavailable,
+                pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
+                app_state: NoRemoteControlHostControls,
+                storage: crate::storage::GrowableHeap,
+                request_endpoints: crate::request_endpoints![],
+                interfaces: ManuallyAttached,
+                persistence: NoPersistence,
+                on_event: |_event, _state: &NoRemoteControlHostControls| {},
+            }
+        },
+        crate::manifold::driver::TokioHost::new(),
+        TokioEntropy::from_test_seed(0x57),
+    );
+    let mut handle = node.handle();
     let (builds, mut receiver) = mpsc::unbounded_channel();
     handle.iface_build = builds;
     let cloned = handle.clone();
-    let observations = Arc::new(Mutex::new(Vec::new()));
     let mut first = [0; 64];
     cloned.fill_random(&mut first);
     observations.lock().unwrap().push(first);
@@ -99,10 +121,10 @@ async fn handles_supervisors_and_interface_seams_share_only_their_node_entropy()
     other.entropy = TokioEntropy::from_test_seed(0x57);
     let mut independent = [0; 64];
     other.fill_random(&mut independent);
-    assert_eq!(independent, first);
+    assert_eq!(independent, observations.lock().unwrap()[0]);
 
     let expected_owner = TokioEntropy::from_test_seed(0x57);
-    let mut expected = vec![[0; 64]; 4];
+    let mut expected = vec![[0; 64]; 5];
     for bytes in &mut expected {
         expected_owner.fill(bytes);
     }

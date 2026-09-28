@@ -26,7 +26,7 @@ pub(crate) use destination_identity_retention::{
     DestinationIdentityRetentionHostCommand,
 };
 pub(crate) use entropy::TokioEntropy;
-pub use entropy::{OsEntropyError, OsEntropySource, OsRuntimeEntropy};
+pub use entropy::{OsEntropyError, OsEntropySource, OsRuntimeEntropy, TokioHandleEntropy};
 pub(crate) use identity_blackhole_commands::{
     apply_identity_blackhole_command, IdentityBlackholeHostCommand,
 };

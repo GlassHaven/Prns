@@ -435,13 +435,17 @@ where
         P: persistence::PersistenceIntent,
         B: FnOnce(PrnsNodeHandle) -> PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
     {
-        Self::assemble_with_host(build_recipe, |persistence| {
-            TokioHost::start_at(
-                persistence
-                    .map(persistence::NodePersistence::timeline_origin)
-                    .unwrap_or_else(persistence::wall_clock_timeline_origin),
-            )
-        })
+        Self::assemble_with_host(
+            build_recipe,
+            crate::runtime::TokioHandleEntropy::new(),
+            |persistence| {
+                TokioHost::start_at(
+                    persistence
+                        .map(persistence::NodePersistence::timeline_origin)
+                        .unwrap_or_else(persistence::wall_clock_timeline_origin),
+                )
+            },
+        )
     }
 }
 
@@ -472,11 +476,33 @@ where
         P: persistence::PersistenceIntent,
         B: FnOnce(PrnsNodeHandle) -> PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
     {
-        Self::assemble_with_host(build_recipe, |_| host)
+        Self::new_with_entropy_sources(
+            build_recipe,
+            host,
+            crate::runtime::TokioHandleEntropy::new(),
+        )
+    }
+
+    /// Selects every node-owned entropy provider before the recipe or interfaces can use them.
+    /// The host owns the timeline and engine stream; `handle_entropy` owns the shared
+    /// handle/interface stream and fallible path-ID provider. No provider is replaced at runtime.
+    pub fn new_with_entropy_sources<'a, D, I, P, B>(
+        build_recipe: B,
+        host: TokioHost<E>,
+        handle_entropy: crate::runtime::TokioHandleEntropy,
+    ) -> Self
+    where
+        D: IntoIterator<Item = PreConfiguredDestination<'a>>,
+        I: AttachIntent,
+        P: persistence::PersistenceIntent,
+        B: FnOnce(PrnsNodeHandle) -> PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
+    {
+        Self::assemble_with_host(build_recipe, handle_entropy, |_| host)
     }
 
     fn assemble_with_host<'a, D, I, P, B>(
         build_recipe: B,
+        handle_entropy: crate::runtime::TokioHandleEntropy,
         host: impl FnOnce(Option<&persistence::NodePersistence>) -> TokioHost<E>,
     ) -> Self
     where
@@ -504,7 +530,7 @@ where
             interfaces: Arc::new(Mutex::new(HashMap::new())),
             store: InterfaceStore::new(),
             resource_admission: super::resource_admission::ResourceAdmissionRegistry::default(),
-            entropy: crate::manifold::driver::TokioEntropy::new(),
+            entropy: handle_entropy,
             timing_oracle: Arc::new(Mutex::new(None)),
             remote_control_controller_grants,
             remote_control_target_accesses,

@@ -3,7 +3,7 @@ use personal_rns::interfaces::InterfaceId;
 use personal_rns::manifold::{interface_seam::Interface, tokio::TokioHost};
 use personal_rns::runtime::PrnsNodeHandle;
 use prns_simulation::{EndpointId, ManualTaskCancellation, ManualTaskId};
-use scenario::{add_node_with_host, NodeControl, TIMELINE_ORIGIN};
+use scenario::{add_node_with_sources, NodeControl, TIMELINE_ORIGIN};
 use source::Reseed;
 
 const NODES: usize = 2;
@@ -15,6 +15,7 @@ pub(super) enum Scenario {
     Restart { receiver_seed: u8 },
     ReseedSuccess { fresh_seed: u8 },
     ReseedFailure,
+    OwnedInputs { shared_seed: u8, path_seed: u8 },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -23,6 +24,7 @@ pub(super) struct Transcript {
     pub checkpoints: Vec<usize>,
     pub responses: Vec<Vec<u8>>,
     pub source_calls: Vec<Read>,
+    pub inputs: Vec<inputs::Observation>,
 }
 
 struct Node {
@@ -39,13 +41,15 @@ fn start(
     seed: u8,
     reseed: Reseed,
     calls: Rc<RefCell<Vec<Read>>>,
+    inputs: inputs::Inputs,
 ) -> Node {
     let interface = medium
         .attach(&(boot.node as u64).to_be_bytes())
         .unwrap_or_else(|error| unreachable!("unique replay interface: {error}"));
     let endpoint = interface.endpoint_id();
     let id = interface.descriptor().id;
-    let (task, mut ready) = add_node_with_host(
+    let interface = inputs.interface(interface, boot);
+    let (task, mut ready) = add_node_with_sources(
         runner,
         NodeSpec {
             index: boot.node,
@@ -57,7 +61,10 @@ fn start(
             heard_capacity: nonzero(1),
         },
         move |origin| {
-            TokioHost::with_runtime_entropy(origin, source::stream(boot, seed, reseed, calls))
+            (
+                TokioHost::with_runtime_entropy(origin, source::stream(boot, seed, reseed, calls)),
+                inputs.entropy(boot),
+            )
         },
     );
     assert!(settle(runner).is_empty());
@@ -152,9 +159,21 @@ pub(super) fn run(seed: u8, payload: &[u8], scenario: Scenario) -> Transcript {
     let mut runner = ManualTaskRunner::new(&mut driver, nonzero(NODES + 1));
     let source_calls = Rc::new(RefCell::new(Vec::new()));
     let reseed = match scenario {
-        Scenario::Fresh | Scenario::Restart { .. } => Reseed::NotReached,
+        Scenario::Fresh | Scenario::Restart { .. } | Scenario::OwnedInputs { .. } => {
+            Reseed::NotReached
+        }
         Scenario::ReseedSuccess { fresh_seed } => Reseed::Succeed(fresh_seed),
         Scenario::ReseedFailure => Reseed::Fail,
+    };
+    let inputs = match scenario {
+        Scenario::OwnedInputs {
+            shared_seed,
+            path_seed,
+        } => inputs::Inputs::new(shared_seed, path_seed),
+        Scenario::Fresh
+        | Scenario::Restart { .. }
+        | Scenario::ReseedSuccess { .. }
+        | Scenario::ReseedFailure => inputs::Inputs::new(0x57, 0xA3),
     };
     let mut nodes = [0, 1].map(|node| {
         start(
@@ -168,9 +187,33 @@ pub(super) fn run(seed: u8, payload: &[u8], scenario: Scenario) -> Transcript {
                 .unwrap_or_else(|| unreachable!("bounded replay seed")),
             reseed,
             Rc::clone(&source_calls),
+            inputs.clone(),
         )
     });
-    let mut responses = vec![exchange(&mut runner, &nodes, payload)];
+    let mut effective_payload = payload.to_vec();
+    if let Scenario::OwnedInputs { .. } = scenario {
+        let handle = nodes[0].control.handle.clone();
+        effective_payload.extend_from_slice(&inputs.handle_bytes(&handle));
+        let remote = destination(1)
+            .destination_hash()
+            .unwrap_or_else(|error| unreachable!("path destination: {error:?}"));
+        let task = runner
+            .insert(async move {
+                assert_eq!(
+                    handle.request_path(remote).await,
+                    Ok(personal_rns::engine::PathFound {
+                        hops: personal_rns::units::HopCount(1)
+                    })
+                );
+                Completion::RoutesChecked { node: 0 }
+            })
+            .unwrap_or_else(|error| unreachable!("path actor: {error}"));
+        assert_eq!(
+            settle(&mut runner),
+            [(task, Completion::RoutesChecked { node: 0 })]
+        );
+    }
+    let mut responses = vec![exchange(&mut runner, &nodes, &effective_payload)];
     let mut checkpoints = vec![medium.trace().events.len()];
     let expected_attachments = match scenario {
         Scenario::Restart { receiver_seed } => {
@@ -199,6 +242,7 @@ pub(super) fn run(seed: u8, payload: &[u8], scenario: Scenario) -> Transcript {
                 receiver_seed,
                 Reseed::NotReached,
                 Rc::clone(&source_calls),
+                inputs.clone(),
             );
             assert_ne!(replacement.task, old.task);
             assert_ne!(replacement.endpoint, old.endpoint);
@@ -212,7 +256,10 @@ pub(super) fn run(seed: u8, payload: &[u8], scenario: Scenario) -> Transcript {
             checkpoints.push(medium.trace().events.len());
             NODES + 1
         }
-        Scenario::Fresh | Scenario::ReseedSuccess { .. } | Scenario::ReseedFailure => NODES,
+        Scenario::Fresh
+        | Scenario::ReseedSuccess { .. }
+        | Scenario::ReseedFailure
+        | Scenario::OwnedInputs { .. } => NODES,
     };
     let expected: BTreeMap<_, _> = nodes
         .into_iter()
@@ -278,5 +325,6 @@ pub(super) fn run(seed: u8, payload: &[u8], scenario: Scenario) -> Transcript {
         checkpoints,
         responses,
         source_calls: calls,
+        inputs: inputs.snapshot(),
     }
 }
