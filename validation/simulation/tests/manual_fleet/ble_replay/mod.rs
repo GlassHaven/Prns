@@ -19,6 +19,8 @@ mod fixture;
 mod fleet;
 mod recovery;
 mod selection;
+mod star;
+mod traffic;
 
 #[derive(Clone, Copy)]
 enum Lifecycle {

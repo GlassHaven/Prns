@@ -1,10 +1,6 @@
 use super::*;
-use personal_rns::routing::links::LinkId;
-use personal_rns::wire::DestinationHash;
 use prns_simulation::{ManualTaskScheduling, SimulationSeed};
 use std::collections::BTreeSet;
-
-mod traffic;
 
 const NODES: usize = 8;
 const PAIRS: usize = NODES / 2;
@@ -109,7 +105,13 @@ fn run(inputs: Inputs) -> FleetTranscript {
                 *heard.borrow() == [destinations[node ^ 1]]
             })
     });
-    let mut links = traffic::establish(&mut runner, &nodes, &destinations, (0..NODES).step_by(2));
+    let mut links = traffic::establish(
+        &mut runner,
+        &nodes,
+        (0..NODES)
+            .step_by(2)
+            .map(|node| (node, destinations[node ^ 1])),
+    );
     let mut responses = vec![traffic::exchange(
         &mut runner,
         &nodes,
@@ -165,7 +167,11 @@ fn run(inputs: Inputs) -> FleetTranscript {
                     ble::member_inventory(&control.handle) == expected_peer(node)
                 })
     });
-    links.extend(traffic::establish(&mut runner, &nodes, &destinations, [0]));
+    links.extend(traffic::establish(
+        &mut runner,
+        &nodes,
+        [(0, destinations[1])],
+    ));
     responses.push(traffic::exchange(
         &mut runner,
         &nodes,

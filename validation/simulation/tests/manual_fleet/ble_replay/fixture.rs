@@ -17,6 +17,17 @@ pub(super) fn start_node(
     first: selection::FirstEvent,
     driver_first: personal_rns::runtime::InterfaceEventSource,
 ) -> LiveNode {
+    start_node_with_peers::<1>(runner, lab, index, seed, first, driver_first)
+}
+
+pub(super) fn start_node_with_peers<const MAX_PEERS: usize>(
+    runner: &mut ManualTaskRunner<'_, Completion>,
+    lab: &VirtualBleLab,
+    index: usize,
+    seed: u8,
+    first: selection::FirstEvent,
+    driver_first: personal_rns::runtime::InterfaceEventSource,
+) -> LiveNode {
     let gatt = VirtualGattConfig::new(CONTROL_MAX_LEN, 20)
         .unwrap_or_else(|error| unreachable!("GATT: {error}"));
     let config = VirtualBleBackendConfig::new(
@@ -25,9 +36,9 @@ pub(super) fn start_node(
         BleRoleCapabilities::DualRole,
         SimulationDurationInTicks::from_ticks(20),
         VirtualBleBackendLimits {
-            inbound_links: nonzero(1),
-            connections: nonzero(1),
-            discovered_peers: nonzero(1),
+            inbound_links: nonzero(MAX_PEERS),
+            connections: nonzero(MAX_PEERS),
+            discovered_peers: nonzero(MAX_PEERS),
         },
         VirtualBleLinkConfig::new(2, 2, BLE_HW_MTU, gatt)
             .unwrap_or_else(|error| unreachable!("link: {error}")),
@@ -36,7 +47,7 @@ pub(super) fn start_node(
     let backend = lab
         .attach_backend(config)
         .unwrap_or_else(|error| unreachable!("attach: {error}"));
-    let supervisor = BluetoothAuto::<_, 1>::new(
+    let supervisor = BluetoothAuto::<_, MAX_PEERS>::new(
         backend,
         BleIdentity::new([index as u8; 16]),
         if index == 0 {
@@ -60,7 +71,7 @@ pub(super) fn start_node(
                 let _attached = handle.supervise(supervisor);
             },
             heard: heard.clone(),
-            heard_capacity: nonzero(1),
+            heard_capacity: nonzero(MAX_PEERS),
         },
         move |origin| {
             (

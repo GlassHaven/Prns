@@ -1,16 +1,15 @@
 use super::*;
+use personal_rns::{routing::links::LinkId, wire::DestinationHash};
 
 pub(super) fn establish(
     runner: &mut ManualTaskRunner<'_, Completion>,
     nodes: &[fixture::LiveNode],
-    destinations: &[DestinationHash],
-    senders: impl IntoIterator<Item = usize>,
+    targets: impl IntoIterator<Item = (usize, DestinationHash)>,
 ) -> BTreeMap<usize, LinkId> {
-    let tasks: BTreeMap<_, _> = senders
+    let tasks: BTreeMap<_, _> = targets
         .into_iter()
-        .map(|node| {
+        .map(|(node, remote)| {
             let handle = nodes[node].control.handle.clone();
-            let remote = destinations[node ^ 1];
             let task = runner
                 .insert(async move {
                     let link = handle
