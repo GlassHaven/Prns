@@ -95,6 +95,7 @@ pub(super) struct NodeFixture<const RESPONSE_BYTES: usize, const REQUEST_BYTES: 
     received: Rc<RefCell<Vec<Received>>>,
     settled: Rc<RefCell<Vec<(CommandId, Settlement)>>>,
     closed: Rc<RefCell<Vec<(LinkId, LinkClosedReason)>>>,
+    task: prns_simulation::ManualTaskId,
 }
 
 impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
@@ -292,8 +293,9 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             EmbassyHost::new(entropy.handle()),
             RequestRoutingCapacity::new(),
         );
-        tasks.insert(node.run(supervisor.run(fleet)));
+        let task = tasks.insert(node.run(supervisor.run(fleet)));
         Self {
+            task,
             handle,
             status,
             responses,
@@ -314,6 +316,17 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
                 payload: SendPlainPacketPayload::from_slice(payload).unwrap(),
             }))
             .unwrap()
+    }
+
+    pub(super) fn stop(self, tasks: &mut EmbassyTasks<'_>) {
+        assert_eq!(
+            tasks.cancel(self.task),
+            prns_simulation::ManualTaskCancellation::Cancelled
+        );
+        assert_eq!(
+            tasks.cancel(self.task),
+            prns_simulation::ManualTaskCancellation::NotLive
+        );
     }
 
     pub fn take_received(&self) -> Vec<Received> {

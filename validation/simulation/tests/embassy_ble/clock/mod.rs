@@ -64,6 +64,13 @@ impl<'driver> EmbassyTasks<'driver> {
         self.runner.insert(future).unwrap()
     }
 
+    pub(super) fn cancel(&mut self, task: ManualTaskId) -> prns_simulation::ManualTaskCancellation {
+        let before = self.snapshot();
+        let result = self.runner.cancel(task).unwrap();
+        assert_eq!(self.snapshot(), before);
+        result
+    }
+
     #[track_caller]
     pub(super) fn complete_ready<T: 'static>(
         &mut self,

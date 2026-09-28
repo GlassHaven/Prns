@@ -47,6 +47,10 @@ This is a current-status guide, not another chronological list of test slices.
   through partition/reconnect for an Embassy/Tokio pair. Two platform-profile
   pairings and ten initial readiness orders each replay their own fixed input.
   This closes that bounded mixed replay gap, not arbitrary topology or fleet scale.
+- Embassy-only replay now covers replacing one complete receiver node at the
+  same radio address while its sender and the scenario clock remain live. Stale
+  static handles cannot address the replacement; old-link traffic expires and
+  fresh-link traffic succeeds. This is host actor reconstruction, not power loss.
 - Request cancellation and overlapping deadline behavior have substantial
   regression coverage. Further permutations require a concrete new question.
 
@@ -121,8 +125,10 @@ fixture gaps without treating Tokio results as Embassy evidence.
   independently of address. Two Embassy nodes repeat complete wire/discovery
   transcripts with payload and entropy controls. The
   [mixed-runtime follow-up](measurements/mixed-runtime-replay.md) adds complete
-  bidirectional transcripts through partition/reconnect. Full Embassy node restart
-  replay and larger Embassy fleets remain unproven.
+  bidirectional transcripts through partition/reconnect. The
+  [Embassy restart follow-up](measurements/embassy-node-restart-replay.md) covers
+  complete receiver reconstruction in a two-node Embassy scenario. Larger Embassy
+  fleets, repeated restart waves and persistence/power-loss models remain open.
 - Memory/scaling: production Embassy APIs require static channel, lane and
   entropy lifetimes. The fixture now counts their direct storage; the opt-in
   two-node heap probe uses a fresh child process so retained allocations from

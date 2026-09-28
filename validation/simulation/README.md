@@ -112,6 +112,9 @@ timer, complete-wire replay and process-isolated heap coverage.
 The [mixed-runtime replay extension](measurements/mixed-runtime-replay.md) compares
 whole bidirectional Embassy/Tokio traffic through a partition and reconnection,
 using explicit entropy and the shared test-only BLE readiness selector.
+The [Embassy restart extension](measurements/embassy-node-restart-replay.md)
+reconstructs a receiver at its former address without resetting the surviving
+sender or shared clock, and checks stale-handle and old-link isolation.
 
 Both frame and BLE media expose an atomic `MediumSchedule` snapshot containing
 their current tick and earliest scheduled event, if any. `VirtualBleLab` exposes

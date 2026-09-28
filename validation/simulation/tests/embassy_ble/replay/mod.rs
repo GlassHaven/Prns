@@ -1,5 +1,6 @@
 use super::*;
 mod mixed;
+mod restart;
 use personal_rns::engine::{AnnounceAppData, AnnounceNow, AnnounceTarget};
 use personal_rns::routing::request_handlers::RequestPathHash;
 use prns_simulation::ble::{
