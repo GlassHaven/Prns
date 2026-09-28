@@ -300,6 +300,8 @@ impl VirtualBleLab {
     /// zero. Each connection is sampled independently, not one atomic fleet instant.
     /// Counters describe events, not queue occupancy; concurrent send/receive
     /// execution may be sampled between their individual accounting updates.
+    /// Latest-send metadata is diagnostic only: a parsed header is neither
+    /// authenticated nor proof that the frame completed transmission.
     #[must_use]
     pub fn data_snapshots(&self) -> Vec<super::BleConnectionDataSnapshot> {
         self.lock_network().connections.data_snapshots()

@@ -1,6 +1,7 @@
 use super::*;
 use crate::scenario::POLL_BUDGET;
-use prns_simulation::ble::BleDataCounters;
+use personal_rns::wire::WireContext;
+use prns_simulation::ble::{BleDataCounters, BleDataSendObservation};
 use prns_simulation::{ManualTaskPoll, ManualTaskScheduling, SimulationSeed};
 
 #[derive(Clone, Copy, Debug)]
@@ -13,6 +14,34 @@ enum CutBoundary {
 enum Direction {
     TowardBle,
     FromBle,
+}
+
+#[derive(Clone, Copy)]
+enum Exchange {
+    Request,
+    Response,
+}
+
+impl Exchange {
+    fn context(self) -> WireContext {
+        match self {
+            Self::Request => WireContext::Request,
+            Self::Response => WireContext::Response,
+        }
+    }
+
+    fn direction(self, request: Direction) -> Direction {
+        match (self, request) {
+            (Self::Request, direction) => direction,
+            (Self::Response, Direction::TowardBle) => Direction::FromBle,
+            (Self::Response, Direction::FromBle) => Direction::TowardBle,
+        }
+    }
+}
+
+struct FragmentTarget {
+    context: WireContext,
+    link: LinkId,
 }
 
 impl Direction {
@@ -45,21 +74,31 @@ impl Direction {
     }
 
     fn counters(self, ble: &VirtualBleLab) -> BleDataCounters {
+        self.activity(ble).0
+    }
+
+    fn activity(self, ble: &VirtualBleLab) -> (BleDataCounters, Option<BleDataSendObservation>) {
         let snapshots = ble.data_snapshots();
         let [connection] = snapshots.as_slice() else {
             unreachable!("exactly one active BLE connection");
         };
         let sender = BleAddress::new([self.sender() as u8; 6]);
         let receiver = BleAddress::new([self.receiver() as u8; 6]);
-        let counters = if connection.dialer == sender {
+        let (counters, observation) = if connection.dialer == sender {
             assert_eq!(connection.listener, receiver);
-            connection.dialer_to_listener
+            (
+                connection.dialer_to_listener,
+                connection.dialer_last_send.clone(),
+            )
         } else {
             assert_eq!((connection.dialer, connection.listener), (receiver, sender));
-            connection.listener_to_dialer
+            (
+                connection.listener_to_dialer,
+                connection.listener_last_send.clone(),
+            )
         };
         assert!(!counters.saturated);
-        counters
+        (counters, observation)
     }
 }
 
@@ -70,6 +109,7 @@ fn stop_partial(
     direction: Direction,
     boundary: CutBoundary,
     before: BleDataCounters,
+    target: FragmentTarget,
 ) {
     let clock = runner
         .snapshot()
@@ -78,7 +118,19 @@ fn stop_partial(
         let Some(ManualTaskPoll::Pending { task }) = runner.poll_next().ok() else {
             unreachable!("request must remain pending at the partial-frame boundary");
         };
-        let current = direction.counters(ble);
+        let (current, observation) = direction.activity(ble);
+        let Some(observation) = observation else {
+            continue;
+        };
+        if observation.before.sends_started < before.sends_started
+            || !observation.header.is_some_and(|header| {
+                header.context == target.context && header.address == target.link.to_address()
+            })
+        {
+            continue;
+        }
+        let before = observation.before;
+        assert!(!before.saturated);
         if current.fragments_queued == before.fragments_queued {
             continue;
         }
@@ -108,6 +160,7 @@ fn stop_partial(
 
 fn exercise(
     direction: Direction,
+    exchange: Exchange,
     boundary: CutBoundary,
     profile: Profile,
     scheduling: ManualTaskScheduling,
@@ -122,8 +175,9 @@ fn exercise(
             let crossing = link(runner, nodes, direction.requester(), direction.responder());
             let local = link(runner, nodes, 0, BRIDGE);
             let tasks: Vec<_> = nodes.iter().map(|node| node.task).collect();
+            let observed_direction = exchange.direction(direction);
             for cycle in 0..CYCLES {
-                let before = direction.counters(ble);
+                let before = observed_direction.counters(ble);
                 let bytes = vec![0x30 + cycle as u8; 256];
                 let control = request(
                     runner,
@@ -132,7 +186,18 @@ fn exercise(
                     crossing,
                     bytes.clone(),
                 );
-                stop_partial(runner, ble, nodes, direction, boundary, before);
+                stop_partial(
+                    runner,
+                    ble,
+                    nodes,
+                    observed_direction,
+                    boundary,
+                    before,
+                    FragmentTarget {
+                        context: exchange.context(),
+                        link: crossing,
+                    },
+                );
                 assert_eq!(
                     settle(runner),
                     [(
@@ -144,10 +209,21 @@ fn exercise(
                     )]
                 );
 
-                let before = direction.counters(ble);
+                let before = observed_direction.counters(ble);
                 let started = frames.now();
                 let pending = lost_requests(runner, nodes, &[(direction.requester(), crossing)]);
-                stop_partial(runner, ble, nodes, direction, boundary, before);
+                stop_partial(
+                    runner,
+                    ble,
+                    nodes,
+                    observed_direction,
+                    boundary,
+                    before,
+                    FragmentTarget {
+                        context: exchange.context(),
+                        link: crossing,
+                    },
+                );
                 assert_eq!(
                     ble.set_reachability(
                         BleAddress::new([BRIDGE as u8; 6]),
@@ -190,7 +266,7 @@ fn exercise(
     );
 }
 
-fn matrix(boundary: CutBoundary) {
+fn matrix(boundary: CutBoundary, exchange: Exchange) {
     for direction in [Direction::TowardBle, Direction::FromBle] {
         for profile in [Profile::AppleBridge, Profile::BluezBridge] {
             for scheduling in [
@@ -205,7 +281,7 @@ fn matrix(boundary: CutBoundary) {
                     seed: SimulationSeed::new(u64::MAX),
                 },
             ] {
-                exercise(direction, boundary, profile, scheduling);
+                exercise(direction, exchange, boundary, profile, scheduling);
             }
         }
     }
@@ -213,10 +289,20 @@ fn matrix(boundary: CutBoundary) {
 
 #[test]
 fn mixed_fragmented_request_cut_after_queueing_partial_frame() {
-    matrix(CutBoundary::Queued);
+    matrix(CutBoundary::Queued, Exchange::Request);
 }
 
 #[test]
 fn mixed_fragmented_request_cut_after_consuming_partial_frame() {
-    matrix(CutBoundary::Consumed);
+    matrix(CutBoundary::Consumed, Exchange::Request);
+}
+
+#[test]
+fn mixed_fragmented_response_cut_after_queueing_partial_frame() {
+    matrix(CutBoundary::Queued, Exchange::Response);
+}
+
+#[test]
+fn mixed_fragmented_response_cut_after_consuming_partial_frame() {
+    matrix(CutBoundary::Consumed, Exchange::Response);
 }

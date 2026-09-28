@@ -20,7 +20,7 @@ pub use backend::{
     VirtualBleLink, VirtualBleLinkConfig,
 };
 pub use config::{BleCapacityField, BleMediumConfig, BleMediumConfigError};
-pub use connection::{BleConnectionDataSnapshot, BleDataCounters};
+pub use connection::{BleConnectionDataSnapshot, BleDataCounters, BleDataSendObservation};
 pub use discovery::{BleDiscoveredPeer, BleDiscoverySnapshot};
 pub use gatt::{VirtualBleSink, VirtualBleSource, VirtualGattConfig, VirtualGattConfigError};
 pub use medium::{

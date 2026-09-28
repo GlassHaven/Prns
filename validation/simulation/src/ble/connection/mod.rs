@@ -9,14 +9,14 @@ mod index;
 
 pub(in crate::ble) use data::ConnectionSide;
 pub(in crate::ble) use data::DataEvent;
-pub use data::{BleConnectionDataSnapshot, BleDataCounters};
+pub use data::{BleConnectionDataSnapshot, BleDataCounters, BleDataSendObservation};
 
 pub(super) use index::ConnectionIndex;
 
 pub(super) struct Connection {
     addresses: [BleAddress; 2],
     closed: watch::Sender<bool>,
-    data: Mutex<[BleDataCounters; 2]>,
+    data: Mutex<[data::DirectionActivity; 2]>,
 }
 
 impl Connection {
@@ -25,7 +25,7 @@ impl Connection {
         Self {
             addresses: [first, second],
             closed,
-            data: Mutex::new([BleDataCounters::default(); 2]),
+            data: Mutex::new(Default::default()),
         }
     }
 
@@ -41,8 +41,10 @@ impl Connection {
         BleConnectionDataSnapshot {
             dialer: self.addresses[0],
             listener: self.addresses[1],
-            dialer_to_listener: data[0],
-            listener_to_dialer: data[1],
+            dialer_to_listener: data[0].counters,
+            listener_to_dialer: data[1].counters,
+            dialer_last_send: data[0].last_send.clone(),
+            listener_last_send: data[1].last_send.clone(),
         }
     }
 
@@ -69,11 +71,29 @@ pub(super) struct ConnectionEndpoint {
 }
 
 impl ConnectionEndpoint {
+    pub(in crate::ble) fn start_send(&self, frame: &[u8]) {
+        let mut data = self
+            .connection
+            .data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let activity = &mut data[self.side.outgoing()];
+        activity.last_send = Some(BleDataSendObservation {
+            header: personal_rns::wire::WirePacketHeader::parse(frame)
+                .ok()
+                .map(|(header, _)| header),
+            frame_length: frame.len(),
+            before: activity.counters,
+        });
+        activity.counters.record(DataEvent::SendStarted);
+    }
+
     pub(in crate::ble) fn outgoing(&self, event: DataEvent) {
         self.connection
             .data
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)[self.side.outgoing()]
+        .counters
         .record(event);
     }
 
@@ -82,6 +102,7 @@ impl ConnectionEndpoint {
             .data
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)[self.side.incoming()]
+        .counters
         .record(event);
     }
 }

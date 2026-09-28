@@ -1,4 +1,21 @@
 use super::BleAddress;
+use personal_rns::wire::WirePacketHeader;
+
+/// The latest length-valid send attempt, not a delivery or authentication claim.
+/// Retains only a parsed header, length and counter baseline; never packet payload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BleDataSendObservation {
+    /// None means these bytes did not parse as a Reticulum header.
+    pub header: Option<WirePacketHeader>,
+    pub frame_length: usize,
+    pub before: BleDataCounters,
+}
+
+#[derive(Default)]
+pub(super) struct DirectionActivity {
+    pub counters: BleDataCounters,
+    pub last_send: Option<BleDataSendObservation>,
+}
 
 /// Cumulative data-characteristic activity, excluding handshake/control values.
 /// Started minus completed sends is not an active-send count: cancellation is
@@ -21,6 +38,8 @@ pub struct BleConnectionDataSnapshot {
     pub listener: BleAddress,
     pub dialer_to_listener: BleDataCounters,
     pub listener_to_dialer: BleDataCounters,
+    pub dialer_last_send: Option<BleDataSendObservation>,
+    pub listener_last_send: Option<BleDataSendObservation>,
 }
 
 pub(in crate::ble) enum DataEvent {

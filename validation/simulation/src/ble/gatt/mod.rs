@@ -11,6 +11,8 @@ use super::connection::{ConnectionEndpoint, DataEvent};
 use super::VirtualBleError;
 
 #[cfg(test)]
+mod observation_tests;
+#[cfg(test)]
 mod tests;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,7 +186,7 @@ impl BleSink for VirtualBleSink {
         }
         let mut closed = self.endpoint.connection.subscribe();
         let mut value = [0; BLE_HW_MTU + FRAGMENT_HEADER_LEN];
-        self.endpoint.outgoing(DataEvent::SendStarted);
+        self.endpoint.start_send(frame);
         for fragment in fragments_of(frame, self.value_limit) {
             if *closed.borrow_and_update() {
                 return Err(VirtualBleError::LinkClosed);

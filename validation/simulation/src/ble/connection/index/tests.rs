@@ -104,6 +104,8 @@ fn activity_snapshots_retire_closed_connections_and_do_not_alias_replacements() 
     second.incoming(DataEvent::ValueConsumed);
     second.outgoing(DataEvent::SendStarted);
     let expected = BleConnectionDataSnapshot {
+        dialer_last_send: None,
+        listener_last_send: None,
         dialer: FIRST,
         listener: SECOND,
         dialer_to_listener: BleDataCounters {
@@ -121,10 +123,12 @@ fn activity_snapshots_retire_closed_connections_and_do_not_alias_replacements() 
     assert!(index.data_snapshots().is_empty());
     let replacement = Arc::new(Connection::new(FIRST, SECOND));
     index.insert(replacement);
-    first.outgoing(DataEvent::SendCompleted);
+    first.start_send(b"old closed endpoint");
     assert_eq!(
         index.data_snapshots(),
         [BleConnectionDataSnapshot {
+            dialer_last_send: None,
+            listener_last_send: None,
             dialer: FIRST,
             listener: SECOND,
             dialer_to_listener: BleDataCounters::default(),

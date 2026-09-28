@@ -681,6 +681,12 @@ or consumed, before a complete frame exists. Both request directions recover on
 the original logical links. These counters retain no packet history and reset
 with connection replacement; saturation is explicit.
 
+The [partial-GATT response matrix](measurements/mixed-fragmented-responses.md)
+adds the returning half of the exchange. Both request and response boundaries
+now match the latest parsed packet header and logical link before inspecting
+fragment deltas, avoiding confusion with protocol proofs. Only the latest header,
+frame length and counter baseline are retained per direction, never payloads.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

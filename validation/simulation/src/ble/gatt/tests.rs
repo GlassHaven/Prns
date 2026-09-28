@@ -23,7 +23,7 @@ fn endpoints() -> (Arc<ConnectionEndpoint>, Arc<ConnectionEndpoint>) {
     )
 }
 
-fn data_pair(value_limit: usize) -> (VirtualBleSink, VirtualBleSource) {
+pub(super) fn data_pair(value_limit: usize) -> (VirtualBleSink, VirtualBleSource) {
     let (first, second) = endpoints();
     let (sender, receiver) = mpsc::channel(1);
     (
