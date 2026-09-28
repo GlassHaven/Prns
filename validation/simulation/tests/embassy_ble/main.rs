@@ -20,6 +20,8 @@ mod clock;
 #[cfg(feature = "heap-profile")]
 mod heap;
 mod replay;
+#[path = "../support/ble_selection.rs"]
+mod selection;
 mod static_storage;
 
 #[cfg(feature = "heap-profile")]

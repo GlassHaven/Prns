@@ -43,6 +43,10 @@ This is a current-status guide, not another chronological list of test slices.
   exact two-node BLE wire replay with changed-payload/entropy controls, and a
   process-isolated heap probe that accounts for static fixture storage separately.
   These are bounded Embassy results, not mixed-runtime byte replay or fleet scale.
+- The mixed-runtime follow-up now repeats complete bidirectional BLE transcripts
+  through partition/reconnect for an Embassy/Tokio pair. Two platform-profile
+  pairings and ten initial readiness orders each replay their own fixed input.
+  This closes that bounded mixed replay gap, not arbitrary topology or fleet scale.
 - Request cancellation and overlapping deadline behavior have substantial
   regression coverage. Further permutations require a concrete new question.
 
@@ -115,8 +119,10 @@ fixture gaps without treating Tokio results as Embassy evidence.
   supervisor stops at its ten-second greeting deadline with a day-long horizon.
 - Replay: the existing `SharedRuntimeEntropy` fixture source now varies
   independently of address. Two Embassy nodes repeat complete wire/discovery
-  transcripts with payload and entropy controls. Mixed-runtime exact-byte replay,
-  Embassy restart/reconnect replay and larger Embassy fleets remain unproven.
+  transcripts with payload and entropy controls. The
+  [mixed-runtime follow-up](measurements/mixed-runtime-replay.md) adds complete
+  bidirectional transcripts through partition/reconnect. Full Embassy node restart
+  replay and larger Embassy fleets remain unproven.
 - Memory/scaling: production Embassy APIs require static channel, lane and
   entropy lifetimes. The fixture now counts their direct storage; the opt-in
   two-node heap probe uses a fresh child process so retained allocations from

@@ -48,6 +48,10 @@ This proves the bounded Embassy-only scenario. Mixed Tokio/Embassy fixtures stil
 use ordinary Tokio entropy sources and do not yet claim whole-byte replay.
 Embassy reconnect/restart replay and large fleets remain separate milestones.
 
+The subsequent [mixed-runtime replay extension](mixed-runtime-replay.md) adds
+complete bidirectional Embassy/Tokio traffic through partition/reconnect. The
+limits above describe this initial Embassy-only checkpoint.
+
 ## Static fixture storage and isolated heap measurement
 
 Production Embassy APIs require static references for channels, lanes and entropy

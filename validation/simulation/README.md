@@ -109,6 +109,9 @@ for a 24-hour real-node lifecycle scenario and the opt-in 8/32/128-node heap pro
 The Embassy fixture additionally bounds each step by its observable timer queue;
 see [Embassy parity evidence](measurements/embassy-parity.md) for coordinated
 timer, complete-wire replay and process-isolated heap coverage.
+The [mixed-runtime replay extension](measurements/mixed-runtime-replay.md) compares
+whole bidirectional Embassy/Tokio traffic through a partition and reconnection,
+using explicit entropy and the shared test-only BLE readiness selector.
 
 Both frame and BLE media expose an atomic `MediumSchedule` snapshot containing
 their current tick and earliest scheduled event, if any. `VirtualBleLab` exposes

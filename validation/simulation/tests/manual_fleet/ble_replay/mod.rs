@@ -18,6 +18,7 @@ use scenario::add_node_with_sources_and_arbitration;
 mod fixture;
 mod fleet;
 mod recovery;
+#[path = "../../support/ble_selection.rs"]
 mod selection;
 mod star;
 mod traffic;
