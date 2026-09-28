@@ -80,3 +80,29 @@ format/docs, registry and website checks on macOS arm64. Both fault modes run in
 the existing registered recovery suite. No production source changed; the wider
 radio simulation, firmware matrix and Miri were not rerun for this test-only
 extension.
+
+## Continued use after recovery
+
+Every surviving cut image now boots another fresh owner and submits a distinct
+`after-reboot` group configuration through its real mailbox. Success must publish
+the full new snapshot, and two subsequent fresh boots must recover that snapshot.
+This closes the gap between readable recovery and continued durable use.
+
+All 65 append-cut images accept the new write immediately. Of the 1,291
+compaction-cut images, 1,188 first return the typed `Capacity` outcome because the
+persisted wear budget disallows another compaction yet. Those cases must perform
+no flash I/O and retain the recovered snapshot, both at boot and one millisecond
+before the independently expected deadline. At the exact deadline the same owner
+must accept and durably complete the new request. The original 100 ms attempt is
+rounded up to a 60,000 ms budget marker, then the configured daily interval is
+added; the test does not derive its expected deadline from the owner's result.
+
+Reported-error and abrupt-removal trials already require identical surviving
+byte images, so one continuation runs per distinct cut case. This remains
+owner-level group persistence evidence, not live radio activation or a complete
+running-node lifecycle. No production behavior changed.
+
+The continuation extension passed the registered recovery suite (33 tests), all
+145 Embassy library tests, all-target Embassy clippy, registry and website checks
+on macOS arm64. The full radio simulation, firmware matrix and Miri were not
+rerun for this owner-test-only change.

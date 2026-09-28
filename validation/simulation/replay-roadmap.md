@@ -140,6 +140,8 @@ expected values. No production clock change was needed.
    and full-node durable reboot remain open.
    Those same cut points also cover dropping pending owner I/O before an error
    or completion is delivered, retaining only bytes for reboot.
+   Every surviving image also supports another durable group change, with exact
+   persisted compaction-cooldown refusal and resumption where needed.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,

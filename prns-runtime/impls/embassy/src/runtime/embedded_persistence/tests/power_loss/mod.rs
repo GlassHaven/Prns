@@ -1,5 +1,6 @@
 use super::*;
 
+mod continuation;
 mod flash;
 use flash::{Control, Cut, Flash, Operation};
 
@@ -202,6 +203,7 @@ fn campaign(campaign: Campaign) {
             Operation::Write { len: 4, .. }
         ));
         let mut cuts = 0;
+        let mut deferred = 0;
         for (operation, event) in reference.trace.iter().enumerate() {
             let prefixes: Vec<_> = match event {
                 Operation::Read { len, .. } => std::vec![0, *len],
@@ -240,11 +242,21 @@ fn campaign(campaign: Campaign) {
                 for _ in 0..2 {
                     assert_eq!(reboot(removed.image).await, durable, "{cut:?}");
                 }
+                if matches!(
+                    continuation::verify(removed.image, durable).await,
+                    continuation::Recovery::AfterCooldown
+                ) {
+                    deferred += 1;
+                }
                 cuts += 1;
             }
         }
+        match campaign {
+            Campaign::Append => assert_eq!(deferred, 0),
+            Campaign::CompactThenAppend => assert!(deferred > 0 && deferred < cuts),
+        }
         std::eprintln!(
-            "verified {cuts} queued-owner {campaign:?} cuts with both reported errors and abrupt power removal"
+            "verified {cuts} queued-owner {campaign:?} cuts with both fault modes and follow-up writes ({deferred} cooldowns)"
         );
     });
 }
