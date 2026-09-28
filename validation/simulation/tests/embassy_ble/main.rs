@@ -17,6 +17,14 @@ use prns_runtime_embassy::manifold::driver::InterfaceLifecycle;
 use prns_simulation::{ManualMedium, ManualTimeDriver, ManualTimeError, SimulationTick};
 
 mod clock;
+#[cfg(feature = "heap-profile")]
+mod heap;
+mod replay;
+mod static_storage;
+
+#[cfg(feature = "heap-profile")]
+#[global_allocator]
+static HEAP: dhat::Alloc = dhat::Alloc;
 mod echo;
 mod fixture;
 mod interop;

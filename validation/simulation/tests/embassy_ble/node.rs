@@ -79,6 +79,12 @@ pub(super) fn destination() -> PreConfiguredDestination<'static> {
 
 pub(super) type Node = NodeFixture<PAYLOAD_BYTES, MAX_SEND_REQUEST_DATA_LEN>;
 
+pub(super) struct NodeInputs {
+    pub address: u8,
+    pub endpoint: Endpoint,
+    pub entropy_seed: u8,
+}
+
 pub(super) struct NodeFixture<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize> {
     pub handle: Handle<RESPONSE_BYTES>,
     pub status: BluetoothAutoStatus<MAX_PEERS>,
@@ -150,6 +156,36 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
         endpoints: R,
         storage: S,
     ) -> Self {
+        Self::with_storage_inputs(
+            tasks,
+            lab,
+            NodeInputs {
+                address,
+                endpoint,
+                entropy_seed: address,
+            },
+            destinations,
+            endpoints,
+            storage,
+        )
+    }
+
+    pub(super) fn with_storage_inputs<
+        R: RequestEndpointSet<NoRemoteControlHostControls> + 'static,
+        S: StorageLayout + 'static,
+    >(
+        tasks: &mut EmbassyTasks<'_>,
+        lab: &VirtualBleLab,
+        inputs: NodeInputs,
+        destinations: [PreConfiguredDestination<'static>; 1],
+        endpoints: R,
+        storage: S,
+    ) -> Self {
+        let NodeInputs {
+            address,
+            endpoint,
+            entropy_seed,
+        } = inputs;
         let RadioFixture {
             supervisor,
             fleet,
@@ -159,15 +195,16 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
             wire,
         } = RadioFixture::new(lab, address, endpoint);
         let status = supervisor.status();
-        let commands = Box::leak(Box::new(
-            Channel::<RawMutex, IssuedCommand, COMMAND_CAPACITY>::new(),
-        ));
-        let completions = Box::leak(Box::new(CompletionPool::<
+        let commands =
+            super::static_storage::allocate(
+                Channel::<RawMutex, IssuedCommand, COMMAND_CAPACITY>::new(),
+            );
+        let completions = super::static_storage::allocate(CompletionPool::<
             RawMutex,
             COMMAND_CAPACITY,
             REQUEST_CAPACITY,
             RESPONSE_BYTES,
-        >::new()));
+        >::new());
         let handle = Handle::new(commands.sender(), completions);
         let wiring = lanes.into_manifold_wiring(
             notify.receiver(),
@@ -187,9 +224,9 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
         let respond_events = responded.clone();
         let request_events = requests.clone();
         let response_events = responses.clone();
-        let entropy = Box::leak(Box::new(
-            SharedRuntimeEntropy::<RawMutex, _>::try_new(TestEntropy(address)).unwrap(),
-        ));
+        let entropy = super::static_storage::allocate(
+            SharedRuntimeEntropy::<RawMutex, _>::try_new(TestEntropy(entropy_seed)).unwrap(),
+        );
         let recipe = PrnsNodeRecipe {
             transport_identity: None,
             remote_control: RemoteControlService::Unavailable,

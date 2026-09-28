@@ -70,7 +70,7 @@ pub(super) fn converge<const RESPONSE: usize, const REQUEST: usize>(
         }
         let now = tasks.snapshot().tick.get();
         assert!(now < deadline, "mixed-runtime discovery must converge");
-        let _ = tasks.advance(tick(now + 1)).unwrap();
+        let _ = tasks.advance_to_next_wake(tick(deadline)).unwrap();
     }
     unreachable!("bounded discovery step count")
 }

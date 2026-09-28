@@ -79,7 +79,7 @@ pub(super) struct RadioFixture {
 impl RadioFixture {
     pub fn new(lab: &VirtualBleLab, address: u8, endpoint: Endpoint) -> Self {
         let id = InterfaceId::from_channel_tag(InterfaceKind::BluetoothAuto, &[address]);
-        let shared = Box::leak(Box::new(BluetoothAutoShared::new(id)));
+        let shared = super::static_storage::allocate(BluetoothAutoShared::new(id));
         let wire = WireGate::new();
         let supervisor = BluetoothAuto::new(
             GatedBackend::new(backend(lab, address), wire.clone()),
@@ -91,12 +91,11 @@ impl RadioFixture {
             },
             shared,
         );
-        let lane = Box::leak(Box::new(
-            StaticManifoldLane::<RawMutex, BLE_HW_MTU, 2>::new(),
-        ));
-        let wake = Box::leak(Box::new(Signal::new()));
-        let notify = Box::leak(Box::new(Channel::new()));
-        let lifecycle = Box::leak(Box::new(Lifecycle::new()));
+        let lane =
+            super::static_storage::allocate(StaticManifoldLane::<RawMutex, BLE_HW_MTU, 2>::new());
+        let wake = super::static_storage::allocate(Signal::new());
+        let notify = super::static_storage::allocate(Channel::new());
+        let lifecycle = super::static_storage::allocate(Lifecycle::new());
         let mut lanes = ManifoldLaneSet::<RawMutex, 1, 2>::new();
         let fleet = lanes
             .claim_supervisor(lane, id, wake)

@@ -3493,6 +3493,8 @@ dependencies = [
  "dhat",
  "embassy-sync 0.8.0",
  "embassy-time",
+ "embassy-time-driver",
+ "embassy-time-queue-utils",
  "personal-rns",
  "prns-core",
  "prns-interfaces-embassy",

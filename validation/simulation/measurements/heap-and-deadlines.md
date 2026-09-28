@@ -3,11 +3,15 @@
 ## Heap baseline
 
 The optional `heap-profile` feature enables the repository's existing DHAT
-allocator tooling only in the manual-fleet test executable. Default builds and
+allocator tooling in the manual-fleet test executable. Default builds and
 shipping crates do not install it. Run the exact ignored probe with one test
 thread; DHAT measures the entire process, not an individual actor. Each fleet
 size gets a fresh profiler. No reference transcript is retained during the run.
 Phase snapshots separate boot, connected traffic, recovery and teardown.
+
+The later [Embassy checkpoint](embassy-parity.md) adds a separate process-isolated
+probe and observable timer adapter; its static-lifetime accounting must not be
+inferred from the Tokio fleet results below.
 
 The original paired fixture reserved 32,768 discovery events per node despite
 retaining fewer than 13 per node in the measured runs. It now permits 64 events

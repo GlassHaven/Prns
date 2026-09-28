@@ -92,7 +92,7 @@ replay is not yet deterministic, and wall-clock boot timestamps and OS entropy
 remain outside this control. This models the characteristic-value boundary, not
 native controller scheduling or OS Bluetooth APIs. L2CAP is explicitly
 unavailable; capability advertisement reports GATT support and the configured
-frame limit. Wi-Fi, flash, physical reset, sleep, automatic deadline discovery, and
+frame limit. Wi-Fi, flash, physical reset, sleep, and
 additional medium models remain future work. Frame/BLE time coordination is
 available through the manual bridge below.
 
@@ -106,6 +106,9 @@ medium effects settle before actor polling resumes. This discovers Tokio timers,
 not Embassy timers or external worker completions. Explicit-boundary stepping
 remains available. See the [heap and deadline evidence](measurements/heap-and-deadlines.md)
 for a 24-hour real-node lifecycle scenario and the opt-in 8/32/128-node heap probe.
+The Embassy fixture additionally bounds each step by its observable timer queue;
+see [Embassy parity evidence](measurements/embassy-parity.md) for coordinated
+timer, complete-wire replay and process-isolated heap coverage.
 
 Both frame and BLE media expose an atomic `MediumSchedule` snapshot containing
 their current tick and earliest scheduled event, if any. `VirtualBleLab` exposes
@@ -514,13 +517,15 @@ allow an ordinary exchange on the same link. This exposed a separate shared-core
 request settlement bug; [Resource settlement evidence](measurements/resource-request-settlement.md)
 records its regression and receipt-ownership checks.
 
-Its private clock bridge mirrors successful medium/Tokio steps into Embassy's
-mock time driver before polling actors. The existing wake-driven runner retains
+Its private clock bridge bounds automatic steps by Embassy's next timer deadline,
+then mirrors successful medium/Tokio steps into its test time driver before
+polling actors. The existing wake-driven runner retains
 explicit actor and poll budgets; refused ready-actor and backward-time steps
 leave all clocks unchanged. A process-wide lease serializes these scenarios and
-resets the mock timer queue only after the actors are dropped. This test fixture
+resets the timer queue only after the actors are dropped. This test fixture
 allows eight actors and uses a 64-entry timer queue; these are scenario bounds,
-not an Embassy fleet scale claim. Known runtime deadlines are supplied explicitly.
+not an Embassy fleet scale claim. Submillisecond Embassy deadlines are refused
+before any clock moves rather than rounded to the shared millisecond timeline.
 
 The tests are included in `virtual-device-simulation`, run alongside Embassy
 component tests in PR CI and by the relevant pre-push gate. The clock, backend,

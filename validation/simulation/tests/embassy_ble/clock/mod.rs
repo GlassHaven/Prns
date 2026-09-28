@@ -2,17 +2,20 @@ use std::future::Future;
 use std::num::NonZeroUsize;
 use std::sync::{Mutex, MutexGuard};
 
-use embassy_time::{Duration, Instant, MockDriver};
+use embassy_time::Instant;
 use prns_simulation::{
     ManualAdvance, ManualTaskId, ManualTaskPoll, ManualTaskRunner, ManualTimeDriver,
     ManualTimeError, ManualTimeSnapshot, SimulationTick,
 };
 
 static CLOCK_OWNER: Mutex<()> = Mutex::new(());
+mod driver;
+mod tests;
 const ACTOR_CAPACITY: usize = 8;
 const SETTLEMENT_POLL_BUDGET: usize = 128;
+const COMPLETION_POLL_BUDGET: usize = 512 * 1024;
 
-// Embassy's mock driver is process-global. Only this integration-test binary uses it;
+// Embassy's time driver is process-global. Only this integration-test binary uses it;
 // the lease serializes scenarios, and outlives every actor that may hold a timer.
 pub(super) struct ClockLease {
     _owner: MutexGuard<'static, ()>,
@@ -25,14 +28,15 @@ impl ClockLease {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         };
-        MockDriver::get().reset();
+        driver::reset();
+        super::static_storage::reset_accounting();
         lease
     }
 }
 
 impl Drop for ClockLease {
     fn drop(&mut self) {
-        MockDriver::get().reset();
+        driver::reset();
     }
 }
 
@@ -81,21 +85,13 @@ impl<'driver> EmbassyTasks<'driver> {
         future: impl Future<Output = T> + 'static,
     ) -> T {
         let before = self.snapshot();
-        let ticks = budget
-            .deadline
-            .get()
-            .checked_sub(before.tick.get())
-            .unwrap();
-        let poll_budget = usize::try_from(ticks.checked_add(1).unwrap())
-            .unwrap()
-            .checked_mul(budget.polls_per_tick.get())
-            .unwrap();
+        assert!(budget.deadline >= before.tick);
         let (send, mut result) = tokio::sync::oneshot::channel();
         let operation = self.insert(async move {
             assert!(send.send(future.await).is_ok());
         });
         let mut polls_at_tick = 0;
-        for _ in 0..poll_budget {
+        for _ in 0..COMPLETION_POLL_BUDGET {
             polls_at_tick += 1;
             assert!(
                 polls_at_tick <= budget.polls_per_tick.get(),
@@ -115,7 +111,7 @@ impl<'driver> EmbassyTasks<'driver> {
                         now < budget.deadline.get(),
                         "operation stalled before completion"
                     );
-                    self.advance(SimulationTick::from_ticks(now + 1)).unwrap();
+                    self.advance_to_next_wake(budget.deadline).unwrap();
                     if self.snapshot().tick.get() != now {
                         polls_at_tick = 0;
                     }
@@ -147,9 +143,41 @@ impl<'driver> EmbassyTasks<'driver> {
             .runtime_elapsed
             .checked_sub(before.runtime_elapsed)
             .unwrap();
-        MockDriver::get().advance(Duration::from_micros(
-            elapsed.as_micros().try_into().unwrap(),
-        ));
+        driver::advance(elapsed.as_micros().try_into().unwrap());
+        let _ = self.snapshot();
+        Ok(report)
+    }
+
+    pub(super) fn advance_to_next_wake(
+        &mut self,
+        horizon: SimulationTick,
+    ) -> Result<ManualAdvance, ClockAdvanceError> {
+        let before = self.snapshot();
+        let boundary = match driver::next_deadline() {
+            None => horizon,
+            Some(micros) => {
+                let remaining = micros.checked_sub(Instant::now().as_micros()).unwrap();
+                if !remaining.is_multiple_of(1000) {
+                    return Err(ClockAdvanceError::SubmillisecondDeadline { micros });
+                }
+                let tick = before
+                    .tick
+                    .get()
+                    .checked_add(remaining / 1000)
+                    .ok_or(ClockAdvanceError::ClockRange)?;
+                horizon.min(SimulationTick::from_ticks(tick))
+            }
+        };
+        let report = self
+            .runner
+            .advance_to_next_wake(boundary)
+            .map_err(ClockAdvanceError::Manual)?;
+        let after = self.runner.snapshot().unwrap();
+        let elapsed = after
+            .runtime_elapsed
+            .checked_sub(before.runtime_elapsed)
+            .unwrap();
+        driver::advance(elapsed.as_micros().try_into().unwrap());
         let _ = self.snapshot();
         Ok(report)
     }
@@ -165,5 +193,25 @@ impl<'driver> EmbassyTasks<'driver> {
             let _ = self.snapshot();
         }
         unreachable!("supervisors exceeded the explicit settlement poll budget")
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum ClockAdvanceError {
+    Manual(ManualTimeError),
+    SubmillisecondDeadline { micros: u64 },
+    ClockRange,
+}
+
+impl std::fmt::Display for ClockAdvanceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Manual(error) => write!(f, "{error}"),
+            Self::SubmillisecondDeadline { micros } => write!(
+                f,
+                "Embassy deadline {micros}us is not aligned to the millisecond simulation clock"
+            ),
+            Self::ClockRange => f.write_str("Embassy deadline exceeds the simulation clock range"),
+        }
     }
 }
