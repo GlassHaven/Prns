@@ -44,6 +44,10 @@ guarantee. Addresses do not identify connection incarnations. The current
 fixture has no reconnects; add incarnation identity before claiming replay
 through reused-address reconnects. This is not a stable serialized artifact.
 
+The subsequent [incarnation follow-up](ble-connection-incarnations.md) adds
+that identity and records both the narrower reconnect data-byte evidence and
+the remaining internal arbitration input discovered by the stronger test.
+
 CoreBluetooth/macOS and BlueZ/Linux are protocol endpoint profiles here, not
 executions of native OS stacks. RF, controllers, firmware, other platforms,
 worker scheduling, arbitrary time jumps and long-duration acceleration remain

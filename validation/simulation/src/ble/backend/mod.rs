@@ -531,10 +531,14 @@ impl<const MAX_PEERS: usize> BleBackend<MAX_PEERS> for VirtualBleBackend {
         {
             return DialOutcome::Busy;
         }
-        let lifecycle = Arc::new(
-            Connection::new(self.config.address, address)
-                .with_wire_capture(network.capture.clone()),
-        );
+        let mut lifecycle = Connection::new(self.config.address, address);
+        if let Some(capture) = &network.capture {
+            let Ok(binding) = capture.bind() else {
+                return DialOutcome::InvariantViolation;
+            };
+            lifecycle = lifecycle.with_wire_capture(binding);
+        }
+        let lifecycle = Arc::new(lifecycle);
         let (mine, theirs) = link_pair(
             self.config.address,
             address,

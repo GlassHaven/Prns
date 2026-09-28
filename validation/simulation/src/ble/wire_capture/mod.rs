@@ -12,10 +12,37 @@ pub enum BleWireChannel {
     Data,
 }
 
+/// Unique within one capture owner, including across shared labs and eviction.
+/// Failed admissions may leave gaps. IDs are never recycled; exhaustion refuses
+/// further captured connections instead of aliasing an earlier incarnation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BleWireConnectionId(u64);
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct ConnectionIdsExhausted;
+
+pub(super) struct CapturedConnection {
+    capture: BleWireCapture,
+    id: BleWireConnectionId,
+}
+
+impl CapturedConnection {
+    pub(super) fn record(
+        &self,
+        from: BleAddress,
+        to: BleAddress,
+        channel: BleWireChannel,
+        bytes: &[u8],
+    ) {
+        self.capture.record(self.id, from, to, channel, bytes);
+    }
+}
+
 /// A value accepted by a virtual characteristic queue, not a delivery or RF observation.
-/// Addresses identify peers, not connection incarnations.
+/// The connection ID distinguishes links that reuse the same addresses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BleWireValue {
+    pub connection: BleWireConnectionId,
     pub from: BleAddress,
     pub to: BleAddress,
     pub channel: BleWireChannel,
@@ -29,6 +56,7 @@ pub struct BleWireSnapshot {
 }
 
 struct Buffer {
+    next_connection: Option<u64>,
     capacity: usize,
     discarded: u64,
     values: VecDeque<BleWireValue>,
@@ -52,6 +80,7 @@ impl BleWireCapture {
     pub fn new(capacity: NonZeroUsize) -> Self {
         Self {
             buffer: Arc::new(Mutex::new(Buffer {
+                next_connection: Some(0),
                 capacity: capacity.get(),
                 discarded: 0,
                 values: VecDeque::new(),
@@ -71,8 +100,22 @@ impl BleWireCapture {
         }
     }
 
-    pub(super) fn record(
+    pub(super) fn bind(&self) -> Result<CapturedConnection, ConnectionIdsExhausted> {
+        let mut buffer = self
+            .buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let id = buffer.next_connection.ok_or(ConnectionIdsExhausted)?;
+        buffer.next_connection = id.checked_add(1);
+        Ok(CapturedConnection {
+            capture: self.clone(),
+            id: BleWireConnectionId(id),
+        })
+    }
+
+    fn record(
         &self,
+        connection: BleWireConnectionId,
         from: BleAddress,
         to: BleAddress,
         channel: BleWireChannel,
@@ -87,6 +130,7 @@ impl BleWireCapture {
             buffer.discarded = buffer.discarded.saturating_add(1);
         }
         buffer.values.push_back(BleWireValue {
+            connection,
             from,
             to,
             channel,

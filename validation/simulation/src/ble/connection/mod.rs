@@ -17,7 +17,7 @@ pub(super) struct Connection {
     addresses: [BleAddress; 2],
     closed: watch::Sender<bool>,
     data: Mutex<[data::DirectionActivity; 2]>,
-    capture: Option<super::BleWireCapture>,
+    capture: Option<super::wire_capture::CapturedConnection>,
 }
 
 impl Connection {
@@ -31,8 +31,11 @@ impl Connection {
         }
     }
 
-    pub(super) fn with_wire_capture(mut self, capture: Option<super::BleWireCapture>) -> Self {
-        self.capture = capture;
+    pub(super) fn with_wire_capture(
+        mut self,
+        capture: super::wire_capture::CapturedConnection,
+    ) -> Self {
+        self.capture = Some(capture);
         self
     }
 

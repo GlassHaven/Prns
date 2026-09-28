@@ -15,6 +15,14 @@ use prns_simulation::ble::{
 };
 use scenario::add_node_with_sources;
 
+mod recovery;
+
+#[derive(Clone, Copy)]
+enum Lifecycle {
+    Fresh,
+    Reconnect,
+}
+
 // Validation-only inputs. There is no production fixed-seed mode.
 fn stream(
     seed: u8,
@@ -35,9 +43,10 @@ struct Transcript {
     discovery: BleTraceSnapshot,
     wire: BleWireSnapshot,
     response: Vec<u8>,
+    connection_boundaries: Vec<usize>,
 }
 
-fn replay(seed: u8, marker: u8) -> Transcript {
+fn replay(seed: u8, marker: u8, lifecycle: Lifecycle) -> Transcript {
     let capture = BleWireCapture::new(nonzero(4096));
     let lab = VirtualBleLab::with_wire_capture(
         BleMediumConfig::new(
@@ -157,40 +166,37 @@ fn replay(seed: u8, marker: u8) -> Transcript {
             .enumerate()
             .all(|(index, (_, _, heard))| *heard.borrow() == [destinations[index ^ 1]])
     });
-    let handle = nodes[0].1.handle.clone();
-    let remote = destinations[1];
-    let link_task = runner
-        .insert(async move {
-            let link = handle
-                .establish_link(remote)
-                .await
-                .unwrap_or_else(|error| unreachable!("link: {error:?}"));
-            Completion::Linked { node: 0, link }
-        })
-        .unwrap_or_else(|error| unreachable!("actor: {error}"));
-    let results = settle(&mut runner);
-    let [(task, Completion::Linked { node: 0, link })] = results.as_slice() else {
-        unreachable!("link settlement: {results:?}")
-    };
-    assert_eq!(*task, link_task);
     let response = vec![marker; 256];
-    let request_task = request(
+    exchange(
         &mut runner,
-        0,
         nodes[0].1.handle.clone(),
-        *link,
-        response.clone(),
+        destinations[1],
+        &response,
     );
-    assert_eq!(
-        settle(&mut runner),
-        [(
-            request_task,
-            Completion::Response {
-                node: 0,
-                bytes: response.clone()
-            }
-        )]
-    );
+    let mut connection_boundaries = Vec::new();
+    match lifecycle {
+        Lifecycle::Fresh => {}
+        Lifecycle::Reconnect => {
+            let boundary = capture.snapshot().values.len();
+            connection_boundaries.push(boundary);
+            recovery::reconnect(
+                &mut runner,
+                &lab,
+                &capture,
+                &nodes
+                    .iter()
+                    .map(|(_, control, _)| control.handle.clone())
+                    .collect::<Vec<_>>(),
+            );
+            exchange(
+                &mut runner,
+                nodes[0].1.handle.clone(),
+                destinations[1],
+                &response,
+            );
+            recovery::assert_distinct_incarnations(&capture.snapshot(), boundary);
+        }
+    }
     let expected: BTreeMap<_, _> = nodes
         .into_iter()
         .enumerate()
@@ -243,23 +249,58 @@ fn replay(seed: u8, marker: u8) -> Transcript {
         discovery,
         wire,
         response,
+        connection_boundaries,
     }
+}
+
+fn exchange(
+    runner: &mut ManualTaskRunner<'_, Completion>,
+    handle: PrnsNodeHandle,
+    remote: personal_rns::wire::DestinationHash,
+    response: &[u8],
+) {
+    let link_handle = handle.clone();
+    let link_task = runner
+        .insert(async move {
+            let link = link_handle
+                .establish_link(remote)
+                .await
+                .unwrap_or_else(|error| unreachable!("link: {error:?}"));
+            Completion::Linked { node: 0, link }
+        })
+        .unwrap_or_else(|error| unreachable!("actor: {error}"));
+    let results = settle(runner);
+    let [(task, Completion::Linked { node: 0, link })] = results.as_slice() else {
+        unreachable!("link settlement: {results:?}")
+    };
+    assert_eq!(*task, link_task);
+    let request_task = request(runner, 0, handle, *link, response.to_vec());
+    assert_eq!(
+        settle(runner),
+        [(
+            request_task,
+            Completion::Response {
+                node: 0,
+                bytes: response.to_vec()
+            }
+        )]
+    );
 }
 
 #[test]
 fn fresh_ble_nodes_replay_every_control_value_and_fragment() {
-    let expected = replay(11, 42);
-    assert_eq!(replay(11, 42), expected);
-    assert_eq!(replay(11, 42), expected);
+    let expected = replay(11, 42, Lifecycle::Fresh);
+    assert_eq!(replay(11, 42, Lifecycle::Fresh), expected);
+    assert_eq!(replay(11, 42, Lifecycle::Fresh), expected);
 }
 
 #[test]
 fn ble_replay_detects_changed_entropy_and_equal_length_payloads() {
-    let baseline = replay(11, 42);
-    let seed = replay(21, 42);
+    let baseline = replay(11, 42, Lifecycle::Fresh);
+    let seed = replay(21, 42, Lifecycle::Fresh);
     assert_eq!(baseline.response, seed.response);
     assert_ne!(baseline.wire, seed.wire);
-    let payload = replay(11, 43);
+    let payload = replay(11, 43, Lifecycle::Fresh);
     assert_eq!(baseline.response.len(), payload.response.len());
     assert_ne!(baseline.response, payload.response);
     assert_ne!(baseline.wire, payload.wire);

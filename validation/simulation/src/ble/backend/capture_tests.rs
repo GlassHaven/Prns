@@ -8,6 +8,11 @@ fn links() -> (VirtualBleLink, VirtualBleLink, BleWireCapture) {
     let capture = BleWireCapture::new(
         NonZeroUsize::new(64).unwrap_or_else(|| unreachable!("nonzero capacity")),
     );
+    let (first, second) = links_with_capture(&capture);
+    (first, second, capture)
+}
+
+fn links_with_capture(capture: &BleWireCapture) -> (VirtualBleLink, VirtualBleLink) {
     let first = BleAddress::new([1; 6]);
     let second = BleAddress::new([2; 6]);
     let config = VirtualBleLinkConfig::new(
@@ -18,16 +23,85 @@ fn links() -> (VirtualBleLink, VirtualBleLink, BleWireCapture) {
             .unwrap_or_else(|error| unreachable!("GATT: {error}")),
     )
     .unwrap_or_else(|error| unreachable!("link: {error}"));
-    let (a, b) = link_pair(
+    link_pair(
         first,
         second,
         config,
         config,
         -40,
         -50,
-        Arc::new(Connection::new(first, second).with_wire_capture(Some(capture.clone()))),
+        Arc::new(
+            Connection::new(first, second).with_wire_capture(
+                capture
+                    .bind()
+                    .unwrap_or_else(|error| unreachable!("capture: {error:?}")),
+            ),
+        ),
+    )
+}
+
+#[tokio::test]
+async fn retained_old_links_cannot_capture_or_deliver_into_replacement_incarnations() {
+    let (mut old_sender, mut old_receiver, capture) = links();
+    old_sender
+        .send_control_value(&[255])
+        .await
+        .unwrap_or_else(|error| unreachable!("old queue: {error}"));
+    assert!(old_sender.endpoint.connection.close());
+    let (mut replacement_sender, mut replacement_receiver) = links_with_capture(&capture);
+    replacement_sender
+        .send_control_value(&[255])
+        .await
+        .unwrap_or_else(|error| unreachable!("replacement queue: {error}"));
+    let snapshot = capture.snapshot();
+    assert_eq!(snapshot.discarded_values, 0);
+    assert_eq!(snapshot.values.len(), 2);
+    assert_ne!(snapshot.values[0].connection, snapshot.values[1].connection);
+    assert_eq!(
+        snapshot.values[0],
+        BleWireValue {
+            connection: snapshot.values[0].connection,
+            ..snapshot.values[1].clone()
+        }
     );
-    (a, b, capture)
+    assert_eq!(
+        old_receiver.control_recv().await,
+        Err(VirtualBleError::LinkClosed)
+    );
+    assert_eq!(
+        old_sender.send_control_value(&[3, 0]).await,
+        Err(VirtualBleError::LinkClosed)
+    );
+    assert_eq!(
+        replacement_receiver.control_recv().await,
+        Err(VirtualBleError::ControlParse(
+            ControlParseError::UnknownKind(255)
+        ))
+    );
+    assert_eq!(capture.snapshot(), snapshot);
+    drop(old_sender);
+    drop(old_receiver);
+    replacement_receiver
+        .send_control_value(&[255])
+        .await
+        .unwrap_or_else(|error| unreachable!("reverse replacement: {error}"));
+    assert_eq!(
+        replacement_sender.control_recv().await,
+        Err(VirtualBleError::ControlParse(
+            ControlParseError::UnknownKind(255)
+        ))
+    );
+    let values = capture.snapshot().values;
+    assert_eq!(
+        values[2],
+        BleWireValue {
+            connection: values[1].connection,
+            from: values[1].to,
+            to: values[1].from,
+            channel: BleWireChannel::Control,
+            bytes: vec![255],
+        }
+    );
 }
 
 #[tokio::test]
@@ -41,6 +115,7 @@ async fn control_capture_is_queue_acceptance_not_parsing_or_attempts() {
     assert_eq!(
         accepted.values,
         [BleWireValue {
+            connection: accepted.values[0].connection,
             from: BleAddress::new([1; 6]),
             to: BleAddress::new([2; 6]),
             channel: BleWireChannel::Control,
@@ -73,6 +148,7 @@ async fn control_capture_is_queue_acceptance_not_parsing_or_attempts() {
     assert_eq!(
         capture.snapshot().values[1],
         BleWireValue {
+            connection: accepted.values[0].connection,
             from: BleAddress::new([2; 6]),
             to: BleAddress::new([1; 6]),
             channel: BleWireChannel::Control,

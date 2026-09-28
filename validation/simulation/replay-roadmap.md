@@ -75,6 +75,15 @@ expected values. No production clock change was needed.
 
 ## Next milestones, in order
 
+The reconnect extension exposed an additional prerequisite: production Tokio
+supervisors arbitrate simultaneously ready events independently of the manual
+runner's outer actor order. Two reconnect runs can choose opposite handshake
+initiators. [Connection-incarnation evidence](measurements/ble-connection-incarnations.md)
+therefore proves data-channel byte replay and recovery invariants, not whole
+reconnect transcript equality. Make that arbitration an explicit replay input
+before expanding exact lifecycle claims; do not replace production fairness
+with fixed priority merely to satisfy a test.
+
 1. Extend the three-provider construction seam beyond the now-proven short BLE
    replay to other backend consumers, auditing randomness outside node-owned providers. Keep
    OS entropy as the production default; no global seed switch or weak
@@ -123,5 +132,6 @@ limits before claiming broader replay.
 The [BLE wire replay follow-up](measurements/ble-wire-replay.md) compares every
 accepted control value and GATT fragment across three fresh two-node runs, with
 changed-seed and equal-length changed-payload controls. Capture is bounded and
-opt-in; this is not native Bluetooth, RF, reconnection-incarnation, or arbitrary
-scheduler replay evidence.
+opt-in; this original round is not native Bluetooth, RF, reconnection-incarnation,
+or arbitrary scheduler replay evidence. The incarnation extension below records
+the precise limit discovered by widening the scenario.
