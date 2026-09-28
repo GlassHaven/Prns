@@ -4,6 +4,8 @@ use personal_rns::wire::WireContext;
 use prns_simulation::ble::{BleDataCounters, BleDataSendObservation};
 use prns_simulation::{ManualTaskPoll, ManualTaskScheduling, SimulationSeed};
 
+mod cancellation;
+
 #[derive(Clone, Copy, Debug)]
 enum CutBoundary {
     Queued,

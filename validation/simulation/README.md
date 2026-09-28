@@ -687,6 +687,12 @@ now match the latest parsed packet header and logical link before inspecting
 fragment deltas, avoiding confusion with protocol proofs. Only the latest header,
 frame length and counter baseline are retained per direction, never payloads.
 
+The [fragmented-response caller-cancellation matrix](measurements/fragmented-caller-cancellation.md)
+keeps the BLE connection intact while dropping the awaiting caller at those
+same boundaries. Two new requests reuse the logical link either before or after
+the abandoned reply drains, with exact payload checks and a later check at the
+old caller's response deadline.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep
