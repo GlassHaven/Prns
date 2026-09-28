@@ -43,6 +43,7 @@ impl Drop for ClockLease {
 pub(super) struct EmbassyTasks<'driver> {
     runner: ManualTaskRunner<'driver, ()>,
     _clock: ClockLease,
+    settlement_poll_budget: NonZeroUsize,
 }
 
 pub(super) struct CompletionBudget {
@@ -52,9 +53,26 @@ pub(super) struct CompletionBudget {
 
 impl<'driver> EmbassyTasks<'driver> {
     pub(super) fn new(driver: &'driver mut ManualTimeDriver, clock: ClockLease) -> Self {
+        Self::with_limits(
+            driver,
+            clock,
+            NonZeroUsize::new(ACTOR_CAPACITY).unwrap(),
+            NonZeroUsize::new(SETTLEMENT_POLL_BUDGET).unwrap(),
+            prns_simulation::ManualTaskScheduling::Cyclic,
+        )
+    }
+
+    pub(super) fn with_limits(
+        driver: &'driver mut ManualTimeDriver,
+        clock: ClockLease,
+        actors: NonZeroUsize,
+        settlement_poll_budget: NonZeroUsize,
+        scheduling: prns_simulation::ManualTaskScheduling,
+    ) -> Self {
         let tasks = Self {
-            runner: ManualTaskRunner::new(driver, NonZeroUsize::new(ACTOR_CAPACITY).unwrap()),
+            runner: ManualTaskRunner::new_with_scheduling(driver, actors, scheduling),
             _clock: clock,
+            settlement_poll_budget,
         };
         assert_eq!(tasks.snapshot().runtime_elapsed, std::time::Duration::ZERO);
         tasks
@@ -79,7 +97,7 @@ impl<'driver> EmbassyTasks<'driver> {
         self.complete_with_budget(
             CompletionBudget {
                 deadline: self.snapshot().tick,
-                polls_per_tick: NonZeroUsize::new(SETTLEMENT_POLL_BUDGET).unwrap(),
+                polls_per_tick: self.settlement_poll_budget,
             },
             future,
         )
@@ -191,7 +209,7 @@ impl<'driver> EmbassyTasks<'driver> {
 
     pub(super) fn settle(&mut self) -> usize {
         let _ = self.snapshot();
-        for polls in 0..SETTLEMENT_POLL_BUDGET {
+        for polls in 0..self.settlement_poll_budget.get() {
             match self.runner.poll_next().unwrap() {
                 ManualTaskPoll::Idle => return polls,
                 ManualTaskPoll::Pending { .. } => {}

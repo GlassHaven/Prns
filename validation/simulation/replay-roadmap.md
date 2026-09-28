@@ -53,6 +53,10 @@ This is a current-status guide, not another chronological list of test slices.
   fresh-link traffic succeeds. This is host actor reconstruction, not power loss.
 - Request cancellation and overlapping deadline behavior have substantial
   regression coverage. Further permutations require a concrete new question.
+- Embassy paired fleets now replay concurrent bidirectional traffic at 8 and 16
+  real nodes, under cyclic and two seeded actor orders. A process-isolated heap
+  probe measures each size, including retained static storage. This is bounded
+  paired traffic, not routed meshes or thousand-node Embassy capacity.
 
 ## Input audit
 
@@ -127,13 +131,16 @@ fixture gaps without treating Tokio results as Embassy evidence.
   [mixed-runtime follow-up](measurements/mixed-runtime-replay.md) adds complete
   bidirectional transcripts through partition/reconnect. The
   [Embassy restart follow-up](measurements/embassy-node-restart-replay.md) covers
-  complete receiver reconstruction in a two-node Embassy scenario. Larger Embassy
-  fleets, repeated restart waves and persistence/power-loss models remain open.
+  complete receiver reconstruction in a two-node Embassy scenario. The
+  [paired-fleet checkpoint](measurements/embassy-fleet-replay.md) extends replay
+  to 8/16 Embassy nodes. Repeated restart waves, larger/routed fleets and
+  persistence/power-loss models remain open.
 - Memory/scaling: production Embassy APIs require static channel, lane and
   entropy lifetimes. The fixture now counts their direct storage; the opt-in
   two-node heap probe uses a fresh child process so retained allocations from
   earlier tests cannot contaminate it. Static storage is deliberately retained
   until process exit, not unsafely reclaimed or described as a production leak.
+  The paired-fleet probe now measures 8/16 nodes in isolated child processes.
   Larger Embassy fleets and repeated lifecycle memory behavior remain open.
 - Shared ownership: retain the common medium, wire capture, actor scheduling,
   clock validation and protocol-core fixes. Each new milestone should identify

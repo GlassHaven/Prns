@@ -115,6 +115,9 @@ using explicit entropy and the shared test-only BLE readiness selector.
 The [Embassy restart extension](measurements/embassy-node-restart-replay.md)
 reconstructs a receiver at its former address without resetting the surviving
 sender or shared clock, and checks stale-handle and old-link isolation.
+The [Embassy paired-fleet checkpoint](measurements/embassy-fleet-replay.md)
+adds 8/16-node concurrent bidirectional replay and process-isolated allocation
+measurements, with static fixture storage reported separately.
 
 Both frame and BLE media expose an atomic `MediumSchedule` snapshot containing
 their current tick and earliest scheduled event, if any. `VirtualBleLab` exposes

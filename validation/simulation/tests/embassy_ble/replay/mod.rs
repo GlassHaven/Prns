@@ -1,4 +1,5 @@
 use super::*;
+mod fleet;
 mod mixed;
 mod restart;
 use personal_rns::engine::{AnnounceAppData, AnnounceNow, AnnounceTarget};
