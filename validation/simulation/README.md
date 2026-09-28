@@ -10,9 +10,11 @@ establishment, and request/response without sockets or physical hardware,
 including a 128-node sparse ring on a manually controlled runtime clock.
 
 The [current roadmap and replay-input audit](replay-roadmap.md) separates proven
-capabilities from the next milestones. Forward work now targets replay
-foundations, measured fleet scaling and broader hardware models rather than
-more permutations of the covered deadline/cancellation cases.
+capabilities from the next milestones. Forward work prioritizes shared behavioral
+contracts across Tokio, Embassy and mixed configurations, then bounded generated
+scenarios, persistence/reboot faults, representative scale/churn and selected ISA
+integration. The [first shared contract](measurements/runtime-contracts.md) uses
+one scenario and independent expected results for all four runtime pairings.
 
 The medium intentionally makes its limits and faults explicit:
 

@@ -17,6 +17,7 @@ use prns_runtime_embassy::manifold::driver::InterfaceLifecycle;
 use prns_simulation::{ManualMedium, ManualTimeDriver, ManualTimeError, SimulationTick};
 
 mod clock;
+mod contracts;
 #[cfg(feature = "heap-profile")]
 mod heap;
 mod replay;

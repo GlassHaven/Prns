@@ -1,6 +1,6 @@
 # Simulator roadmap and replay inputs
 
-Current checkpoint: replay foundations, after the deadline/cancellation matrices.
+Current checkpoint: shared runtime contracts, after the bounded replay foundations.
 This is a current-status guide, not another chronological list of test slices.
 
 ## Established foundation
@@ -113,7 +113,28 @@ An initial clock assertion failed because the test read `TokioClock` outside
 the runner. Clock observations now execute as runner actors and validate exact
 expected values. No production clock change was needed.
 
-## Next milestones, in order
+## Forward priorities, in order
+
+1. Share behavioral contracts across Tokio, Embassy and mixed configurations.
+   The [first common scenario](measurements/runtime-contracts.md) runs the same
+   bidirectional echo, exact response expiry, cancellation and partition recovery
+   assertions against all four runtime pairings. Adapters translate APIs, not
+   expected outcomes. Resource, restart and persistence contracts are not yet
+   consolidated; their focused regressions remain valuable evidence.
+2. Generate bounded scenarios using these adapters and existing medium faults,
+   with explicit work budgets, reproducible inputs and actionable failing cases.
+   Do not substitute a second protocol model for production execution.
+3. Add persistence/reboot fault scenarios, distinguishing actor reconstruction
+   from durable storage and actual power-loss behavior.
+4. Measure representative sparse scale and churn, retaining cleanup, resource
+   bounds and correctness assertions rather than increasing node count alone.
+5. Connect selected workloads to ISA emulators. Native radio/controller timing,
+   RF and physical power behavior remain separate evidence.
+
+### Supporting replay work
+
+The audits below remain relevant to these priorities. They are not a competing
+sequence of prerequisites before bounded generated scenarios can begin.
 
 ### Embassy parity checkpoint
 
