@@ -693,6 +693,11 @@ same boundaries. Two new requests reuse the logical link either before or after
 the abandoned reply drains, with exact payload checks and a later check at the
 old caller's response deadline.
 
+The [request-side cancellation follow-up](measurements/fragmented-request-cancellation.md)
+moves cancellation earlier, before the request has finished crossing BLE. The
+after-drain cases verify that the request still finishes and the peer emits a
+complete response: dropping a local waiter does not retract accepted work.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

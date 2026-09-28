@@ -43,6 +43,7 @@ fn replacements(
 
 fn exercise(
     direction: Direction,
+    exchange: Exchange,
     boundary: CutBoundary,
     timing: ReplacementTiming,
     profile: Profile,
@@ -58,10 +59,12 @@ fn exercise(
             let crossing = link(runner, nodes, direction.requester(), direction.responder());
             let local = link(runner, nodes, 0, BRIDGE);
             let tasks: Vec<_> = nodes.iter().map(|node| node.task).collect();
+            let observed_direction = exchange.direction(direction);
             let response_direction = Exchange::Response.direction(direction);
             for cycle in 0..CYCLES {
                 let started = frames.now();
-                let before = response_direction.counters(ble);
+                let before = observed_direction.counters(ble);
+                let response_before = response_direction.counters(ble);
                 let handle = nodes[direction.requester()].control.handle.clone();
                 let abandoned = runner
                     .insert(async move {
@@ -87,11 +90,11 @@ fn exercise(
                     runner,
                     ble,
                     nodes,
-                    response_direction,
+                    observed_direction,
                     boundary,
                     before,
                     FragmentTarget {
-                        context: WireContext::Response,
+                        context: exchange.context(),
                         link: crossing,
                     },
                 );
@@ -99,7 +102,7 @@ fn exercise(
                     .snapshot()
                     .unwrap_or_else(|error| unreachable!("cancel clock: {error}"));
                 let activity = ble.data_snapshots();
-                let partial = response_direction.counters(ble);
+                let partial = observed_direction.counters(ble);
                 let trace = ble.trace();
                 assert_eq!(runner.task_count(), 4);
                 assert_eq!(
@@ -120,7 +123,7 @@ fn exercise(
                     ReplacementTiming::BeforeDrain => {}
                     ReplacementTiming::AfterDrain => {
                         assert!(settle(runner).is_empty());
-                        let after = response_direction.counters(ble);
+                        let after = observed_direction.counters(ble);
                         assert_eq!(
                             (
                                 after.sends_started,
@@ -132,6 +135,22 @@ fn exercise(
                                 partial.sends_completed + 1,
                                 partial.frames_reassembled + 1
                             )
+                        );
+                        let (response, observation) = response_direction.activity(ble);
+                        let observation = observation
+                            .unwrap_or_else(|| unreachable!("peer response after cancellation"));
+                        assert!(observation.before.sends_started >= response_before.sends_started);
+                        assert!(observation.header.is_some_and(|header| {
+                            header.context == WireContext::Response
+                                && header.address == crossing.to_address()
+                        }));
+                        assert_eq!(
+                            response.sends_completed,
+                            observation.before.sends_completed + 1
+                        );
+                        assert_eq!(
+                            response.frames_reassembled,
+                            observation.before.frames_reassembled + 1
                         );
                         assert_eq!(runner.snapshot().ok().as_ref(), Some(&clock));
                     }
@@ -158,7 +177,7 @@ fn exercise(
     );
 }
 
-fn matrix(boundary: CutBoundary, timing: ReplacementTiming) {
+fn matrix(boundary: CutBoundary, timing: ReplacementTiming, exchange: Exchange) {
     for direction in [Direction::TowardBle, Direction::FromBle] {
         for profile in [Profile::AppleBridge, Profile::BluezBridge] {
             for scheduling in [
@@ -173,7 +192,7 @@ fn matrix(boundary: CutBoundary, timing: ReplacementTiming) {
                     seed: SimulationSeed::new(u64::MAX),
                 },
             ] {
-                exercise(direction, boundary, timing, profile, scheduling);
+                exercise(direction, exchange, boundary, timing, profile, scheduling);
             }
         }
     }
@@ -181,20 +200,72 @@ fn matrix(boundary: CutBoundary, timing: ReplacementTiming) {
 
 #[test]
 fn cancelled_queued_response_accepts_replacements_before_drain() {
-    matrix(CutBoundary::Queued, ReplacementTiming::BeforeDrain);
+    matrix(
+        CutBoundary::Queued,
+        ReplacementTiming::BeforeDrain,
+        Exchange::Response,
+    );
 }
 
 #[test]
 fn cancelled_consumed_response_accepts_replacements_before_drain() {
-    matrix(CutBoundary::Consumed, ReplacementTiming::BeforeDrain);
+    matrix(
+        CutBoundary::Consumed,
+        ReplacementTiming::BeforeDrain,
+        Exchange::Response,
+    );
 }
 
 #[test]
 fn cancelled_queued_response_accepts_replacements_after_drain() {
-    matrix(CutBoundary::Queued, ReplacementTiming::AfterDrain);
+    matrix(
+        CutBoundary::Queued,
+        ReplacementTiming::AfterDrain,
+        Exchange::Response,
+    );
 }
 
 #[test]
 fn cancelled_consumed_response_accepts_replacements_after_drain() {
-    matrix(CutBoundary::Consumed, ReplacementTiming::AfterDrain);
+    matrix(
+        CutBoundary::Consumed,
+        ReplacementTiming::AfterDrain,
+        Exchange::Response,
+    );
+}
+
+#[test]
+fn cancelled_queued_request_accepts_replacements_before_drain() {
+    matrix(
+        CutBoundary::Queued,
+        ReplacementTiming::BeforeDrain,
+        Exchange::Request,
+    );
+}
+
+#[test]
+fn cancelled_consumed_request_accepts_replacements_before_drain() {
+    matrix(
+        CutBoundary::Consumed,
+        ReplacementTiming::BeforeDrain,
+        Exchange::Request,
+    );
+}
+
+#[test]
+fn cancelled_queued_request_accepts_replacements_after_drain() {
+    matrix(
+        CutBoundary::Queued,
+        ReplacementTiming::AfterDrain,
+        Exchange::Request,
+    );
+}
+
+#[test]
+fn cancelled_consumed_request_accepts_replacements_after_drain() {
+    matrix(
+        CutBoundary::Consumed,
+        ReplacementTiming::AfterDrain,
+        Exchange::Request,
+    );
 }
