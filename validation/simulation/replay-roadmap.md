@@ -10,7 +10,9 @@ This is a current-status guide, not another chronological list of test slices.
   schedules select reproducible alternative actor orders.
 - A two-node frame-only announce/link/echo scenario repeats complete medium
   traces, including packet bytes and shutdown, using explicitly supplied host
-  entropy. This is not yet general BLE, restart or path-discovery replay.
+  entropy. That bounded scenario now also covers a receiver restart and the
+  successful/failed host reseed boundary. This is not general BLE or
+  path-discovery replay.
 - Correctness scenarios cover 128 frame nodes, 20 routed nodes and 16 BLE nodes.
   Backend-scale tests are not evidence for thousands of production nodes.
 - Tokio/Embassy scenarios exercise real requests, Resource transfers, failures
@@ -74,8 +76,9 @@ expected values. No production clock change was needed.
    the now node-scoped handle/interface owner, and path-request IDs, including
    source selection, restarts and reseeding. Keep OS entropy as the production
    default; avoid a process-global seed switch or weak shipping RNG mode.
-2. Extend the bounded frame-echo packet replay to restarts and reseeding, then
-   other transports once their exercised inputs are controlled. Retain
+2. Carry the bounded frame-echo replay approach to other transports once their
+   exercised inputs are controlled. Receiver restart and successful/failed
+   periodic reseeding now have focused packet evidence. Retain
    changed-input controls; define a versioned replay artifact before exporting
    a stable format (current transcripts are private test values).
 3. Expose/coordinate runtime deadlines before claiming arbitrary time jumps or
@@ -102,3 +105,8 @@ The [node-host follow-up](measurements/node-host-replay.md) carries that source
 through real nodes and proves a bounded frame-only packet trace. Shared
 handle/interface and path-ID source selection remain unfinished; their consumers
 must be controlled before widening the replay claim.
+
+The [restart/reseed follow-up](measurements/restart-reseed-replay.md) records
+source reads by node and boot incarnation. It retains whole packet traces
+through restart and drives the real core reseed policy at its byte boundary.
+These tests add no shipping behavior or new entropy-source implementation.
