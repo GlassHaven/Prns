@@ -726,6 +726,11 @@ then retire the middle caller either before expiry or at the deadline tick
 before actor polling. The two survivors must still settle together, with no
 completion from the cancelled caller.
 
+The [deadline-edge retirement cases](measurements/deadline-edge-retirement.md)
+cancel the earliest deadline, the latest deadline, or every pending caller.
+They check silent cancelled boundaries and fresh traffic between deadlines,
+including when no old callers remain to drive timer progress.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

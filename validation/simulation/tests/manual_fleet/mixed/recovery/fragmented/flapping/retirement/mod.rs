@@ -1,10 +1,15 @@
 use super::*;
 
+mod edges;
+
 #[derive(Clone, Copy)]
 pub(super) enum Retirement {
     KeepAll,
     CancelMiddle,
     CancelMiddleAtDeadline,
+    CancelFirst,
+    CancelLast,
+    CancelAll,
 }
 
 impl Retirement {
@@ -12,6 +17,9 @@ impl Retirement {
         match self {
             Self::KeepAll => false,
             Self::CancelMiddle | Self::CancelMiddleAtDeadline => admission == 1,
+            Self::CancelFirst => admission == 0,
+            Self::CancelLast => admission == WAVES - 1,
+            Self::CancelAll => true,
         }
     }
 
@@ -24,7 +32,7 @@ impl Retirement {
     ) -> usize {
         match self {
             Self::KeepAll => return 0,
-            Self::CancelMiddle => {}
+            Self::CancelMiddle | Self::CancelFirst | Self::CancelLast | Self::CancelAll => {}
             Self::CancelMiddleAtDeadline => {
                 let deadline = pending[1].deadline;
                 assert_eq!(
@@ -48,20 +56,29 @@ impl Retirement {
                 assert_eq!(runner.task_count(), 3 + WAVES);
             }
         }
-        let clock = runner.snapshot().ok();
+        let clock = runner
+            .snapshot()
+            .unwrap_or_else(|error| unreachable!("retirement clock: {error}"));
         let activity = ble.data_snapshots();
-        assert_eq!(
-            runner.cancel(pending[1].task).ok(),
-            Some(ManualTaskCancellation::Cancelled)
-        );
-        assert_eq!(
-            runner.cancel(pending[1].task).ok(),
-            Some(ManualTaskCancellation::NotLive)
-        );
-        assert_eq!(runner.task_count(), 3 + WAVES - 1);
-        assert_eq!(runner.snapshot().ok(), clock);
+        let mut retired = 0;
+        for (admission, request) in pending.iter().enumerate() {
+            if !self.cancels(admission) {
+                continue;
+            }
+            assert_eq!(
+                runner.cancel(request.task).ok(),
+                Some(ManualTaskCancellation::Cancelled)
+            );
+            assert_eq!(
+                runner.cancel(request.task).ok(),
+                Some(ManualTaskCancellation::NotLive)
+            );
+            retired += 1;
+            assert_eq!(runner.task_count(), 3 + WAVES - retired);
+        }
+        assert_eq!(runner.snapshot().ok(), Some(clock));
         assert_eq!(ble.data_snapshots(), activity);
-        1
+        retired
     }
 }
 
