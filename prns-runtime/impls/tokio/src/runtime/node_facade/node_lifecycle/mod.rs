@@ -54,7 +54,9 @@ use super::super::request_runner::{
 use super::super::{
     InterfaceStore, Message, PreConfiguredDestination, PrnsEvent, PrnsNodeRecipe, SendError,
 };
-use super::interface_lifecycle::{drive_interfaces, DriverMsg};
+use super::interface_lifecycle::{
+    drive_interfaces_with_arbitration, DriverMsg, InterfaceArbitration,
+};
 use super::{persistence, AttachIntent, PrnsNodeHandle, PrnsNodeLocalHandle};
 
 const LOCAL_COMMAND_DEPTH: usize = 128;
@@ -90,6 +92,7 @@ pub struct PrnsNode<St, R, F, S: StorageLayout, E = crate::runtime::OsEntropySou
     accepted_announce_observer: Option<AcceptedAnnounceObserver>,
     pub(super) crypto_pool: CryptoPoolConfig,
     scheduler_policy: SchedulerPolicy,
+    interface_arbitration: InterfaceArbitration,
     persistence: Option<persistence::NodePersistence>,
 }
 
@@ -553,6 +556,7 @@ where
             iface_build_rx,
             accepted_announce_observer: None,
             crypto_pool: CryptoPoolConfig::host_default(),
+            interface_arbitration: InterfaceArbitration::TokioFair,
             scheduler_policy: SchedulerPolicy::production(),
             persistence: node_persistence,
         }
@@ -658,6 +662,13 @@ where
     #[must_use]
     pub fn with_crypto_pool(mut self, crypto_pool: CryptoPoolConfig) -> Self {
         self.crypto_pool = crypto_pool;
+        self
+    }
+
+    /// Selects this node's interface-driver readiness arbitration before execution.
+    #[must_use]
+    pub fn with_interface_arbitration(mut self, arbitration: InterfaceArbitration) -> Self {
+        self.interface_arbitration = arbitration;
         self
     }
 
@@ -826,6 +837,7 @@ where
             mut accepted_announce_observer,
             crypto_pool,
             scheduler_policy,
+            interface_arbitration,
             persistence: _,
         } = self;
         let AssembledNode {
@@ -942,11 +954,12 @@ where
                 },
                 handle.clone(),
             ),
-            drive_interfaces(
+            drive_interfaces_with_arbitration(
                 std::vec::Vec::new(),
                 iface_build_rx,
                 driver_commands,
                 driver_interfaces,
+                interface_arbitration,
             ),
         );
         match persistence_worker {

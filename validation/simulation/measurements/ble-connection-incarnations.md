@@ -62,6 +62,10 @@ fairness and making competing readiness reproducible in validation. Fixed
 priority or a process-global RNG override solely to make this test pass would
 not be an appropriate shortcut.
 
+The subsequent [arbitration follow-up](ble-replay-arbitration.md) closes this
+specific gap and refines the diagnosis: both the enclosing interface driver and
+the BLE supervisor need controlled inputs for full reconnect transcript replay.
+
 ## Production behavior
 
 Unchanged. This round is entirely simulation capture, fixtures and evidence.

@@ -277,11 +277,12 @@ enum Step<L: BleLink> {
     DiscoveryGroups(DiscoveryGroupSet),
 }
 
-pub struct BluetoothAuto<B, const MAX_PEERS: usize> {
+pub struct BluetoothAuto<B, const MAX_PEERS: usize, S = super::TokioFairBleEvents> {
     backend: B,
     local: LocalPeer,
     policy: EffectiveInterfacePolicy,
     status: BluetoothAutoStatus,
+    event_selector: S,
 }
 
 impl<B, const MAX_PEERS: usize> BluetoothAuto<B, MAX_PEERS>
@@ -303,12 +304,6 @@ where
         )
     }
 
-    #[must_use]
-    pub fn with_policy(mut self, policy: EffectiveInterfacePolicy) -> Self {
-        self.policy = policy;
-        self
-    }
-
     pub(crate) fn with_status(
         backend: B,
         identity: BleIdentity,
@@ -328,6 +323,31 @@ where
             policy: contract::defaults_for_bitrate(contract::BLE_BITRATE_GUESS_BPS)
                 .configured(ConfiguredInterfacePolicy::default()),
             status,
+            event_selector: super::TokioFairBleEvents,
+        }
+    }
+}
+
+impl<B, const MAX_PEERS: usize, S> BluetoothAuto<B, MAX_PEERS, S> {
+    #[must_use]
+    pub fn with_policy(mut self, policy: EffectiveInterfacePolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    /// Replaces only supervisor arbitration; backend, identity and status stay owned
+    /// by this instance. Ordinary constructors retain Tokio's fair selection.
+    #[must_use]
+    pub fn with_event_selector<N: super::BleEventSelector>(
+        self,
+        event_selector: N,
+    ) -> BluetoothAuto<B, MAX_PEERS, N> {
+        BluetoothAuto {
+            backend: self.backend,
+            local: self.local,
+            policy: self.policy,
+            status: self.status,
+            event_selector,
         }
     }
 
@@ -576,7 +596,8 @@ impl InterfaceStatus for BluetoothAutoStatus {
     }
 }
 
-impl<B, const MAX_PEERS: usize> InterfaceSupervisor for BluetoothAuto<B, MAX_PEERS>
+impl<B, const MAX_PEERS: usize, S: super::BleEventSelector + 'static> InterfaceSupervisor
+    for BluetoothAuto<B, MAX_PEERS, S>
 where
     B: BleBackend<MAX_PEERS>,
     B::Link: 'static,
@@ -599,6 +620,7 @@ where
             local,
             policy,
             status,
+            mut event_selector,
         } = self;
         if let Some(reason) = backend.blocked() {
             status.mark_failed(Some(reason));
@@ -637,13 +659,34 @@ where
                 apply_radio::<B, MAX_PEERS>(&mut pending, &mut members, &mut backend).await;
                 continue;
             }
-            let step = tokio::select! {
-                event = backend.next_event() => Step::Event(event),
-                Some(done) = handshakes.next(), if !handshakes.is_empty() => Step::Handshake(done),
-                Some((identity, address)) = closed_rx.recv() => Step::Closed(identity, address),
-                () = status.wait_until_disabled() => Step::Disabled,
-                groups = status.wait_for_discovery_groups_change(&discovery_groups) => Step::DiscoveryGroups(groups),
-            };
+            let step = event_selector
+                .select(super::BleEventSources {
+                    backend: async { Step::Event(backend.next_event().await) },
+                    handshake: async {
+                        if let Some(done) = handshakes.next().await {
+                            return Step::Handshake(done);
+                        }
+                        std::future::pending().await
+                    },
+                    closed: async {
+                        if let Some((identity, address)) = closed_rx.recv().await {
+                            return Step::Closed(identity, address);
+                        }
+                        std::future::pending().await
+                    },
+                    disabled: async {
+                        status.wait_until_disabled().await;
+                        Step::Disabled
+                    },
+                    groups: async {
+                        Step::DiscoveryGroups(
+                            status
+                                .wait_for_discovery_groups_change(&discovery_groups)
+                                .await,
+                        )
+                    },
+                })
+                .await;
             match step {
                 Step::Disabled => {}
                 Step::DiscoveryGroups(groups) => {
@@ -795,7 +838,8 @@ where
     }
 }
 
-impl<B, const MAX_PEERS: usize> prns_core::interfaces::ReportsStatus for BluetoothAuto<B, MAX_PEERS>
+impl<B, const MAX_PEERS: usize, S> prns_core::interfaces::ReportsStatus
+    for BluetoothAuto<B, MAX_PEERS, S>
 where
     B: BleBackend<MAX_PEERS>,
 {

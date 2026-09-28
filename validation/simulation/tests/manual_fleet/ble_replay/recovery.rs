@@ -126,7 +126,7 @@ pub(super) fn assert_distinct_incarnations(snapshot: &BleWireSnapshot, boundary:
 }
 
 #[test]
-fn partition_reconnect_preserves_incarnation_isolation_and_data_bytes() {
+fn partition_reconnect_replays_the_entire_transcript_with_explicit_arbitration() {
     let expected = replay(11, 42, Lifecycle::Reconnect);
     let data = |transcript: &Transcript| {
         transcript
@@ -139,13 +139,25 @@ fn partition_reconnect_preserves_incarnation_isolation_and_data_bytes() {
     };
     for _ in 0..8 {
         let actual = replay(11, 42, Lifecycle::Reconnect);
-        // Simultaneously ready supervisor branches can change the handshake initiator.
-        // Keep the raw transcript; only the data-channel replay claim is made here.
-        assert_eq!(data(&actual), data(&expected));
-        assert_eq!(actual.response, expected.response);
-        assert_eq!(actual.connection_boundaries, expected.connection_boundaries);
+        actual.assert_replays(&expected);
     }
     let changed = replay(21, 42, Lifecycle::Reconnect);
     assert_eq!(changed.response, expected.response);
     assert_ne!(data(&changed), data(&expected));
+}
+
+#[test]
+fn every_initial_event_order_repeats_its_own_full_reconnect_transcript() {
+    for driver_first in [
+        personal_rns::runtime::InterfaceEventSource::Message,
+        personal_rns::runtime::InterfaceEventSource::Completion,
+    ] {
+        for first in selection::FirstEvent::ALL {
+            let expected = replay_with_selection(11, 42, Lifecycle::Reconnect, first, driver_first);
+            for _ in 0..8 {
+                replay_with_selection(11, 42, Lifecycle::Reconnect, first, driver_first)
+                    .assert_replays(&expected);
+            }
+        }
+    }
 }

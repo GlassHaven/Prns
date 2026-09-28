@@ -57,7 +57,7 @@ use super::{InterfaceStore, SendError};
 pub use byte_stream::{ByteStreamReader, ByteStreamWriter, StreamId};
 pub use interface_lifecycle::{
     AttachIntent, Attachable, AttachedInterface, AttachedSupervisor, DetachedFleet, Fleet,
-    InterfaceAttachmentMetadata, InterfaceSupervisor,
+    InterfaceArbitration, InterfaceAttachmentMetadata, InterfaceEventSource, InterfaceSupervisor,
 };
 use interface_lifecycle::{DriverMsg, RegisteredInterface};
 pub use node_lifecycle::{

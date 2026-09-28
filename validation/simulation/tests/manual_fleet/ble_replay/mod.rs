@@ -13,9 +13,10 @@ use prns_simulation::ble::{
     BleWireSnapshot, VirtualBleBackendConfig, VirtualBleBackendLimits, VirtualBleLab,
     VirtualBleLinkConfig, VirtualGattConfig,
 };
-use scenario::add_node_with_sources;
+use scenario::add_node_with_sources_and_arbitration;
 
 mod recovery;
+mod selection;
 
 #[derive(Clone, Copy)]
 enum Lifecycle {
@@ -46,7 +47,47 @@ struct Transcript {
     connection_boundaries: Vec<usize>,
 }
 
+impl Transcript {
+    fn assert_replays(&self, expected: &Self) {
+        for (index, (actual, expected)) in self
+            .wire
+            .values
+            .iter()
+            .zip(&expected.wire.values)
+            .enumerate()
+        {
+            assert_eq!(actual, expected, "wire value {index}");
+        }
+        for (index, (actual, expected)) in self
+            .discovery
+            .events
+            .iter()
+            .zip(&expected.discovery.events)
+            .enumerate()
+        {
+            assert_eq!(actual, expected, "discovery event {index}");
+        }
+        assert_eq!(self, expected);
+    }
+}
+
 fn replay(seed: u8, marker: u8, lifecycle: Lifecycle) -> Transcript {
+    replay_with_selection(
+        seed,
+        marker,
+        lifecycle,
+        selection::FirstEvent::Backend,
+        personal_rns::runtime::InterfaceEventSource::Message,
+    )
+}
+
+fn replay_with_selection(
+    seed: u8,
+    marker: u8,
+    lifecycle: Lifecycle,
+    first: selection::FirstEvent,
+    driver_first: personal_rns::runtime::InterfaceEventSource,
+) -> Transcript {
     let capture = BleWireCapture::new(nonzero(4096));
     let lab = VirtualBleLab::with_wire_capture(
         BleMediumConfig::new(
@@ -105,9 +146,10 @@ fn replay(seed: u8, marker: u8, lifecycle: Lifecycle) -> Transcript {
                 l2cap: None,
                 link_mtu: BLE_HW_MTU as u16,
             },
-        );
+        )
+        .with_event_selector(selection::RoundRobinBleEvents::new(first));
         let heard = Rc::new(RefCell::new(Vec::new()));
-        let (task, mut ready) = add_node_with_sources(
+        let (task, mut ready) = add_node_with_sources_and_arbitration(
             &mut runner,
             NodeSpec {
                 index,
@@ -128,6 +170,9 @@ fn replay(seed: u8, marker: u8, lifecycle: Lifecycle) -> Transcript {
                         },
                     ),
                 )
+            },
+            personal_rns::runtime::InterfaceArbitration::RoundRobin {
+                first: driver_first,
             },
         );
         assert!(settle(&mut runner).is_empty());

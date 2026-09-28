@@ -154,6 +154,25 @@ where
     E: EntropySource + 'static,
     H: FnOnce(InstantMillis) -> (TokioHost<E>, TokioHandleEntropy) + 'static,
 {
+    add_node_with_sources_and_arbitration(
+        runner,
+        spec,
+        sources,
+        personal_rns::runtime::InterfaceArbitration::TokioFair,
+    )
+}
+
+pub fn add_node_with_sources_and_arbitration<F, E, H>(
+    runner: &mut ManualTaskRunner<'_, Completion>,
+    spec: NodeSpec<F>,
+    sources: H,
+    arbitration: personal_rns::runtime::InterfaceArbitration,
+) -> (ManualTaskId, oneshot::Receiver<NodeControl>)
+where
+    F: FnOnce(&PrnsNodeHandle) + 'static,
+    E: EntropySource + 'static,
+    H: FnOnce(InstantMillis) -> (TokioHost<E>, TokioHandleEntropy) + 'static,
+{
     let elapsed = runner
         .snapshot()
         .unwrap_or_else(|error| unreachable!("node admission clock: {error}"))
@@ -216,7 +235,8 @@ where
                 host,
                 handle_entropy,
             )
-            .with_crypto_pool(CryptoPoolConfig::Inline);
+            .with_crypto_pool(CryptoPoolConfig::Inline)
+            .with_interface_arbitration(arbitration);
             let clock = node.clock();
             let origin = clock.now();
             assert!(ready

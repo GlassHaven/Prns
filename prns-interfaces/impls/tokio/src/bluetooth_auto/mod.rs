@@ -1,8 +1,10 @@
+mod event_selection;
 #[cfg(feature = "bluetooth-auto")]
 mod host;
 #[cfg(all(feature = "bluetooth-auto", target_os = "linux"))]
 mod linux;
 mod runtime;
+pub use event_selection::{BleEventSelector, BleEventSources, TokioFairBleEvents};
 
 #[cfg(feature = "bluetooth-auto")]
 pub use host::{

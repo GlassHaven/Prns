@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+
+mod arbitration;
+pub use arbitration::{InterfaceArbitration, InterfaceEventSource};
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
@@ -704,11 +707,29 @@ pub(super) enum DriverMsg {
 }
 
 /// Drive every interface run future — the recipe's initial set, plus any added through the handle at runtime — on the `run` task. Each runtime-added interface is wrapped with a stop signal so [`PrnsNodeHandle::remove_interface`] can drop it mid-flight; the initial set runs for the node's life.
+#[cfg(test)]
 pub(super) async fn drive_interfaces(
+    initial: std::vec::Vec<Pin<Box<dyn Future<Output = ()>>>>,
+    messages: UnboundedReceiver<DriverMsg>,
+    commands: UnboundedSender<HostCommand>,
+    interfaces: Arc<Mutex<HashMap<InterfaceId, RegisteredInterface>>>,
+) {
+    drive_interfaces_with_arbitration(
+        initial,
+        messages,
+        commands,
+        interfaces,
+        InterfaceArbitration::TokioFair,
+    )
+    .await;
+}
+
+pub(super) async fn drive_interfaces_with_arbitration(
     initial: std::vec::Vec<Pin<Box<dyn Future<Output = ()>>>>,
     mut messages: UnboundedReceiver<DriverMsg>,
     commands: UnboundedSender<HostCommand>,
     interfaces: Arc<Mutex<HashMap<InterfaceId, RegisteredInterface>>>,
+    mut arbitration: InterfaceArbitration,
 ) {
     let mut futures: FuturesUnordered<Pin<Box<dyn Future<Output = Option<InterfaceId>>>>> = initial
         .into_iter()
@@ -728,9 +749,36 @@ pub(super) async fn drive_interfaces(
         if !open && futures.is_empty() {
             return;
         }
-        tokio::select! {
-            message = messages.recv(), if open => match message {
-                Some(DriverMsg::Add { id, supervisor, registration, build }) => {
+        enum Event {
+            Message(Option<DriverMsg>),
+            Completion(Option<Option<InterfaceId>>),
+        }
+        let event = arbitration
+            .select(
+                async {
+                    if open {
+                        Event::Message(messages.recv().await)
+                    } else {
+                        std::future::pending().await
+                    }
+                },
+                async {
+                    if futures.is_empty() {
+                        std::future::pending().await
+                    } else {
+                        Event::Completion(futures.next().await)
+                    }
+                },
+            )
+            .await;
+        match event {
+            Event::Message(message) => match message {
+                Some(DriverMsg::Add {
+                    id,
+                    supervisor,
+                    registration,
+                    build,
+                }) => {
                     if let Some(supervisor_id) = supervisor {
                         let _ = supervisor_of.insert(id, supervisor_id);
                     }
@@ -747,7 +795,13 @@ pub(super) async fn drive_interfaces(
                         Err(_) => Box::pin(async move { Some(id) }),
                     };
                     futures.push(guarded);
-                    stops.insert(id, RunningInterface { stop: stop_tx, registration });
+                    stops.insert(
+                        id,
+                        RunningInterface {
+                            stop: stop_tx,
+                            registration,
+                        },
+                    );
                 }
                 Some(DriverMsg::Stop { id }) => {
                     let Some(registration) = stop_interface(&mut stops, id) else {
@@ -775,15 +829,9 @@ pub(super) async fn drive_interfaces(
                 None => open = false,
             },
             // An interface whose run future ended on its own (a dropped connection, no reconnect) deregisters itself: its descriptor must not outlive its wire. A future ended by a `Stop` already had its id pulled from `stops`, so the `stops.remove` here is what distinguishes a natural completion from a deliberate one.
-            done = futures.next(), if !futures.is_empty() => {
+            Event::Completion(done) => {
                 if let Some(Some(id)) = done {
-                    complete_interface(
-                        &mut stops,
-                        &mut supervisor_of,
-                        &interfaces,
-                        &commands,
-                        id,
-                    );
+                    complete_interface(&mut stops, &mut supervisor_of, &interfaces, &commands, id);
                 }
             }
         }

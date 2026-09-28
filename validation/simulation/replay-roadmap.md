@@ -75,14 +75,12 @@ expected values. No production clock change was needed.
 
 ## Next milestones, in order
 
-The reconnect extension exposed an additional prerequisite: production Tokio
-supervisors arbitrate simultaneously ready events independently of the manual
-runner's outer actor order. Two reconnect runs can choose opposite handshake
-initiators. [Connection-incarnation evidence](measurements/ble-connection-incarnations.md)
-therefore proves data-channel byte replay and recovery invariants, not whole
-reconnect transcript equality. Make that arbitration an explicit replay input
-before expanding exact lifecycle claims; do not replace production fairness
-with fixed priority merely to satisfy a test.
+The reconnect extension exposed an additional input: internal readiness
+arbitration. The [arbitration follow-up](measurements/ble-replay-arbitration.md)
+now controls both the interface-task driver and BLE supervisor per instance,
+restoring exact whole reconnect transcripts across ten initial-order combinations.
+Production defaults remain Tokio-fair. This closes the observed two-node
+reconnect gap, not every nested selector, worker or native backend schedule.
 
 1. Extend the three-provider construction seam beyond the now-proven short BLE
    replay to other backend consumers, auditing randomness outside node-owned providers. Keep
