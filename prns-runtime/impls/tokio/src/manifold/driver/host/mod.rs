@@ -1,10 +1,11 @@
 use std::time::Duration;
 
+use prns_core::entropy::{EntropySource, RuntimeEntropy};
 use tokio::time::Instant;
 
 use crate::engine::InstantMillis;
 use crate::manifold::Host;
-use crate::runtime::OsRuntimeEntropy;
+use crate::runtime::OsEntropySource;
 
 const MAX_TIMER_ARM_MILLIS: u64 = 24 * 60 * 60 * 1_000;
 
@@ -88,13 +89,6 @@ impl TokioClock {
             tokio::time::sleep(Duration::from_millis(remaining.min(MAX_TIMER_ARM_MILLIS))).await;
         }
     }
-
-    fn with_entropy(self, entropy: OsRuntimeEntropy) -> TokioHost {
-        TokioHost {
-            clock: self,
-            entropy,
-        }
-    }
 }
 
 impl Default for TokioClock {
@@ -118,17 +112,18 @@ impl Default for TokioClock {
 /// let host = TokioHost::new();
 /// let duplicated = host.clone();
 /// ```
-pub struct TokioHost {
+pub struct TokioHost<S = OsEntropySource> {
     clock: TokioClock,
-    entropy: OsRuntimeEntropy,
+    entropy: RuntimeEntropy<S>,
 }
 
 #[expect(
     clippy::expect_used,
     reason = "a host without a functioning OS CSPRNG must not emit runtime randomness"
 )]
-fn seeded_runtime_entropy() -> OsRuntimeEntropy {
-    OsRuntimeEntropy::try_new().expect("OS CSPRNG must provide the initial runtime seed")
+fn seeded_runtime_entropy() -> RuntimeEntropy<OsEntropySource> {
+    RuntimeEntropy::try_new(OsEntropySource)
+        .expect("OS CSPRNG must provide the initial runtime seed")
 }
 
 impl TokioHost {
@@ -140,7 +135,21 @@ impl TokioHost {
     /// Mirrors `EmbassyTimebase::start_at`: the logical timeline resumes from `logical_start` instead of zero, so persisted timestamps stay in this boot's past.
     #[must_use]
     pub fn start_at(logical_start: InstantMillis) -> Self {
-        TokioClock::start_at(logical_start).with_entropy(seeded_runtime_entropy())
+        Self::with_runtime_entropy(logical_start, seeded_runtime_entropy())
+    }
+}
+
+impl<S: EntropySource> TokioHost<S> {
+    /// Moves an initialized core stream into this host without reseeding or copying it.
+    ///
+    /// Source quality remains the caller's responsibility. Controlled sources belong only in
+    /// isolated validation; ordinary node construction always selects the OS-backed host.
+    #[must_use]
+    pub fn with_runtime_entropy(logical_start: InstantMillis, entropy: RuntimeEntropy<S>) -> Self {
+        Self {
+            clock: TokioClock::start_at(logical_start),
+            entropy,
+        }
     }
 
     #[must_use]
@@ -159,7 +168,7 @@ impl Default for TokioHost {
     }
 }
 
-impl Host for TokioHost {
+impl<S: EntropySource> Host for TokioHost<S> {
     fn now(&self) -> InstantMillis {
         self.clock.now()
     }
@@ -172,6 +181,9 @@ impl Host for TokioHost {
         self.entropy.fill_random(bytes);
     }
 }
+
+#[cfg(test)]
+mod entropy_tests;
 
 #[cfg(test)]
 mod tests {

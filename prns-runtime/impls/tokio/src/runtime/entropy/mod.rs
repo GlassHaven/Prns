@@ -5,7 +5,8 @@ use prns_core::remote_control::{
 };
 pub(crate) use shared::TokioEntropy;
 
-pub(crate) struct OsEntropySource;
+/// The operating-system CSPRNG used to seed and reseed Tokio runtime streams.
+pub struct OsEntropySource;
 
 impl EntropySource for OsEntropySource {
     type Error = OsEntropyError;

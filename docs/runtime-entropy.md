@@ -22,11 +22,23 @@ provider, preserving the continuous secret stream without copying it. Embassy
 installs that generator once behind a mutex and distributes copyable
 `EntropyHandle` values; copying a handle does not copy the generator.
 
-Standard/Tokio hosts seed from the operating-system CSPRNG. A manifold owns a
-non-cloneable stream, while the few thread-local consumers seed an isolated
-stream lazily. Continuing Prns inside a process produced by raw Unix `fork` is
+Standard/Tokio nodes seed from the operating-system CSPRNG. A manifold owns a
+non-cloneable stream. Each node also owns a shared stream for its handle,
+attached interfaces and supervisor fleets; cloning a handle shares ownership,
+not generator state. Unrelated nodes do not share a thread-local generator.
+Path-discovery identifiers retain a fallible direct OS-source read, returning
+`EntropyUnavailable` before submitting a command if that read fails.
+Continuing Prns inside a process produced by raw Unix `fork` is
 unsupported because inherited generator state would be duplicated; spawning a
 fresh executable remains supported.
+
+`TokioHost::with_runtime_entropy` accepts an already-initialized
+`RuntimeEntropy<S>` and an explicit logical origin. Moving the stream preserves
+its position, source and reseed health without another seed read. The host does
+not accept a raw seed or an unbranded random-output callback. Controlled sources
+are appropriate only for isolated validation; normal node construction remains
+OS-backed. This host-level seam does not yet configure all entropy owners in a
+complete node or establish packet-level simulator replay.
 
 ## Reseeding
 

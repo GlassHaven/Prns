@@ -2,6 +2,7 @@ mod byte_stream;
 mod handle_capabilities;
 mod interface_lifecycle;
 mod node_lifecycle;
+mod path_discovery;
 mod persistence;
 mod remote_control;
 mod request_response;
@@ -25,12 +26,11 @@ use crate::engine::{
     AllowRequester, AllowRequesterFailure, AnnounceNow, CloseLink, CloseRemoteControlPairing,
     CloseRemoteControlPairingOutcome, CommandId, EgressTarget, EstablishLink, EstablishLinkFailure,
     Identify, IdentifyFailure, IssuedCommand, LinkEstablished, OpenRemoteControlPairing,
-    PacketReceiptDelivered, PathFound, PathRequestId, PrnsCommand, RemoteControlPairingOpened,
-    RequestPath, RequestPathFailure, SendGroup, SendGroupFailure, SendGroupPayload,
-    SendPlainPacket, SendPlainPacketFailure, SendPlainPacketPayload, SendSinglePacket,
-    SendSinglePacketFailure, SendSinglePacketPayload, SendToChannel, SendToChannelBody,
-    SendToChannelFailure, SendToLink, SendToLinkFailure, SendToLinkPayload,
-    SetRegisteredAnnounceAppData, Settlement, PATH_REQUEST_ID_LEN,
+    PacketReceiptDelivered, PrnsCommand, RemoteControlPairingOpened, RequestPathFailure, SendGroup,
+    SendGroupFailure, SendGroupPayload, SendPlainPacket, SendPlainPacketFailure,
+    SendPlainPacketPayload, SendSinglePacket, SendSinglePacketFailure, SendSinglePacketPayload,
+    SendToChannel, SendToChannelBody, SendToChannelFailure, SendToLink, SendToLinkFailure,
+    SendToLinkPayload, SetRegisteredAnnounceAppData, Settlement,
 };
 use crate::identity::IdentityHash;
 use crate::interfaces::rns_management::RnsRemotePathTableRequest;
@@ -461,28 +461,6 @@ impl PrnsNodeHandle {
         {
             Some(Settlement::EstablishLink(result)) => result.map_err(SendError::Failed),
             Some(_) | None => Err(SendError::NodeStopped),
-        }
-    }
-
-    pub async fn request_path(
-        &self,
-        destination: DestinationHash,
-    ) -> Result<PathFound, RequestPathError> {
-        let mut request_id = [0; PATH_REQUEST_ID_LEN];
-        getrandom::getrandom(&mut request_id).map_err(|_| RequestPathError::EntropyUnavailable)?;
-        let timing = self.path_command_timing().await;
-        match self
-            .settle_with_timing(
-                PrnsCommand::RequestPath(RequestPath {
-                    destination,
-                    id: PathRequestId::new(request_id),
-                }),
-                timing,
-            )
-            .await
-        {
-            Some(Settlement::RequestPath(result)) => result.map_err(RequestPathError::Failed),
-            Some(_) | None => Err(RequestPathError::NodeStopped),
         }
     }
 

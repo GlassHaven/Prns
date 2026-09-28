@@ -21,17 +21,17 @@ This is a current-status guide, not another chronological list of test slices.
 | --- | --- | --- |
 | Logical boot epoch | Tokio node lifecycle normally selects persistence or wall time; `with_timeline_origin` already supplies an explicit origin | Manual-fleet fixtures now use that existing API, with a fixed epoch plus runtime elapsed time |
 | Monotonic time | `ManualTimeDriver` owns paused Tokio time and validates medium coordination | Observe Tokio clocks inside runner-polled actors; outside-runtime reads use host time |
-| Engine/inline-crypto entropy | `TokioHost` owns `OsRuntimeEntropy`, backed by shared-core `RuntimeEntropy` | Initial seeding and later reseeding remain OS-backed |
+| Engine/inline-crypto entropy | `TokioHost<S>` owns shared-core `RuntimeEntropy<S>`; the default source is the OS | An initialized source can now be supplied at the host boundary; full-node construction still selects the OS |
 | Handle/interface entropy | `TokioEntropy` now owns an eagerly OS-seeded, node-scoped shared stream; handle clones, fleets and interface seams retain that owner | Executor-thread consumption no longer couples unrelated nodes; deterministic source selection is still absent |
-| Path-discovery identifiers | `PrnsNodeHandle::request_path` calls `getrandom` directly | Another owner must join replay scenarios that exercise path requests; this echo fixture does not |
+| Path-discovery identifiers | `PrnsNodeHandle::request_path` uses a fallible `OsEntropySource` read through a private source seam | Failure-before-admission is tested; full-node replay still needs source ownership/selection for this path |
 | Boot identities | Manual-fleet destinations and transport identities use explicit fixture secrets | Stable in this fixture; not a promise for arbitrary provisioning paths |
 | Actor order | Manual task runner supports cyclic and versioned seeded scheduling | Does not determine branch selection inside futures or background-worker completion |
 | Container ordering | Node handles include standard `HashMap` inventories | Audit iteration consumers before treating larger multi-interface ordering as reproducible |
 | Process-command timestamps | Tokio process-command support reads `SystemTime` | Outside the current no-process scenario; do not call the entire runtime clock-controlled |
 
-Source owners: Tokio `manifold/driver/host.rs`, `runtime/entropy/mod.rs`,
+Source owners: Tokio `manifold/driver/host/mod.rs`, `runtime/entropy/mod.rs`,
 `runtime/entropy/shared.rs`,
-`runtime/node_facade/mod.rs`, `runtime/node_facade/node_lifecycle/mod.rs`,
+`runtime/node_facade/path_discovery/mod.rs`, `runtime/node_facade/node_lifecycle/mod.rs`,
 `runtime/node_facade/persistence/mod.rs`, and `runtime/process_commands.rs`.
 Shared entropy policy already belongs to core; do not duplicate its generator
 or reseeding rules in the simulator.
@@ -88,3 +88,9 @@ The [entropy ownership follow-up](measurements/node-entropy-ownership.md) change
 Tokio production ownership from thread-local to node-scoped for handles and
 interfaces, retaining the core CSPRNG. Its synchronization and memory costs are
 explicit; it does not yet seed or replay production packets deterministically.
+
+The [host source seam follow-up](measurements/host-entropy-source.md) allows a
+low-level Tokio host to consume a supplied core stream without adding a new
+generator or global switch. Path discovery keeps its fallible source contract.
+The next construction step must connect explicit sources to the complete node,
+its shared handle/interface stream and path IDs before packet replay is claimed.
