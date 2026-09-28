@@ -26,6 +26,10 @@ This is a current-status guide, not another chronological list of test slices.
   multi-peer ownership coverage, not routed-mesh or scale-performance evidence.
 - Correctness scenarios cover 128 frame nodes, 20 routed nodes and 16 BLE nodes.
   Backend-scale tests are not evidence for thousands of production nodes.
+- The paired BLE replay fixture now covers 32 nodes in ordinary tests and
+  128 nodes in an opt-in lifecycle timing probe. The probe retains exact replay
+  and cleanup assertions; its debug timings include tracing and are not peak
+  memory or sustained network throughput measurements.
 - Tokio/Embassy scenarios exercise real requests, Resource transfers, failures
   and recovery. Simulator findings have driven shared-core fixes.
 - Request cancellation and overlapping deadline behavior have substantial
@@ -109,6 +113,8 @@ concurrent connections owned by one supervisor without additional runtime contro
    long-duration acceleration. Bring worker completions under explicit control.
 4. Measure full-node memory, active-peer cost and event throughput while scaling
    sparse routed and BLE fleets. Retain correctness and cleanup assertions.
+   [Initial BLE lifecycle timings](measurements/ble-fleet-scaling.md) now cover
+   8, 32 and 128 real nodes; allocation/RSS and phase-level attribution remain open.
 5. Add Wi-Fi, persistence/power-loss and sleep models, then connect selected
    workloads to ISA emulators. Native radio/controller behavior and RF remain
    separate evidence; board names on virtual protocol profiles do not cover it.

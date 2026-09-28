@@ -2,10 +2,10 @@ use super::*;
 use prns_simulation::{ManualTaskScheduling, SimulationSeed};
 use std::collections::BTreeSet;
 
-const NODES: usize = 8;
-const PAIRS: usize = NODES / 2;
-const TRACE_EVENTS: usize = 262_144;
-const CAPTURE_VALUES: usize = 16_384;
+mod scale;
+
+const TRACE_EVENTS_PER_NODE: usize = 32_768;
+const CAPTURE_VALUES_PER_NODE: usize = 2_048;
 
 #[derive(Clone, Copy)]
 struct Inputs {
@@ -33,8 +33,10 @@ fn expected_peer(node: usize) -> Vec<(InterfaceId, ConnectionState)> {
     )]
 }
 
-fn run(inputs: Inputs) -> FleetTranscript {
-    let capture = BleWireCapture::new(nonzero(CAPTURE_VALUES));
+fn run<const NODES: usize>(inputs: Inputs) -> FleetTranscript {
+    const { assert!(NODES >= 4 && NODES <= 128 && NODES.is_multiple_of(2)) };
+    let pairs = NODES / 2;
+    let capture = BleWireCapture::new(nonzero(NODES * CAPTURE_VALUES_PER_NODE));
     let lab = VirtualBleLab::with_wire_capture(
         BleMediumConfig::new(
             TopologyConfig::Explicit {
@@ -43,7 +45,7 @@ fn run(inputs: Inputs) -> FleetTranscript {
             NODES,
             4,
             NODES,
-            TRACE_EVENTS,
+            NODES * TRACE_EVENTS_PER_NODE,
         )
         .unwrap_or_else(|error| unreachable!("paired lab: {error}")),
         capture.clone(),
@@ -53,7 +55,7 @@ fn run(inputs: Inputs) -> FleetTranscript {
             .unwrap_or_else(|error| unreachable!("clock: {error}"));
     let mut runner = ManualTaskRunner::new_with_scheduling(
         &mut driver,
-        nonzero(NODES + PAIRS),
+        nonzero(NODES + pairs),
         inputs.scheduling,
     );
     let nodes: Vec<_> = (0..NODES)
@@ -86,7 +88,7 @@ fn run(inputs: Inputs) -> FleetTranscript {
         );
     }
     ble::advance_until(&mut runner, || {
-        lab.active_connection_count() == PAIRS
+        lab.active_connection_count() == pairs
             && nodes
                 .iter()
                 .enumerate()
@@ -120,14 +122,14 @@ fn run(inputs: Inputs) -> FleetTranscript {
     )];
     let before = capture.snapshot();
     let mut boundaries = vec![before.values.len()];
-    let old_connections = connection_pairs(&before);
-    assert_eq!(old_connections.len(), PAIRS);
+    let old_connections = connection_pairs::<NODES>(&before);
+    assert_eq!(old_connections.len(), pairs);
 
     assert_eq!(
         lab.set_reachability(address(0), address(1), Reachability::Isolated),
         Ok(TopologyMutation::Applied)
     );
-    assert_eq!(lab.active_connection_count(), PAIRS - 1);
+    assert_eq!(lab.active_connection_count(), pairs - 1);
     assert!(settle(&mut runner).is_empty());
     assert_eq!(capture.snapshot(), before);
     for (node, fixture::LiveNode { control, .. }) in nodes.iter().enumerate() {
@@ -159,7 +161,7 @@ fn run(inputs: Inputs) -> FleetTranscript {
         Ok(TopologyMutation::Applied)
     );
     ble::advance_until(&mut runner, || {
-        lab.active_connection_count() == PAIRS
+        lab.active_connection_count() == pairs
             && nodes
                 .iter()
                 .enumerate()
@@ -183,8 +185,8 @@ fn run(inputs: Inputs) -> FleetTranscript {
         discarded_values: 0,
         values: recovered.values[boundaries[1]..].to_vec(),
     };
-    let new_connections = connection_pairs(&after);
-    assert_eq!(new_connections.len(), PAIRS);
+    let new_connections = connection_pairs::<NODES>(&after);
+    assert_eq!(new_connections.len(), pairs);
     for (addresses, connection) in &new_connections {
         if *addresses == (address(0), address(1)) {
             assert_ne!(old_connections.get(addresses), Some(connection));
@@ -244,7 +246,7 @@ fn pair(value: &prns_simulation::ble::BleWireValue) -> (BleAddress, BleAddress) 
     (value.from.min(value.to), value.from.max(value.to))
 }
 
-fn connection_pairs(
+fn connection_pairs<const NODES: usize>(
     snapshot: &BleWireSnapshot,
 ) -> BTreeMap<(BleAddress, BleAddress), prns_simulation::ble::BleWireConnectionId> {
     let mut connections = BTreeMap::new();
@@ -310,9 +312,9 @@ fn concurrent_pairs_replay_recovery_under_seeded_actor_orders() {
             host_seed: 11,
             payload_marker: 42,
         };
-        let expected = run(inputs);
+        let expected = run::<8>(inputs);
         for _ in 0..3 {
-            assert_replay(&run(inputs), &expected);
+            assert_replay(&run::<8>(inputs), &expected);
         }
     }
 }
@@ -326,14 +328,14 @@ fn fleet_replay_detects_changed_protocol_inputs() {
         host_seed: 11,
         payload_marker: 42,
     };
-    let baseline = run(inputs);
-    let seed = run(Inputs {
+    let baseline = run::<8>(inputs);
+    let seed = run::<8>(Inputs {
         host_seed: 21,
         ..inputs
     });
     assert_eq!(baseline.responses, seed.responses);
     assert_ne!(baseline.wire, seed.wire);
-    let payload = run(Inputs {
+    let payload = run::<8>(Inputs {
         payload_marker: 43,
         ..inputs
     });
