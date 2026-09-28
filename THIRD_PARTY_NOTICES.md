@@ -2,7 +2,7 @@
 
 This checked bundle covers the shipped and qualification Rust, JavaScript, and Android product graphs.
 It was generated with `cargo-about 0.9.1` by `./tools/prns repo notices generate`.
-Notice input fingerprint: `sha256:ff0ec6242f7a778b66a55701591227889aff5a9329aeb5f77e82725d8a9db18c`.
+Notice input fingerprint: `sha256:0de28935d026300994ccc189527e60573cc8b45c6879f6677a66d50c3fa14b38`.
 Each locked Rust manifest closure is fetched into a fresh isolated Cargo home before cargo-about reads its target-filtered packaged license material offline.
 Entries are deduplicated by SPDX identifier and canonical notice text; line endings, trailing space, and repeated blank lines are normalized without changing legal words.
 

@@ -130,6 +130,9 @@ expected values. No production clock change was needed.
    arbitrary sequence generation, complete-byte replay or automatic shrinking.
 3. Add persistence/reboot fault scenarios, distinguishing actor reconstruction
    from durable storage and actual power-loss behavior.
+   The [journal foundation](measurements/journal-power-loss.md) covers 694
+   compaction cut points and exact generation recovery from surviving bytes.
+   Runtime persistence-owner integration and full-node durable reboot remain open.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,
