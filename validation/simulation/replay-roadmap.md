@@ -30,6 +30,13 @@ This is a current-status guide, not another chronological list of test slices.
   128 nodes in an opt-in lifecycle timing probe. The probe retains exact replay
   and cleanup assertions; its debug timings include tracing and are not peak
   memory or sustained network throughput measurements.
+- An opt-in allocator probe now measures live/peak requested heap and allocation
+  totals at 8/32/128 nodes. Right-sizing the paired fixture's trace reserve reduced
+  its 128-node measured peak from 325 MB to 57 MB without trace eviction.
+- Tokio wake-driven stepping now coordinates registered actors, timer wakes,
+  medium events and a caller horizon without fixed tick polling. A day-long idle
+  two-node scenario resumes real traffic, then stops at a real request deadline;
+  repeated hourly timers verify rearming over a simulated day.
 - Tokio/Embassy scenarios exercise real requests, Resource transfers, failures
   and recovery. Simulator findings have driven shared-core fixes.
 - Request cancellation and overlapping deadline behavior have substantial
@@ -88,6 +95,36 @@ expected values. No production clock change was needed.
 
 ## Next milestones, in order
 
+### Embassy parity checkpoint
+
+Embassy is a first-class simulation target, not deferred hardware-only work.
+Existing mixed-runtime request/Resource, cancellation and recovery scenarios run
+its real runtime and share protocol-core fixes. The recent complete-byte replay,
+fleet heap measurements and automatic wake stepping are nevertheless Tokio-only
+evidence and must not stand in for Embassy results.
+
+- Clock coordination: `embassy_ble/clock.rs` already leases the process-global
+  Embassy mock clock and aligns it with the shared runner. The upstream mock
+  driver exposes reset/advance but not its next deadline; completion loops still
+  step tick-by-tick. Add an observable host-side Embassy time-driver adapter and
+  coordinate its earliest deadline with Tokio and medium events before extending
+  long-duration claims. Keep scheduling policy in the adapter, not protocol core.
+- Replay: Embassy's node fixture already supplies `SharedRuntimeEntropy` from an
+  explicit test source. Audit the remaining mixed-runtime inputs and add complete
+  wire-replay evidence before inventing another entropy seam or copying Tokio's
+  arbitration mechanism into Embassy.
+- Memory/scaling: current Embassy fixtures use `Box::leak` to satisfy static
+  channel, lane and entropy lifetimes. Do not apply the Tokio heap probe unchanged
+  or describe retained fixture allocations as a production leak. Establish owned
+  or process-isolated fixtures and account for static storage separately before
+  measuring repeated lifecycle cleanup and larger fleets.
+- Shared ownership: retain the common medium, wire capture, actor scheduling,
+  clock validation and protocol-core fixes. Each new milestone should identify
+  evidence for both adapters, or name the specific unresolved adapter limitation.
+
+These are coverage/design follow-ups, not evidence of an Embassy production bug.
+Close this parity gap before expanding into another Tokio-only scenario family.
+
 The reconnect extension exposed an additional input: internal readiness
 arbitration. The [arbitration follow-up](measurements/ble-replay-arbitration.md)
 now controls both the interface-task driver and BLE supervisor per instance,
@@ -109,8 +146,9 @@ concurrent connections owned by one supervisor without additional runtime contro
    periodic reseeding now have focused packet evidence. Retain
    changed-input controls; define a versioned replay artifact before exporting
    a stable format (current transcripts are private test values).
-3. Expose/coordinate runtime deadlines before claiming arbitrary time jumps or
-   long-duration acceleration. Bring worker completions under explicit control.
+3. Extend the now-available Tokio wake-driven stepping to broader long-duration
+   workloads. Embassy timer coordination and external worker completions remain
+   separate gaps; neither is discovered by Tokio's timer queue.
 4. Measure full-node memory, active-peer cost and event throughput while scaling
    sparse routed and BLE fleets. Retain correctness and cleanup assertions.
    [Initial BLE lifecycle timings](measurements/ble-fleet-scaling.md) now cover
@@ -122,6 +160,10 @@ concurrent connections owned by one supervisor without additional runtime contro
 5. Add Wi-Fi, persistence/power-loss and sleep models, then connect selected
    workloads to ISA emulators. Native radio/controller behavior and RF remain
    separate evidence; board names on virtual protocol profiles do not cover it.
+
+The [heap and deadline checkpoint](measurements/heap-and-deadlines.md) records
+the bounded scale baseline, explicit heap-profile command, wake-stepping contract
+and long-duration evidence. RSS and thousand-node capacity are not yet measured.
 
 Production impact of the initial timeline round: none. The existing timeline API is reused in
 tests; entropy remains OS-backed. Verification evidence is recorded in

@@ -9,6 +9,7 @@ pub enum ManualTimeError {
     InvalidTickDuration {
         requested: Duration,
     },
+    WakeSteppingRequiresMillisecondTicks,
     InsideRuntime,
     SpawnedTasks {
         count: usize,
@@ -44,6 +45,7 @@ impl fmt::Display for ManualTimeError {
         match self {
             Self::RuntimeBuild(error) => write!(formatter, "cannot build manual runtime: {error}"),
             Self::InvalidTickDuration { requested } => write!(formatter, "tick duration {requested:?} must be a nonzero whole number of milliseconds fitting u64"),
+            Self::WakeSteppingRequiresMillisecondTicks => formatter.write_str("automatic wake stepping requires one-millisecond ticks"),
             Self::InsideRuntime => formatter.write_str("manual time driving requires a synchronous caller outside Tokio"),
             Self::SpawnedTasks { count } => write!(formatter, "manual time driving does not support {count} live spawned tasks"),
             Self::ReadyTasks { count } => write!(formatter, "settle {count} ready manual tasks before advancing time"),
@@ -65,6 +67,7 @@ impl std::error::Error for ManualTimeError {
             Self::Frames(error) => Some(error),
             Self::Ble(error) => Some(error),
             Self::InvalidTickDuration { .. }
+            | Self::WakeSteppingRequiresMillisecondTicks
             | Self::InsideRuntime
             | Self::SpawnedTasks { .. }
             | Self::ReadyTasks { .. }

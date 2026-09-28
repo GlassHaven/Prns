@@ -1,5 +1,9 @@
 #![cfg(feature = "controlled-time")]
 
+#[cfg(feature = "heap-profile")]
+#[global_allocator]
+static HEAP: dhat::Alloc = dhat::Alloc;
+
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -18,6 +22,7 @@ use prns_simulation::{
 mod ble;
 mod ble_replay;
 mod entropy_replay;
+mod long_duration;
 mod mixed;
 mod restart;
 mod routing;

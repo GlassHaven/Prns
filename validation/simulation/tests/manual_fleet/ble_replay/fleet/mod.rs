@@ -2,11 +2,13 @@ use super::*;
 use prns_simulation::{ManualTaskScheduling, SimulationSeed};
 use std::collections::BTreeSet;
 
+#[cfg(feature = "heap-profile")]
+mod heap;
 mod phases;
 mod scale;
 
-const TRACE_EVENTS_PER_NODE: usize = 32_768;
-const CAPTURE_VALUES_PER_NODE: usize = 2_048;
+const TRACE_EVENTS_PER_NODE: usize = 64;
+const CAPTURE_VALUES_PER_NODE: usize = 256;
 
 #[derive(Clone, Copy)]
 struct Inputs {

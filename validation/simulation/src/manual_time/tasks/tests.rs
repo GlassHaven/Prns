@@ -6,7 +6,7 @@ use std::time::Duration;
 use super::*;
 use crate::{FaultPlan, ManualMedium, TopologyConfig, VirtualMedium, VirtualMediumConfig};
 
-fn capacity(value: usize) -> NonZeroUsize {
+pub(super) fn capacity(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).unwrap_or_else(|| unreachable!("nonzero test capacity"))
 }
 
@@ -27,7 +27,7 @@ pub(super) fn driver() -> ManualTimeDriver {
     .unwrap_or_else(|error| unreachable!("valid driver: {error}"))
 }
 
-fn insert<T, F: Future<Output = T> + 'static>(
+pub(super) fn insert<T, F: Future<Output = T> + 'static>(
     runner: &mut ManualTaskRunner<'_, T>,
     future: F,
 ) -> ManualTaskId {
@@ -36,7 +36,7 @@ fn insert<T, F: Future<Output = T> + 'static>(
         .unwrap_or_else(|error| unreachable!("admission: {error}"))
 }
 
-fn poll<T>(runner: &mut ManualTaskRunner<'_, T>) -> ManualTaskPoll<T> {
+pub(super) fn poll<T>(runner: &mut ManualTaskRunner<'_, T>) -> ManualTaskPoll<T> {
     runner
         .poll_next()
         .unwrap_or_else(|error| unreachable!("poll: {error}"))

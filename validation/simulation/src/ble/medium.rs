@@ -378,6 +378,18 @@ impl VirtualBleMedium {
         schedule_locked(&self.lock_state())
     }
 
+    #[cfg(feature = "controlled-time")]
+    pub(crate) fn check_advance(&self, requested: SimulationTick) -> Result<(), BleAdvanceError> {
+        let state = self.lock_state();
+        if requested < state.now {
+            return Err(BleAdvanceError::BeforeCurrent {
+                current: state.now,
+                requested,
+            });
+        }
+        planned_emissions(&state, requested).map(|_| ())
+    }
+
     pub fn advance_to_next_event(
         &self,
         not_after: SimulationTick,

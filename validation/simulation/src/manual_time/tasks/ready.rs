@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::ops::Bound::{Excluded, Unbounded};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
-use std::task::Wake;
+use std::task::{Wake, Waker};
 
 use super::{ManualTaskId, ManualTaskScheduling};
 
@@ -16,6 +16,7 @@ pub(super) struct ReadyTasks {
     ready: BTreeSet<ReadyKey>,
     last_polled: Option<ReadyKey>,
     scheduling: ManualTaskScheduling,
+    pub(super) waiter: Option<Waker>,
 }
 
 impl ReadyTasks {
@@ -25,6 +26,7 @@ impl ReadyTasks {
             ready: BTreeSet::new(),
             last_polled: None,
             scheduling,
+            waiter: None,
         }
     }
 
@@ -59,10 +61,12 @@ impl ReadyTasks {
         Some(next.task)
     }
 
-    fn wake(&mut self, id: ManualTaskId) {
+    fn wake(&mut self, id: ManualTaskId) -> Option<Waker> {
         if self.live.contains(&id) {
             self.ready.insert(self.key(id));
+            return self.waiter.take();
         }
+        None
     }
 
     fn key(&self, task: ManualTaskId) -> ReadyKey {
@@ -96,7 +100,10 @@ impl Wake for TaskWake {
 
     fn wake_by_ref(self: &Arc<Self>) {
         if let Some(ready) = self.ready.upgrade() {
-            ReadyTasks::lock(&ready).wake(self.id);
+            let waiter = ReadyTasks::lock(&ready).wake(self.id);
+            if let Some(waiter) = waiter {
+                waiter.wake();
+            }
         }
     }
 }

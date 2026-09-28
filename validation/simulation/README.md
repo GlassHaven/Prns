@@ -98,6 +98,15 @@ available through the manual bridge below.
 
 ## Event-aware stepping
 
+For registered actors on the private paused Tokio runtime,
+`ManualTaskRunner::advance_to_next_wake(horizon)` now stops at the earliest
+actor wake, medium event or caller horizon. It requires one-millisecond ticks,
+settled actors and exclusive driving. Actors are not polled while time moves;
+medium effects settle before actor polling resumes. This discovers Tokio timers,
+not Embassy timers or external worker completions. Explicit-boundary stepping
+remains available. See the [heap and deadline evidence](measurements/heap-and-deadlines.md)
+for a 24-hour real-node lifecycle scenario and the opt-in 8/32/128-node heap probe.
+
 Both frame and BLE media expose an atomic `MediumSchedule` snapshot containing
 their current tick and earliest scheduled event, if any. `VirtualBleLab` exposes
 the same view. Queued receptions and runnable runtime tasks are not represented

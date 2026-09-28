@@ -276,6 +276,11 @@ impl VirtualBleLab {
         self.medium.schedule()
     }
 
+    #[cfg(feature = "controlled-time")]
+    pub(crate) fn check_advance(&self, requested: SimulationTick) -> Result<(), BleAdvanceError> {
+        self.medium.check_advance(requested)
+    }
+
     pub fn advance_to_next_event(
         &self,
         not_after: SimulationTick,

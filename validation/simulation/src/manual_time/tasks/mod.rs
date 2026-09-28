@@ -10,6 +10,7 @@ use super::{ManualAdvance, ManualTimeDriver, ManualTimeError, ManualTimeSnapshot
 use crate::SimulationTick;
 
 mod cancellation;
+mod deadlines;
 mod ready;
 mod scheduling;
 pub use cancellation::ManualTaskCancellation;

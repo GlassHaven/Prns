@@ -258,6 +258,47 @@ enum Drift {
 }
 
 #[test]
+fn wake_stepping_preflights_ble_budget_before_either_clock_moves() {
+    let (frames, ble, mut backends) = media(1);
+    let mut driver = checked(ManualTimeDriver::new(
+        ManualMedium::FramesAndBle {
+            frames: frames.clone(),
+            ble: ble.clone(),
+        },
+        Duration::from_millis(1),
+    ));
+    for backend in &mut backends {
+        advertising(&mut driver, backend, AdvertisingMode::On);
+    }
+    let before = (frames.trace(), ble.trace(), checked(driver.snapshot()));
+    let mut runner = ManualTaskRunner::<()>::new(&mut driver, NonZeroUsize::MIN);
+    assert!(matches!(
+        runner.advance_to_next_wake(tick(100)),
+        Err(ManualTimeError::Ble(_))
+    ));
+    assert_eq!(
+        (frames.trace(), ble.trace(), checked(runner.snapshot())),
+        before
+    );
+}
+
+#[test]
+fn wake_stepping_refuses_coarse_ticks_without_mutation() {
+    let (frames, ble, _backends) = media(2);
+    let mut driver = driver(&frames, &ble);
+    let before = (frames.trace(), ble.trace(), checked(driver.snapshot()));
+    let mut runner = ManualTaskRunner::<()>::new(&mut driver, NonZeroUsize::MIN);
+    assert!(matches!(
+        runner.advance_to_next_wake(tick(100)),
+        Err(ManualTimeError::WakeSteppingRequiresMillisecondTicks)
+    ));
+    assert_eq!(
+        (frames.trace(), ble.trace(), checked(runner.snapshot())),
+        before
+    );
+}
+
+#[test]
 fn mixed_advance_selects_each_medium_when_its_deadline_is_earliest() {
     let (frames, ble, mut backends) = media(2);
     let sender = frames.attach(b"sender").unwrap();

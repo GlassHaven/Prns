@@ -14,6 +14,22 @@ pub enum ManualMedium {
 }
 
 impl ManualMedium {
+    pub(super) fn check_advance(&self, target: SimulationTick) -> Result<(), ManualTimeError> {
+        let now = self.now()?;
+        if target < now {
+            return Err(ManualTimeError::BeforeCurrent {
+                current: now,
+                requested: target,
+            });
+        }
+        match self {
+            Self::Frames(_) => Ok(()),
+            Self::Ble(ble) | Self::FramesAndBle { ble, .. } => {
+                ble.check_advance(target).map_err(ManualTimeError::Ble)
+            }
+        }
+    }
+
     pub(super) fn now(&self) -> Result<SimulationTick, ManualTimeError> {
         match self {
             Self::Frames(medium) => Ok(medium.now()),
