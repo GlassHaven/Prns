@@ -14,6 +14,7 @@ pub(super) fn replacements(
     crossing: LinkId,
     cycle: usize,
 ) {
+    let remaining_actors = runner.task_count();
     let expected: BTreeMap<_, _> = [0x61, 0x91]
         .into_iter()
         .map(|marker| {
@@ -38,7 +39,7 @@ pub(super) fn replacements(
         settle(runner).into_iter().collect::<BTreeMap<_, _>>(),
         expected
     );
-    assert_eq!(runner.task_count(), 3);
+    assert_eq!(runner.task_count(), remaining_actors);
 }
 
 fn exercise(

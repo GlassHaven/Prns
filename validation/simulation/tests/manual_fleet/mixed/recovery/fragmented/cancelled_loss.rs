@@ -1,6 +1,12 @@
 use super::*;
 use prns_simulation::ManualTaskCancellation;
 
+#[derive(Clone, Copy)]
+enum RecoveryTiming {
+    BeforeTimeout,
+    AfterTimeout,
+}
+
 fn reachability(ble: &VirtualBleLab, state: Reachability) {
     assert_eq!(
         ble.set_reachability(
@@ -16,6 +22,7 @@ fn exercise(
     direction: Direction,
     exchange: Exchange,
     boundary: CutBoundary,
+    recovery: RecoveryTiming,
     profile: Profile,
     scheduling: ManualTaskScheduling,
 ) {
@@ -85,19 +92,38 @@ fn exercise(
                 let live = lost_requests(runner, nodes, &[(direction.requester(), crossing)]);
                 assert!(settle(runner).is_empty());
                 assert_eq!(runner.task_count(), 4);
-                expire(runner, frames, ble, started, live);
+                let pending = match recovery {
+                    RecoveryTiming::BeforeTimeout => live,
+                    RecoveryTiming::AfterTimeout => {
+                        expire(runner, frames, ble, started, live);
+                        BTreeMap::new()
+                    }
+                };
                 assert_eq!(
                     runner.cancel(abandoned).ok(),
                     Some(ManualTaskCancellation::NotLive)
                 );
-                assert_eq!(runner.task_count(), 3);
+                assert_eq!(runner.task_count(), 3 + pending.len());
                 echo(runner, nodes, 0, local, 0x51 + cycle as u8);
 
                 reachability(ble, Reachability::Reachable);
                 converge(runner, ble, nodes);
+                if let RecoveryTiming::BeforeTimeout = recovery {
+                    assert!(
+                        frames.now().get() < started.get() + REQUEST_TIMEOUT,
+                        "reconnection must precede the original deadline"
+                    );
+                    assert_eq!(runner.task_count(), 4);
+                }
                 routes(runner, nodes, frame_id);
                 cancellation::replacements(runner, nodes, direction, crossing, cycle);
                 assert_eq!(ble.active_connection_count(), 1);
+                if let RecoveryTiming::BeforeTimeout = recovery {
+                    assert!(frames.now().get() < started.get() + REQUEST_TIMEOUT);
+                    assert_eq!(runner.task_count(), 4);
+                    expire(runner, frames, ble, started, pending);
+                    assert_eq!(runner.task_count(), 3);
+                }
                 // Exercise a second deadline interval after replacement, still with
                 // no callback/completion from the abandoned actor.
                 let recovered = frames.now();
@@ -117,7 +143,7 @@ fn exercise(
     );
 }
 
-fn matrix(exchange: Exchange, boundary: CutBoundary) {
+fn matrix(exchange: Exchange, boundary: CutBoundary, recovery: RecoveryTiming) {
     for direction in [Direction::TowardBle, Direction::FromBle] {
         for profile in [Profile::AppleBridge, Profile::BluezBridge] {
             for scheduling in [
@@ -132,7 +158,7 @@ fn matrix(exchange: Exchange, boundary: CutBoundary) {
                     seed: SimulationSeed::new(u64::MAX),
                 },
             ] {
-                exercise(direction, exchange, boundary, profile, scheduling);
+                exercise(direction, exchange, boundary, recovery, profile, scheduling);
             }
         }
     }
@@ -140,20 +166,72 @@ fn matrix(exchange: Exchange, boundary: CutBoundary) {
 
 #[test]
 fn cancelled_caller_survives_loss_of_queued_request_fragments() {
-    matrix(Exchange::Request, CutBoundary::Queued);
+    matrix(
+        Exchange::Request,
+        CutBoundary::Queued,
+        RecoveryTiming::AfterTimeout,
+    );
 }
 
 #[test]
 fn cancelled_caller_survives_loss_of_consumed_request_fragments() {
-    matrix(Exchange::Request, CutBoundary::Consumed);
+    matrix(
+        Exchange::Request,
+        CutBoundary::Consumed,
+        RecoveryTiming::AfterTimeout,
+    );
 }
 
 #[test]
 fn cancelled_caller_survives_loss_of_queued_response_fragments() {
-    matrix(Exchange::Response, CutBoundary::Queued);
+    matrix(
+        Exchange::Response,
+        CutBoundary::Queued,
+        RecoveryTiming::AfterTimeout,
+    );
 }
 
 #[test]
 fn cancelled_caller_survives_loss_of_consumed_response_fragments() {
-    matrix(Exchange::Response, CutBoundary::Consumed);
+    matrix(
+        Exchange::Response,
+        CutBoundary::Consumed,
+        RecoveryTiming::AfterTimeout,
+    );
+}
+
+#[test]
+fn early_recovery_after_abandoned_queued_request_preserves_old_timeout() {
+    matrix(
+        Exchange::Request,
+        CutBoundary::Queued,
+        RecoveryTiming::BeforeTimeout,
+    );
+}
+
+#[test]
+fn early_recovery_after_abandoned_consumed_request_preserves_old_timeout() {
+    matrix(
+        Exchange::Request,
+        CutBoundary::Consumed,
+        RecoveryTiming::BeforeTimeout,
+    );
+}
+
+#[test]
+fn early_recovery_after_abandoned_queued_response_preserves_old_timeout() {
+    matrix(
+        Exchange::Response,
+        CutBoundary::Queued,
+        RecoveryTiming::BeforeTimeout,
+    );
+}
+
+#[test]
+fn early_recovery_after_abandoned_consumed_response_preserves_old_timeout() {
+    matrix(
+        Exchange::Response,
+        CutBoundary::Consumed,
+        RecoveryTiming::BeforeTimeout,
+    );
 }

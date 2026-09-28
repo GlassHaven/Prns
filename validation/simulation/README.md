@@ -703,6 +703,10 @@ then combines caller abandonment with a BLE cut before those fragments drain.
 A live timeout control distinguishes silent caller retirement from stalled
 timer progress; recovery reuses the original logical link.
 
+The [early-recovery matrix](measurements/fragmented-early-recovery.md) reconnects
+before the old deadline, completes fresh concurrent traffic while an older
+request remains pending, then checks that only the older live caller times out.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep
