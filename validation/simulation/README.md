@@ -698,6 +698,11 @@ moves cancellation earlier, before the request has finished crossing BLE. The
 after-drain cases verify that the request still finishes and the peer emits a
 complete response: dropping a local waiter does not retract accepted work.
 
+The [cancellation-plus-loss matrix](measurements/fragmented-cancellation-loss.md)
+then combines caller abandonment with a BLE cut before those fragments drain.
+A live timeout control distinguishes silent caller retirement from stalled
+timer progress; recovery reuses the original logical link.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

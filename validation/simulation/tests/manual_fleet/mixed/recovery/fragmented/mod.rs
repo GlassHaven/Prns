@@ -5,6 +5,7 @@ use prns_simulation::ble::{BleDataCounters, BleDataSendObservation};
 use prns_simulation::{ManualTaskPoll, ManualTaskScheduling, SimulationSeed};
 
 mod cancellation;
+mod cancelled_loss;
 
 #[derive(Clone, Copy, Debug)]
 enum CutBoundary {

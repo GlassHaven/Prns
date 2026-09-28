@@ -7,7 +7,7 @@ enum ReplacementTiming {
     AfterDrain,
 }
 
-fn replacements(
+pub(super) fn replacements(
     runner: &mut ManualTaskRunner<'_, Completion>,
     nodes: &[fixture::Node],
     direction: Direction,
