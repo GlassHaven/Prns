@@ -711,6 +711,11 @@ The [repeated-loss matrix](measurements/fragmented-staggered-timeouts.md) builds
 three outstanding lost exchanges across rapid reconnects. Fresh traffic fills
 the existing actor budget while each older caller retains its own deadline.
 
+Two follow-ups check [retiring the middle caller](measurements/middle-caller-retirement.md)
+without disturbing neighboring deadlines, and [alternating request/response losses](measurements/mixed-exchange-loss.md)
+while callers from earlier outages remain pending. Both reuse the same bounded
+fleet and exact deadline/completion assertions.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

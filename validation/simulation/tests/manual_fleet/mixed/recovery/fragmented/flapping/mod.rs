@@ -1,4 +1,29 @@
 use super::*;
+use prns_simulation::ManualTaskCancellation;
+
+mod mixed;
+
+#[derive(Clone, Copy)]
+enum ExchangeOrder {
+    Uniform,
+    Alternating,
+}
+
+impl ExchangeOrder {
+    fn at(self, first: Exchange, wave: usize) -> Exchange {
+        match (self, wave % 2, first) {
+            (Self::Uniform, _, exchange) | (Self::Alternating, 0, exchange) => exchange,
+            (Self::Alternating, _, Exchange::Request) => Exchange::Response,
+            (Self::Alternating, _, Exchange::Response) => Exchange::Request,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Retirement {
+    KeepAll,
+    CancelMiddle,
+}
 
 const WAVES: usize = 3;
 const BATCHES: usize = 2;
@@ -24,6 +49,8 @@ fn exercise(
     direction: Direction,
     exchange: Exchange,
     boundary: CutBoundary,
+    retirement: Retirement,
+    order: ExchangeOrder,
     profile: Profile,
     scheduling: ManualTaskScheduling,
 ) {
@@ -37,10 +64,11 @@ fn exercise(
             let crossing = link(runner, nodes, direction.requester(), direction.responder());
             let local = link(runner, nodes, 0, BRIDGE);
             let tasks: Vec<_> = nodes.iter().map(|node| node.task).collect();
-            let observed_direction = exchange.direction(direction);
             for batch in 0..BATCHES {
                 let mut pending: Vec<PendingRequest> = Vec::with_capacity(WAVES);
                 for wave in 0..WAVES {
+                    let exchange = order.at(exchange, wave);
+                    let observed_direction = exchange.direction(direction);
                     if wave != 0 {
                         let target = tick(frames.now().get() + WAVE_GAP_MS);
                         assert!(target.get() < pending[0].started.get() + REQUEST_TIMEOUT);
@@ -128,20 +156,42 @@ fn exercise(
                     assert_eq!(ble.active_connection_count(), 1);
                 }
                 assert_eq!(runner.task_count(), 3 + WAVES);
-                for (index, request) in pending.into_iter().enumerate() {
-                    expire(
-                        runner,
-                        frames,
-                        ble,
-                        request.started,
-                        BTreeMap::from([(
-                            request.task,
-                            Completion::TimedOut {
-                                node: direction.requester(),
-                            },
-                        )]),
+                let mut live = WAVES;
+                if let Retirement::CancelMiddle = retirement {
+                    let clock = runner.snapshot().ok();
+                    let activity = ble.data_snapshots();
+                    assert_eq!(
+                        runner.cancel(pending[1].task).ok(),
+                        Some(ManualTaskCancellation::Cancelled)
                     );
-                    assert_eq!(runner.task_count(), 3 + WAVES - index - 1);
+                    assert_eq!(
+                        runner.cancel(pending[1].task).ok(),
+                        Some(ManualTaskCancellation::NotLive)
+                    );
+                    live -= 1;
+                    assert_eq!(runner.task_count(), 3 + live);
+                    assert_eq!(runner.snapshot().ok(), clock);
+                    assert_eq!(ble.data_snapshots(), activity);
+                }
+                for (index, request) in pending.into_iter().enumerate() {
+                    let expected = match (retirement, index) {
+                        (Retirement::CancelMiddle, 1) => BTreeMap::new(),
+                        _ => {
+                            live -= 1;
+                            BTreeMap::from([(
+                                request.task,
+                                Completion::TimedOut {
+                                    node: direction.requester(),
+                                },
+                            )])
+                        }
+                    };
+                    expire(runner, frames, ble, request.started, expected);
+                    assert_eq!(runner.task_count(), 3 + live);
+                    assert_eq!(
+                        runner.cancel(request.task).ok(),
+                        Some(ManualTaskCancellation::NotLive)
+                    );
                     cancellation::replacements(
                         runner,
                         nodes,
@@ -168,7 +218,16 @@ fn exercise(
     );
 }
 
-fn matrix(exchange: Exchange, boundary: CutBoundary) {
+fn matrix(exchange: Exchange, boundary: CutBoundary, retirement: Retirement) {
+    matrix_with_order(exchange, boundary, retirement, ExchangeOrder::Uniform);
+}
+
+fn matrix_with_order(
+    exchange: Exchange,
+    boundary: CutBoundary,
+    retirement: Retirement,
+    order: ExchangeOrder,
+) {
     for direction in [Direction::TowardBle, Direction::FromBle] {
         for profile in [Profile::AppleBridge, Profile::BluezBridge] {
             for scheduling in [
@@ -183,7 +242,9 @@ fn matrix(exchange: Exchange, boundary: CutBoundary) {
                     seed: SimulationSeed::new(u64::MAX),
                 },
             ] {
-                exercise(direction, exchange, boundary, profile, scheduling);
+                exercise(
+                    direction, exchange, boundary, retirement, order, profile, scheduling,
+                );
             }
         }
     }
@@ -191,20 +252,64 @@ fn matrix(exchange: Exchange, boundary: CutBoundary) {
 
 #[test]
 fn staggered_timeouts_survive_repeated_queued_request_loss() {
-    matrix(Exchange::Request, CutBoundary::Queued);
+    matrix(Exchange::Request, CutBoundary::Queued, Retirement::KeepAll);
 }
 
 #[test]
 fn staggered_timeouts_survive_repeated_consumed_request_loss() {
-    matrix(Exchange::Request, CutBoundary::Consumed);
+    matrix(
+        Exchange::Request,
+        CutBoundary::Consumed,
+        Retirement::KeepAll,
+    );
 }
 
 #[test]
 fn staggered_timeouts_survive_repeated_queued_response_loss() {
-    matrix(Exchange::Response, CutBoundary::Queued);
+    matrix(Exchange::Response, CutBoundary::Queued, Retirement::KeepAll);
 }
 
 #[test]
 fn staggered_timeouts_survive_repeated_consumed_response_loss() {
-    matrix(Exchange::Response, CutBoundary::Consumed);
+    matrix(
+        Exchange::Response,
+        CutBoundary::Consumed,
+        Retirement::KeepAll,
+    );
+}
+
+#[test]
+fn cancelling_middle_queued_request_preserves_neighbor_deadlines() {
+    matrix(
+        Exchange::Request,
+        CutBoundary::Queued,
+        Retirement::CancelMiddle,
+    );
+}
+
+#[test]
+fn cancelling_middle_consumed_request_preserves_neighbor_deadlines() {
+    matrix(
+        Exchange::Request,
+        CutBoundary::Consumed,
+        Retirement::CancelMiddle,
+    );
+}
+
+#[test]
+fn cancelling_middle_queued_response_preserves_neighbor_deadlines() {
+    matrix(
+        Exchange::Response,
+        CutBoundary::Queued,
+        Retirement::CancelMiddle,
+    );
+}
+
+#[test]
+fn cancelling_middle_consumed_response_preserves_neighbor_deadlines() {
+    matrix(
+        Exchange::Response,
+        CutBoundary::Consumed,
+        Retirement::CancelMiddle,
+    );
 }
