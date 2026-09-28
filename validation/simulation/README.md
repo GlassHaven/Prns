@@ -716,6 +716,11 @@ without disturbing neighboring deadlines, and [alternating request/response loss
 while callers from earlier outages remain pending. Both reuse the same bounded
 fleet and exact deadline/completion assertions.
 
+The [reverse-deadline cases](measurements/reverse-request-deadlines.md) require
+later callers to retire before earlier ones. The [shared-deadline cases](measurements/shared-request-deadline.md)
+require three staggered callers to settle as one exact batch. Both alternate
+request/response loss and recover before any old caller expires.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

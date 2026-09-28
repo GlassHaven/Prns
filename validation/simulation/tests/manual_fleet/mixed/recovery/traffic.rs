@@ -1,4 +1,5 @@
 use super::*;
+use crate::scenario::POLL_BUDGET;
 
 pub(super) fn clocks(
     runner: &mut ManualTaskRunner<'_, Completion>,
@@ -78,20 +79,36 @@ pub(super) fn expire(
     started: SimulationTick,
     expected: BTreeMap<ManualTaskId, Completion>,
 ) {
-    let deadline = started.get() + REQUEST_TIMEOUT;
+    expire_at(
+        runner,
+        frames,
+        ble,
+        tick(started.get() + REQUEST_TIMEOUT),
+        expected,
+    );
+}
+
+pub(super) fn expire_at(
+    runner: &mut ManualTaskRunner<'_, Completion>,
+    frames: &VirtualMedium,
+    ble: &VirtualBleLab,
+    deadline: SimulationTick,
+    expected: BTreeMap<ManualTaskId, Completion>,
+) {
+    assert!(deadline >= frames.now());
     let remaining_actors = runner.task_count() - expected.len();
-    for _ in 0..REQUEST_TIMEOUT * 3 {
+    for _ in 0..POLL_BUDGET {
         let now = runner
             .snapshot()
             .unwrap_or_else(|error| unreachable!("clock: {error}"))
             .tick
             .get();
         assert!(runner
-            .advance_to_next_event(tick((now + 1).min(deadline)))
+            .advance_to_next_event(tick((now + 1).min(deadline.get())))
             .is_ok());
         assert_eq!(frames.now(), ble.now());
         let completed = settle(runner);
-        if frames.now() == tick(deadline) {
+        if frames.now() == deadline {
             assert_eq!(completed.into_iter().collect::<BTreeMap<_, _>>(), expected);
             assert_eq!(runner.task_count(), remaining_actors);
             return;
