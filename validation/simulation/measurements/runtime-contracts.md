@@ -56,6 +56,11 @@ Embassy-only counterpart.
 Production impact: none. All changes are host-only tests and documentation;
 shipping behavior, firmware memory and public APIs are unchanged.
 
+The subsequent [generated campaign](generated-runtime-contracts.md) exposed and
+fixed obsolete Tokio BLE close notifications affecting replacement connections.
+That follow-up changes production adapter behavior; the original contract
+foundation described here did not. Identical recovery latency remains unclaimed.
+
 ## Verification
 
 Run Cargo commands with `CARGO_INCREMENTAL=0`:

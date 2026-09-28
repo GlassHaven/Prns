@@ -57,7 +57,19 @@ impl<Seam: InterfaceSeam> BleFrameForwarder for PeerInbound<'_, Seam> {
 struct ClosedSignal {
     identity: BleIdentity,
     address: BleAddress,
-    sink: mpsc::UnboundedSender<(BleIdentity, BleAddress)>,
+    sink: mpsc::UnboundedSender<PeerClosed>,
+}
+
+struct PeerClosed {
+    identity: BleIdentity,
+    address: BleAddress,
+    status: TokioInterfaceStatus,
+}
+
+impl PeerClosed {
+    fn matches(&self, address: BleAddress, status: &TokioInterfaceStatus) -> bool {
+        self.address == address && self.status.same_instance(status)
+    }
 }
 
 pub struct BluetoothPeer<Src, Snk> {
@@ -105,7 +117,7 @@ impl<Src: BleSource, Snk: BleSink> BluetoothPeer<Src, Snk> {
     fn report_close_to(
         mut self,
         address: BleAddress,
-        sink: mpsc::UnboundedSender<(BleIdentity, BleAddress)>,
+        sink: mpsc::UnboundedSender<PeerClosed>,
     ) -> Self {
         self.closed = Some(ClosedSignal {
             identity: self.identity,
@@ -213,15 +225,25 @@ impl<Src: BleSource, Snk: BleSink> Interface for BluetoothPeer<Src, Snk> {
                 }
             }
         }
-        let closed = self.closed.take();
+        let closed = self
+            .closed
+            .take()
+            .map(|signal| (signal, self.status.clone()));
         drop(self);
-        if let Some(ClosedSignal {
-            identity,
-            address,
-            sink,
-        }) = closed
+        if let Some((
+            ClosedSignal {
+                identity,
+                address,
+                sink,
+            },
+            status,
+        )) = closed
         {
-            let _ = sink.send((identity, address));
+            let _ = sink.send(PeerClosed {
+                identity,
+                address,
+                status,
+            });
             std::future::pending::<()>().await;
         }
     }
@@ -272,7 +294,7 @@ enum HandshakeFailure {
 enum Step<L: BleLink> {
     Event(BleEvent<L>),
     Handshake(HandshakeDone<L>),
-    Closed(BleIdentity, BleAddress),
+    Closed(PeerClosed),
     Disabled,
     DiscoveryGroups(DiscoveryGroupSet),
 }
@@ -634,7 +656,7 @@ where
         let mut manager = ConnectionPolicy::<MAX_PEERS, DIAL_TRACK>::new(local);
         let mut members: HashMap<BleIdentity, TokioMember> = HashMap::new();
         let mut handshakes: HandshakeQueue<B::Link> = FuturesUnordered::new();
-        let (closed_tx, mut closed_rx) = mpsc::unbounded_channel::<(BleIdentity, BleAddress)>();
+        let (closed_tx, mut closed_rx) = mpsc::unbounded_channel::<PeerClosed>();
         let mut pending: std::vec::Vec<PolicyAction> = std::vec::Vec::new();
         status.mark_up();
         manager.start(&mut |action| pending.push(action));
@@ -669,8 +691,8 @@ where
                         std::future::pending().await
                     },
                     closed: async {
-                        if let Some((identity, address)) = closed_rx.recv().await {
-                            return Step::Closed(identity, address);
+                        if let Some(closed) = closed_rx.recv().await {
+                            return Step::Closed(closed);
                         }
                         std::future::pending().await
                     },
@@ -813,14 +835,18 @@ where
                         }
                     }
                 }
-                Step::Closed(identity, address) => {
-                    if members
-                        .get(&identity)
-                        .is_some_and(|member| member.address == address)
-                    {
-                        if let Some(member) = members.remove(&identity) {
-                            member.attached.teardown();
-                        }
+                Step::Closed(closed) => {
+                    let Some(member) = members.get(&closed.identity) else {
+                        continue;
+                    };
+                    if !closed.matches(member.address, &member.status) {
+                        continue;
+                    }
+                    let PeerClosed {
+                        identity, address, ..
+                    } = closed;
+                    if let Some(member) = members.remove(&identity) {
+                        member.attached.teardown();
                     }
                     manager.handle(PolicyInput::Closed { identity, address }, &mut |action| {
                         pending.push(action)
@@ -911,7 +937,7 @@ async fn apply_settle<B, const MAX_PEERS: usize>(
     pending: &mut std::vec::Vec<PolicyAction>,
     link: B::Link,
     fleet: &Fleet,
-    closed: &mpsc::UnboundedSender<(BleIdentity, BleAddress)>,
+    closed: &mpsc::UnboundedSender<PeerClosed>,
     members: &mut HashMap<BleIdentity, TokioMember>,
     backend: &mut B,
     policy: EffectiveInterfacePolicy,
@@ -1916,16 +1942,46 @@ mod tests {
         drop(link_b);
 
         let identity = BleIdentity::new([1u8; 16]);
-        let (closed_tx, mut closed_rx) = mpsc::unbounded_channel::<(BleIdentity, BleAddress)>();
+        let (closed_tx, mut closed_rx) = mpsc::unbounded_channel::<PeerClosed>();
         let member =
             BluetoothPeer::new(identity, source, sink).report_close_to(addr, closed_tx.clone());
+        let status = member.status();
         tokio::spawn(member.run(idle_seam()));
 
         let reported = tokio::time::timeout(Duration::from_secs(2), closed_rx.recv())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(reported, (identity, addr));
+        assert_eq!((reported.identity, reported.address), (identity, addr));
+        assert!(reported.matches(addr, &status));
+    }
+
+    #[test]
+    fn queued_close_belongs_to_one_incarnation_even_at_the_same_address() {
+        let identity = BleIdentity::new([1; 16]);
+        let address = BleAddress::new([2; 6]);
+        let id = InterfaceId::from_channel_tag(InterfaceKind::BluetoothPeer, identity.as_bytes());
+        let old = TokioInterfaceStatus::new_unaccounted(id, ConnectionState::Connected);
+        let replacement = TokioInterfaceStatus::new_unaccounted(id, ConnectionState::Connected);
+        let delayed = PeerClosed {
+            identity,
+            address,
+            status: old.clone(),
+        };
+        let current = PeerClosed {
+            identity,
+            address,
+            status: replacement.clone(),
+        };
+        assert_eq!(
+            [
+                delayed.matches(address, &old),
+                delayed.matches(address, &replacement),
+                current.matches(address, &replacement),
+                current.matches(BleAddress::new([3; 6]), &replacement),
+            ],
+            [true, false, true, false]
+        );
     }
 
     #[tokio::test]
@@ -1935,7 +1991,7 @@ mod tests {
         let (source, sink) = link_a.into_data();
         let _keep_peer_alive = link_b;
 
-        let (closed_tx, mut closed_rx) = mpsc::unbounded_channel::<(BleIdentity, BleAddress)>();
+        let (closed_tx, mut closed_rx) = mpsc::unbounded_channel::<PeerClosed>();
         let member = BluetoothPeer::new(BleIdentity::new([1u8; 16]), source, sink)
             .report_close_to(addr, closed_tx.clone());
         let handle = tokio::spawn(member.run(idle_seam()));

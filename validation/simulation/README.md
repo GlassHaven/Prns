@@ -15,6 +15,8 @@ contracts across Tokio, Embassy and mixed configurations, then bounded generated
 scenarios, persistence/reboot faults, representative scale/churn and selected ISA
 integration. The [first shared contract](measurements/runtime-contracts.md) uses
 one scenario and independent expected results for all four runtime pairings.
+The [generated campaign](measurements/generated-runtime-contracts.md) composes
+three fault/recovery operations in every order across those same pairings.
 
 The medium intentionally makes its limits and faults explicit:
 

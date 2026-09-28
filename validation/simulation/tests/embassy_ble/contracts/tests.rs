@@ -26,12 +26,7 @@ fn every_runtime_pair_obeys_the_same_request_failure_and_recovery_contract() {
         after_cancellation: echo(45),
         after_reconnect: echo(44),
     };
-    for runtimes in [
-        [Runtime::Tokio, Runtime::Tokio],
-        [Runtime::Embassy, Runtime::Embassy],
-        [Runtime::Embassy, Runtime::Tokio],
-        [Runtime::Tokio, Runtime::Embassy],
-    ] {
+    for runtimes in RUNTIME_PAIRS {
         for scheduling in [
             ManualTaskScheduling::Cyclic,
             ManualTaskScheduling::Seeded {

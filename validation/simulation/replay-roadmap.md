@@ -124,6 +124,10 @@ expected values. No production clock change was needed.
 2. Generate bounded scenarios using these adapters and existing medium faults,
    with explicit work budgets, reproducible inputs and actionable failing cases.
    Do not substitute a second protocol model for production execution.
+   The [first generated campaign](measurements/generated-runtime-contracts.md)
+   covers 96 cases and exposed a stale Tokio BLE close notification that could
+   tear down a replacement connection. This bounded permutation campaign is not
+   arbitrary sequence generation, complete-byte replay or automatic shrinking.
 3. Add persistence/reboot fault scenarios, distinguishing actor reconstruction
    from durable storage and actual power-loss behavior.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
