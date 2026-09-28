@@ -23,6 +23,7 @@ use super::scenario::{
 mod ble;
 mod churn;
 mod fixture;
+mod replay;
 mod transport;
 use fixture::{connect, destination_hash, echo, link, restart, with_fleet};
 

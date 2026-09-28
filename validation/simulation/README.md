@@ -9,6 +9,11 @@ The foundation provides a deterministic, bounded frame medium and a production
 establishment, and request/response without sockets or physical hardware,
 including a 128-node sparse ring on a manually controlled runtime clock.
 
+The [current roadmap and replay-input audit](replay-roadmap.md) separates proven
+capabilities from the next milestones. Forward work now targets replay
+foundations, measured fleet scaling and broader hardware models rather than
+more permutations of the covered deadline/cancellation cases.
+
 The medium intentionally makes its limits and faults explicit:
 
 - endpoint, receive-queue, and trace capacities are required configuration;
@@ -249,8 +254,10 @@ The scenario has explicit endpoint, neighbor, receive-queue, pending-delivery,
 trace, actor, and per-settlement poll limits. Its timed section advances one
 millisecond at a time, draining ready actors between steps. This is short-horizon
 full-node coordination with known time resolution, not automatic discovery of
-all production deadlines or arbitrary event-jump safety. Node boot origins and
-OS entropy still vary; no byte-for-byte replay claim is made. This establishes
+all production deadlines or arbitrary event-jump safety. The shared manual-fleet
+fixture sets boot origins from a fixed logical epoch plus coordinated runtime
+elapsed time, including restarts. OS entropy still varies; no byte-for-byte
+replay claim is made. This establishes
 128-node correctness for a direct-neighbor workload, not routed multi-hop
 coverage, total per-node memory cost, throughput, or a maximum fleet size.
 
@@ -416,8 +423,9 @@ and complete attachment cleanup are checked explicitly.
   simulated interval. Scale runs must retain correctness assertions for delivery,
   recovery, backpressure, and cleanup, not merely demonstrate that nodes start.
 
-Remaining obstacles include full-node deadline discovery, background-worker and
-multi-medium coordination, and measured total per-node and per-peer allocation.
+Remaining obstacles include full-node deadline discovery, background-worker
+coordination, models beyond the coordinated frame/BLE media, and measured total
+per-node and per-peer allocation.
 The transport-sized BLE receive buffer removes one known large allocation, not
 all of those costs. Native queues, scheduler storage, and larger production-node
 scales still need evidence.

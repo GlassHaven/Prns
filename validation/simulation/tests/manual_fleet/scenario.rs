@@ -29,6 +29,7 @@ use tokio::sync::oneshot;
 pub const NODE_COUNT: usize = 128;
 pub const QUERY_PATH: &str = "/simulation/manual-fleet";
 pub const POLL_BUDGET: usize = NODE_COUNT * 256;
+pub const TIMELINE_ORIGIN: InstantMillis = InstantMillis(1_000_000);
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Completion {
@@ -120,6 +121,18 @@ pub fn add_node<F: FnOnce(&PrnsNodeHandle) + 'static>(
     runner: &mut ManualTaskRunner<'_, Completion>,
     spec: NodeSpec<F>,
 ) -> (ManualTaskId, oneshot::Receiver<NodeControl>) {
+    let elapsed = runner
+        .snapshot()
+        .unwrap_or_else(|error| unreachable!("node admission clock: {error}"))
+        .runtime_elapsed;
+    let elapsed_millis = u64::try_from(elapsed.as_millis())
+        .unwrap_or_else(|_| unreachable!("bounded scenario duration"));
+    let timeline_origin = InstantMillis(
+        TIMELINE_ORIGIN
+            .0
+            .checked_add(elapsed_millis)
+            .unwrap_or_else(|| unreachable!("bounded scenario timeline")),
+    );
     let NodeSpec {
         index,
         role,
@@ -164,7 +177,8 @@ pub fn add_node<F: FnOnce(&PrnsNodeHandle) + 'static>(
                 interfaces: attach_interfaces,
                 persistence: NoPersistence,
             })
-            .with_crypto_pool(CryptoPoolConfig::Inline);
+            .with_crypto_pool(CryptoPoolConfig::Inline)
+            .with_timeline_origin(timeline_origin);
             let clock = node.clock();
             let origin = clock.now();
             assert!(ready
