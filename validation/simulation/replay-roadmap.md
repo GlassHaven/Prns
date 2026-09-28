@@ -16,6 +16,10 @@ This is a current-status guide, not another chronological list of test slices.
 - A bounded path-discovery/echo variant now supplies all three runtime entropy
   providers and compares interface draws, handle draws, path IDs and packet
   traces. Changing either shared-stream or path-source input changes output.
+- Eight real BLE nodes now replay four concurrent pairs, including selective
+  reconnect while unaffected links continue traffic, under cyclic and three
+  seeded actor orders. Whole wire/discovery traces repeat for each fixed input.
+  This is paired-fleet replay, not multi-peer mesh or scale-performance evidence.
 - Correctness scenarios cover 128 frame nodes, 20 routed nodes and 16 BLE nodes.
   Backend-scale tests are not evidence for thousands of production nodes.
 - Tokio/Embassy scenarios exercise real requests, Resource transfers, failures
@@ -34,6 +38,7 @@ This is a current-status guide, not another chronological list of test slices.
 | Path-discovery identifiers | The same owner retains a separate fallible source; the public `request_path` API consumes it before admission | Explicit provider selection and failure-before-admission are tested, including successful path discovery in the simulator |
 | Boot identities | Manual-fleet destinations and transport identities use explicit fixture secrets | Stable in this fixture; not a promise for arbitrary provisioning paths |
 | Actor order | Manual task runner supports cyclic and versioned seeded scheduling | Does not determine branch selection inside futures or background-worker completion |
+| Internal readiness | Node interface-driver and BLE supervisor selection are independently configurable; normal defaults remain Tokio-fair | Explicit per-instance rotation supports the two-node and paired-fleet replay fixtures; other selectors remain scenario-dependent |
 | Container ordering | Node handles include standard `HashMap` inventories | Audit iteration consumers before treating larger multi-interface ordering as reproducible |
 | Process-command timestamps | Tokio process-command support reads `SystemTime` | Outside the current no-process scenario; do not call the entire runtime clock-controlled |
 
@@ -81,6 +86,8 @@ now controls both the interface-task driver and BLE supervisor per instance,
 restoring exact whole reconnect transcripts across ten initial-order combinations.
 Production defaults remain Tokio-fair. This closes the observed two-node
 reconnect gap, not every nested selector, worker or native backend schedule.
+The [paired-fleet follow-up](measurements/ble-paired-fleet-replay.md) composes
+those controls with outer seeded actor order across concurrent links.
 
 1. Extend the three-provider construction seam beyond the now-proven short BLE
    replay to other backend consumers, auditing randomness outside node-owned providers. Keep

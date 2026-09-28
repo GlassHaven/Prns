@@ -15,6 +15,8 @@ use prns_simulation::ble::{
 };
 use scenario::add_node_with_sources_and_arbitration;
 
+mod fixture;
+mod fleet;
 mod recovery;
 mod selection;
 
@@ -115,71 +117,14 @@ fn replay_with_selection(
         })
         .collect();
     for index in 0..2 {
-        let gatt = VirtualGattConfig::new(CONTROL_MAX_LEN, 20)
-            .unwrap_or_else(|error| unreachable!("GATT: {error}"));
-        let config = VirtualBleBackendConfig::new(
-            BleAddress::new([index as u8; 6]),
-            -40,
-            BleRoleCapabilities::DualRole,
-            SimulationDurationInTicks::from_ticks(20),
-            VirtualBleBackendLimits {
-                inbound_links: nonzero(1),
-                connections: nonzero(1),
-                discovered_peers: nonzero(1),
-            },
-            VirtualBleLinkConfig::new(2, 2, BLE_HW_MTU, gatt)
-                .unwrap_or_else(|error| unreachable!("link: {error}")),
-        )
-        .unwrap_or_else(|error| unreachable!("backend: {error}"));
-        let backend = lab
-            .attach_backend(config)
-            .unwrap_or_else(|error| unreachable!("attach: {error}"));
-        let supervisor = BluetoothAuto::<_, 1>::new(
-            backend,
-            BleIdentity::new([index as u8; 16]),
-            if index == 0 {
-                Endpoint::CoreBluetooth(AppleHost::MacOs)
-            } else {
-                Endpoint::BlueZ(BlueZHost::Linux)
-            },
-            LinkCapabilities {
-                l2cap: None,
-                link_mtu: BLE_HW_MTU as u16,
-            },
-        )
-        .with_event_selector(selection::RoundRobinBleEvents::new(first));
-        let heard = Rc::new(RefCell::new(Vec::new()));
-        let (task, mut ready) = add_node_with_sources_and_arbitration(
+        nodes.push(fixture::start_node(
             &mut runner,
-            NodeSpec {
-                index,
-                role: NodeRole::Endpoint,
-                attach_interfaces: move |handle: &PrnsNodeHandle| {
-                    let _attached = handle.supervise(supervisor);
-                },
-                heard: heard.clone(),
-                heard_capacity: nonzero(1),
-            },
-            move |origin| {
-                (
-                    TokioHost::with_runtime_entropy(origin, stream(seed + index as u8)),
-                    TokioHandleEntropy::from_sources(
-                        stream(80 + index as u8),
-                        |_output: &mut [u8]| -> Result<(), core::convert::Infallible> {
-                            unreachable!("this routed BLE scenario must not request path entropy")
-                        },
-                    ),
-                )
-            },
-            personal_rns::runtime::InterfaceArbitration::RoundRobin {
-                first: driver_first,
-            },
-        );
-        assert!(settle(&mut runner).is_empty());
-        let control = ready
-            .try_recv()
-            .unwrap_or_else(|error| unreachable!("ready: {error}"));
-        nodes.push((task, control, heard));
+            &lab,
+            index,
+            seed,
+            first,
+            driver_first,
+        ));
     }
     assert_eq!(
         lab.set_reachability(
@@ -191,30 +136,35 @@ fn replay_with_selection(
     );
     ble::advance_until(&mut runner, || {
         lab.active_connection_count() == 1
-            && nodes.iter().enumerate().all(|(index, (_, control, _))| {
-                ble::member_inventory(&control.handle)
-                    == [(
-                        InterfaceId::from_channel_tag(
-                            InterfaceKind::BluetoothPeer,
-                            &[(index ^ 1) as u8; 16],
-                        ),
-                        ConnectionState::Connected,
-                    )]
-            })
+            && nodes
+                .iter()
+                .enumerate()
+                .all(|(index, fixture::LiveNode { control, .. })| {
+                    ble::member_inventory(&control.handle)
+                        == [(
+                            InterfaceId::from_channel_tag(
+                                InterfaceKind::BluetoothPeer,
+                                &[(index ^ 1) as u8; 16],
+                            ),
+                            ConnectionState::Connected,
+                        )]
+                })
     });
-    for (index, (_, control, _)) in nodes.iter().enumerate() {
+    for (index, fixture::LiveNode { control, .. }) in nodes.iter().enumerate() {
         announce(control, destinations[index]);
     }
     ble::advance_until(&mut runner, || {
         nodes
             .iter()
             .enumerate()
-            .all(|(index, (_, _, heard))| *heard.borrow() == [destinations[index ^ 1]])
+            .all(|(index, fixture::LiveNode { heard, .. })| {
+                *heard.borrow() == [destinations[index ^ 1]]
+            })
     });
     let response = vec![marker; 256];
     exchange(
         &mut runner,
-        nodes[0].1.handle.clone(),
+        nodes[0].control.handle.clone(),
         destinations[1],
         &response,
     );
@@ -230,12 +180,12 @@ fn replay_with_selection(
                 &capture,
                 &nodes
                     .iter()
-                    .map(|(_, control, _)| control.handle.clone())
+                    .map(|fixture::LiveNode { control, .. }| control.handle.clone())
                     .collect::<Vec<_>>(),
             );
             exchange(
                 &mut runner,
-                nodes[0].1.handle.clone(),
+                nodes[0].control.handle.clone(),
                 destinations[1],
                 &response,
             );
@@ -245,7 +195,7 @@ fn replay_with_selection(
     let expected: BTreeMap<_, _> = nodes
         .into_iter()
         .enumerate()
-        .map(|(node, (task, control, _))| {
+        .map(|(node, fixture::LiveNode { task, control, .. })| {
             assert_eq!(control.shutdown.send(()), Ok(()));
             (
                 task,
