@@ -1,6 +1,7 @@
 use super::*;
 use prns_interfaces_tokio::bluetooth_auto::BluetoothAutoStatus;
 
+mod inflight;
 mod lab;
 mod overlapping;
 mod restart;

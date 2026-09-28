@@ -669,6 +669,12 @@ then restore them in either order. Local traffic resumes on the restored side
 while end-to-end traffic remains blocked until both media recover. Concurrent
 requests then reuse the original links without restarting any node.
 
+The [mixed in-flight boundary matrix](measurements/mixed-inflight-outages.md)
+cuts connectivity after a real request or response has reached the bridge's
+frame queue, before the bridge polls it. It distinguishes losing the remaining
+BLE path from cutting a frame hop the response has already completed, with an
+uninterrupted control at every selected boundary.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep
