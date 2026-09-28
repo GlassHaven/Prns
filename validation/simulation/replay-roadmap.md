@@ -75,12 +75,12 @@ expected values. No production clock change was needed.
 
 ## Next milestones, in order
 
-1. Apply the now-complete three-provider construction seam to BLE and other
-   backend consumers, auditing randomness outside node-owned providers. Keep
+1. Extend the three-provider construction seam beyond the now-proven short BLE
+   replay to other backend consumers, auditing randomness outside node-owned providers. Keep
    OS entropy as the production default; no global seed switch or weak
    shipping RNG mode exists. Host restart/reseed evidence must not be treated
    as shared-source/backend lifecycle coverage without exercising those paths.
-2. Carry the bounded frame-echo replay approach to other transports once their
+2. Carry the bounded frame/BLE echo replay approach to other transports once their
    exercised inputs are controlled. Receiver restart and successful/failed
    periodic reseeding now have focused packet evidence. Retain
    changed-input controls; define a versioned replay artifact before exporting
@@ -119,3 +119,9 @@ The [owned-input follow-up](measurements/owned-entropy-inputs.md) completes sour
 selection for the three audited node-owned providers and exercises their public
 consumers. It records the shared owner's dispatch/memory cost and the remaining
 limits before claiming broader replay.
+
+The [BLE wire replay follow-up](measurements/ble-wire-replay.md) compares every
+accepted control value and GATT fragment across three fresh two-node runs, with
+changed-seed and equal-length changed-payload controls. Capture is bounded and
+opt-in; this is not native Bluetooth, RF, reconnection-incarnation, or arbitrary
+scheduler replay evidence.

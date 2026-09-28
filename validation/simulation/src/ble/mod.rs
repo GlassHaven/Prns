@@ -9,6 +9,8 @@ mod gatt;
 mod medium;
 mod radio_id;
 mod trace;
+mod wire_capture;
+pub use wire_capture::{BleWireCapture, BleWireChannel, BleWireSnapshot, BleWireValue};
 
 pub use advertisement::{
     BleAdvertisement, BleAdvertisementError, BleAdvertisingParameters,

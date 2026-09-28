@@ -17,6 +17,7 @@ pub(super) struct Connection {
     addresses: [BleAddress; 2],
     closed: watch::Sender<bool>,
     data: Mutex<[data::DirectionActivity; 2]>,
+    capture: Option<super::BleWireCapture>,
 }
 
 impl Connection {
@@ -26,7 +27,13 @@ impl Connection {
             addresses: [first, second],
             closed,
             data: Mutex::new(Default::default()),
+            capture: None,
         }
+    }
+
+    pub(super) fn with_wire_capture(mut self, capture: Option<super::BleWireCapture>) -> Self {
+        self.capture = capture;
+        self
     }
 
     pub(super) fn connects(&self, address: BleAddress) -> bool {
@@ -71,6 +78,16 @@ pub(super) struct ConnectionEndpoint {
 }
 
 impl ConnectionEndpoint {
+    pub(in crate::ble) fn capture(&self, channel: super::BleWireChannel, bytes: &[u8]) {
+        if let Some(capture) = &self.connection.capture {
+            capture.record(
+                self.connection.addresses[self.side.outgoing()],
+                self.connection.addresses[self.side.incoming()],
+                channel,
+                bytes,
+            );
+        }
+    }
     pub(in crate::ble) fn start_send(&self, frame: &[u8]) {
         let mut data = self
             .connection

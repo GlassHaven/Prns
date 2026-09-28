@@ -199,6 +199,7 @@ impl BleSink for VirtualBleSink {
                 _ = closed.changed() => return Err(VirtualBleError::LinkClosed),
                 result = self.sender.send(value[..len].to_vec()) => {
                     result.map_err(|_| VirtualBleError::LinkClosed)?;
+                    self.endpoint.capture(super::BleWireChannel::Data, &value[..len]);
                     self.endpoint.outgoing(DataEvent::FragmentQueued);
                 }
             }

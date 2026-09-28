@@ -1,0 +1,266 @@
+use super::*;
+use personal_rns::interfaces::bluetooth_auto::{
+    AppleHost, BleAddress, BleIdentity, BleRoleCapabilities, BlueZHost, Endpoint, LinkCapabilities,
+    BLE_HW_MTU, CONTROL_MAX_LEN,
+};
+use personal_rns::interfaces::{ConnectionState, InterfaceId, InterfaceKind};
+use personal_rns::manifold::tokio::TokioHost;
+use personal_rns::runtime::{PrnsNodeHandle, TokioHandleEntropy};
+use prns_core::entropy::{EntropySource, RuntimeEntropy};
+use prns_interfaces_tokio::bluetooth_auto::BluetoothAuto;
+use prns_simulation::ble::{
+    BleMediumConfig, BleSimulationEvent, BleTraceSnapshot, BleWireCapture, BleWireChannel,
+    BleWireSnapshot, VirtualBleBackendConfig, VirtualBleBackendLimits, VirtualBleLab,
+    VirtualBleLinkConfig, VirtualGattConfig,
+};
+use scenario::add_node_with_sources;
+
+// Validation-only inputs. There is no production fixed-seed mode.
+fn stream(
+    seed: u8,
+) -> RuntimeEntropy<impl EntropySource<Error = core::convert::Infallible> + Send> {
+    let mut reads = 0;
+    RuntimeEntropy::try_new(move |output: &mut [u8]| {
+        reads += 1;
+        assert_eq!(reads, 1, "short BLE replay must not reseed");
+        assert_eq!(output.len(), 32);
+        output.fill(seed);
+        Ok::<(), core::convert::Infallible>(())
+    })
+    .unwrap_or_else(|never| match never {})
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct Transcript {
+    discovery: BleTraceSnapshot,
+    wire: BleWireSnapshot,
+    response: Vec<u8>,
+}
+
+fn replay(seed: u8, marker: u8) -> Transcript {
+    let capture = BleWireCapture::new(nonzero(4096));
+    let lab = VirtualBleLab::with_wire_capture(
+        BleMediumConfig::new(
+            TopologyConfig::Explicit {
+                max_neighbors: nonzero(1),
+            },
+            2,
+            4,
+            4,
+            262_144,
+        )
+        .unwrap_or_else(|error| unreachable!("lab: {error}")),
+        capture.clone(),
+    );
+    let mut driver =
+        ManualTimeDriver::new(ManualMedium::Ble(lab.clone()), Duration::from_millis(1))
+            .unwrap_or_else(|error| unreachable!("clock: {error}"));
+    let mut runner = ManualTaskRunner::new(&mut driver, nonzero(4));
+    let mut nodes = Vec::new();
+    let destinations: Vec<_> = (0..2)
+        .map(|index| {
+            destination(index)
+                .destination_hash()
+                .unwrap_or_else(|error| unreachable!("destination: {error:?}"))
+        })
+        .collect();
+    for index in 0..2 {
+        let gatt = VirtualGattConfig::new(CONTROL_MAX_LEN, 20)
+            .unwrap_or_else(|error| unreachable!("GATT: {error}"));
+        let config = VirtualBleBackendConfig::new(
+            BleAddress::new([index as u8; 6]),
+            -40,
+            BleRoleCapabilities::DualRole,
+            SimulationDurationInTicks::from_ticks(20),
+            VirtualBleBackendLimits {
+                inbound_links: nonzero(1),
+                connections: nonzero(1),
+                discovered_peers: nonzero(1),
+            },
+            VirtualBleLinkConfig::new(2, 2, BLE_HW_MTU, gatt)
+                .unwrap_or_else(|error| unreachable!("link: {error}")),
+        )
+        .unwrap_or_else(|error| unreachable!("backend: {error}"));
+        let backend = lab
+            .attach_backend(config)
+            .unwrap_or_else(|error| unreachable!("attach: {error}"));
+        let supervisor = BluetoothAuto::<_, 1>::new(
+            backend,
+            BleIdentity::new([index as u8; 16]),
+            if index == 0 {
+                Endpoint::CoreBluetooth(AppleHost::MacOs)
+            } else {
+                Endpoint::BlueZ(BlueZHost::Linux)
+            },
+            LinkCapabilities {
+                l2cap: None,
+                link_mtu: BLE_HW_MTU as u16,
+            },
+        );
+        let heard = Rc::new(RefCell::new(Vec::new()));
+        let (task, mut ready) = add_node_with_sources(
+            &mut runner,
+            NodeSpec {
+                index,
+                role: NodeRole::Endpoint,
+                attach_interfaces: move |handle: &PrnsNodeHandle| {
+                    let _attached = handle.supervise(supervisor);
+                },
+                heard: heard.clone(),
+                heard_capacity: nonzero(1),
+            },
+            move |origin| {
+                (
+                    TokioHost::with_runtime_entropy(origin, stream(seed + index as u8)),
+                    TokioHandleEntropy::from_sources(
+                        stream(80 + index as u8),
+                        |_output: &mut [u8]| -> Result<(), core::convert::Infallible> {
+                            unreachable!("this routed BLE scenario must not request path entropy")
+                        },
+                    ),
+                )
+            },
+        );
+        assert!(settle(&mut runner).is_empty());
+        let control = ready
+            .try_recv()
+            .unwrap_or_else(|error| unreachable!("ready: {error}"));
+        nodes.push((task, control, heard));
+    }
+    assert_eq!(
+        lab.set_reachability(
+            BleAddress::new([0; 6]),
+            BleAddress::new([1; 6]),
+            Reachability::Reachable
+        ),
+        Ok(TopologyMutation::Applied)
+    );
+    ble::advance_until(&mut runner, || {
+        lab.active_connection_count() == 1
+            && nodes.iter().enumerate().all(|(index, (_, control, _))| {
+                ble::member_inventory(&control.handle)
+                    == [(
+                        InterfaceId::from_channel_tag(
+                            InterfaceKind::BluetoothPeer,
+                            &[(index ^ 1) as u8; 16],
+                        ),
+                        ConnectionState::Connected,
+                    )]
+            })
+    });
+    for (index, (_, control, _)) in nodes.iter().enumerate() {
+        announce(control, destinations[index]);
+    }
+    ble::advance_until(&mut runner, || {
+        nodes
+            .iter()
+            .enumerate()
+            .all(|(index, (_, _, heard))| *heard.borrow() == [destinations[index ^ 1]])
+    });
+    let handle = nodes[0].1.handle.clone();
+    let remote = destinations[1];
+    let link_task = runner
+        .insert(async move {
+            let link = handle
+                .establish_link(remote)
+                .await
+                .unwrap_or_else(|error| unreachable!("link: {error:?}"));
+            Completion::Linked { node: 0, link }
+        })
+        .unwrap_or_else(|error| unreachable!("actor: {error}"));
+    let results = settle(&mut runner);
+    let [(task, Completion::Linked { node: 0, link })] = results.as_slice() else {
+        unreachable!("link settlement: {results:?}")
+    };
+    assert_eq!(*task, link_task);
+    let response = vec![marker; 256];
+    let request_task = request(
+        &mut runner,
+        0,
+        nodes[0].1.handle.clone(),
+        *link,
+        response.clone(),
+    );
+    assert_eq!(
+        settle(&mut runner),
+        [(
+            request_task,
+            Completion::Response {
+                node: 0,
+                bytes: response.clone()
+            }
+        )]
+    );
+    let expected: BTreeMap<_, _> = nodes
+        .into_iter()
+        .enumerate()
+        .map(|(node, (task, control, _))| {
+            assert_eq!(control.shutdown.send(()), Ok(()));
+            (
+                task,
+                Completion::Stopped {
+                    node,
+                    result: Ok(()),
+                },
+            )
+        })
+        .collect();
+    assert_eq!(
+        settle(&mut runner).into_iter().collect::<BTreeMap<_, _>>(),
+        expected
+    );
+    assert_eq!(runner.task_count(), 0);
+    assert_eq!(lab.active_connection_count(), 0);
+    let discovery = lab.trace();
+    assert_eq!(discovery.discarded_events, 0);
+    let mut attached = Vec::new();
+    let mut detached = Vec::new();
+    for event in &discovery.events {
+        match event {
+            BleSimulationEvent::RadioAttached { radio } => attached.push(*radio),
+            BleSimulationEvent::RadioDetached { radio } => detached.push(*radio),
+            BleSimulationEvent::ObservationDropped { .. } => unreachable!("discovery drop"),
+            _ => {}
+        }
+    }
+    attached.sort();
+    detached.sort();
+    assert_eq!(attached.len(), 2);
+    assert_eq!(attached, detached);
+    let wire = capture.snapshot();
+    assert_eq!(wire.discarded_values, 0);
+    for channel in [BleWireChannel::Control, BleWireChannel::Data] {
+        assert!(wire.values.iter().any(|value| value.channel == channel));
+    }
+    assert!(
+        wire.values
+            .iter()
+            .filter(|value| value.channel == BleWireChannel::Data)
+            .count()
+            > 16
+    );
+    Transcript {
+        discovery,
+        wire,
+        response,
+    }
+}
+
+#[test]
+fn fresh_ble_nodes_replay_every_control_value_and_fragment() {
+    let expected = replay(11, 42);
+    assert_eq!(replay(11, 42), expected);
+    assert_eq!(replay(11, 42), expected);
+}
+
+#[test]
+fn ble_replay_detects_changed_entropy_and_equal_length_payloads() {
+    let baseline = replay(11, 42);
+    let seed = replay(21, 42);
+    assert_eq!(baseline.response, seed.response);
+    assert_ne!(baseline.wire, seed.wire);
+    let payload = replay(11, 43);
+    assert_eq!(baseline.response.len(), payload.response.len());
+    assert_ne!(baseline.response, payload.response);
+    assert_ne!(baseline.wire, payload.wire);
+}

@@ -212,6 +212,18 @@ pub struct VirtualBleLab {
 }
 
 impl VirtualBleLab {
+    /// Enables bounded characteristic-value retention for this lab's connections.
+    #[must_use]
+    pub fn with_wire_capture(config: BleMediumConfig, capture: super::BleWireCapture) -> Self {
+        Self {
+            medium: VirtualBleMedium::new(config),
+            network: Arc::new(Mutex::new(ConnectionNetwork {
+                capture: Some(capture),
+                ..ConnectionNetwork::default()
+            })),
+        }
+    }
+
     #[must_use]
     pub fn new(config: BleMediumConfig) -> Self {
         Self {
@@ -367,6 +379,7 @@ impl VirtualBleLab {
 struct ConnectionNetwork {
     peers: BTreeMap<BleAddress, RegisteredPeer>,
     connections: ConnectionIndex,
+    capture: Option<super::BleWireCapture>,
 }
 
 struct RegisteredPeer {
@@ -518,7 +531,10 @@ impl<const MAX_PEERS: usize> BleBackend<MAX_PEERS> for VirtualBleBackend {
         {
             return DialOutcome::Busy;
         }
-        let lifecycle = Arc::new(Connection::new(self.config.address, address));
+        let lifecycle = Arc::new(
+            Connection::new(self.config.address, address)
+                .with_wire_capture(network.capture.clone()),
+        );
         let (mine, theirs) = link_pair(
             self.config.address,
             address,
@@ -589,7 +605,11 @@ impl VirtualBleLink {
         tokio::select! {
             biased;
             _ = closed.changed() => Err(VirtualBleError::LinkClosed),
-            result = self.control_tx.send(value) => result.map_err(|_| VirtualBleError::LinkClosed),
+            result = self.control_tx.send(value) => {
+                result.map_err(|_| VirtualBleError::LinkClosed)?;
+                self.endpoint.capture(super::BleWireChannel::Control, bytes);
+                Ok(())
+            },
         }
     }
 }
@@ -708,6 +728,9 @@ fn link_pair(
         },
     )
 }
+
+#[cfg(test)]
+mod capture_tests;
 
 #[cfg(test)]
 mod tests {

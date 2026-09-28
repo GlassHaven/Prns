@@ -16,6 +16,7 @@ use prns_simulation::{
 };
 
 mod ble;
+mod ble_replay;
 mod entropy_replay;
 mod mixed;
 mod restart;
