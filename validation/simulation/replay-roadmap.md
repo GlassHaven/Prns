@@ -138,6 +138,8 @@ expected values. No production clock change was needed.
    owner campaign adds 65 append and 1,291 compaction/write cuts through admission,
    settlement and repeated reboot. Tokio store parity, runtime activation/rollback
    and full-node durable reboot remain open.
+   Those same cut points also cover dropping pending owner I/O before an error
+   or completion is delivered, retaining only bytes for reboot.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,

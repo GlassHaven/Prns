@@ -18,6 +18,8 @@ pub(super) struct Cut {
 enum Power {
     On,
     CutAt(Cut),
+    RemoveAt(Cut),
+    Removed,
     Off,
 }
 
@@ -39,8 +41,17 @@ impl Control {
         self.power = cut.map_or(Power::On, Power::CutAt);
     }
 
+    pub fn remove_power_at(&mut self, cut: Cut) {
+        self.trace.clear();
+        self.power = Power::RemoveAt(cut);
+    }
+
+    pub fn power_removed(&self) -> bool {
+        matches!(self.power, Power::Removed)
+    }
+
     fn begin(&mut self, operation: Operation, len: usize) -> Result<usize, TestFlashError> {
-        if matches!(self.power, Power::Off) {
+        if matches!(self.power, Power::Off | Power::Removed) {
             return Err(TestFlashError);
         }
         let (offset, alignment) = match operation {
@@ -60,6 +71,13 @@ impl Control {
             if ordinal == cut.operation {
                 assert!(cut.completed_bytes <= len);
                 self.power = Power::Off;
+                return Ok(cut.completed_bytes);
+            }
+        }
+        if let Power::RemoveAt(cut) = self.power {
+            if ordinal == cut.operation {
+                assert!(cut.completed_bytes <= len);
+                self.power = Power::Removed;
                 return Ok(cut.completed_bytes);
             }
         }
@@ -125,6 +143,55 @@ pub(super) struct Flash {
     control: Rc<RefCell<Control>>,
 }
 
+#[test]
+fn power_removal_leaves_io_pending_until_dropped_without_repeating_the_operation() {
+    let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+    for completed_bytes in 0..=4 {
+        let control = Rc::new(RefCell::new(Control::new()));
+        let mut flash = Flash::boot([0xff; CAPACITY], control.clone());
+        control.borrow_mut().remove_power_at(Cut {
+            operation: 0,
+            completed_bytes,
+        });
+        {
+            let mut write = core::pin::pin!(flash.write(4, &[1, 2, 3, 4]));
+            for _ in 0..2 {
+                assert!(core::future::Future::poll(write.as_mut(), &mut context).is_pending());
+                assert!(control.borrow().power_removed());
+                assert_eq!(
+                    control.borrow().trace,
+                    std::vec![Operation::Write { offset: 4, len: 4 }]
+                );
+            }
+        }
+        let mut expected = [0xff; CAPACITY];
+        expected[4..4 + completed_bytes].copy_from_slice(&[1, 2, 3, 4][..completed_bytes]);
+        assert_eq!(flash.into_image(), expected);
+    }
+    let control = Rc::new(RefCell::new(Control::new()));
+    let mut flash = Flash::boot([0; CAPACITY], control.clone());
+    control.borrow_mut().remove_power_at(Cut {
+        operation: 0,
+        completed_bytes: ERASE - 1,
+    });
+    {
+        let mut erase = core::pin::pin!(flash.erase(0, ERASE as u32));
+        for _ in 0..2 {
+            assert!(core::future::Future::poll(erase.as_mut(), &mut context).is_pending());
+        }
+    }
+    let mut expected = [0; CAPACITY];
+    expected[..ERASE - 1].fill(0xff);
+    assert_eq!(flash.into_image(), expected);
+    assert_eq!(
+        control.borrow().trace,
+        std::vec![Operation::Erase {
+            offset: 0,
+            len: ERASE
+        }]
+    );
+}
+
 impl Flash {
     pub fn boot(image: [u8; CAPACITY], control: Rc<RefCell<Control>>) -> Self {
         let mut inner = TestFlash::new();
@@ -133,6 +200,14 @@ impl Flash {
     }
     pub fn into_image(self) -> [u8; CAPACITY] {
         self.inner.bytes
+    }
+
+    async fn finish(&self) -> Result<(), TestFlashError> {
+        let power_removed = self.control.borrow().power_removed();
+        if power_removed {
+            core::future::pending::<()>().await;
+        }
+        self.control.borrow().finish()
     }
 }
 
@@ -151,7 +226,7 @@ impl ReadNorFlash for Flash {
             bytes.len(),
         )?;
         self.inner.read(offset, &mut bytes[..len]).await?;
-        self.control.borrow().finish()
+        self.finish().await
     }
     fn capacity(&self) -> usize {
         CAPACITY
@@ -176,7 +251,7 @@ impl NorFlash for Flash {
             bytes.len(),
         )?;
         self.inner.write(offset, &bytes[..len]).await?;
-        self.control.borrow().finish()
+        self.finish().await
     }
     async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
         let len = (to - from) as usize;
@@ -188,6 +263,6 @@ impl NorFlash for Flash {
             len,
         )?;
         self.inner.bytes[from as usize..from as usize + completed].fill(0xff);
-        self.control.borrow().finish()
+        self.finish().await
     }
 }

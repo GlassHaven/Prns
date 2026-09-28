@@ -28,10 +28,11 @@ failure is not treated as proof that the write did not happen.
 ## Scope
 
 Production behavior: unchanged. This is test coverage and module organization.
-The fixture models contiguous prefix tears with immediate I/O. It lets the owner
-observe the sticky flash error and settle before discarding volatile state; it
-does not model scheduler cancellation during pending I/O or instruction-level
-power removal. Reboots retain bytes only, not owner state or journal cursors.
+The fixture models contiguous prefix tears. The original campaign lets the owner
+observe a sticky flash error and settle before discarding volatile state. The
+abrupt-removal extension below instead drops pending I/O before error handling.
+Neither is instruction-level power removal. Reboots retain bytes only, not owner
+state or journal cursors.
 
 This proves queued group persistence and compaction recovery. It does not prove
 radio activation/rollback, controller-grant transactions, Tokio storage, a whole
@@ -57,3 +58,25 @@ passed in 89.013 seconds including compilation/build-lock waiting. Workspace
 tests, Embassy clippy, format/docs, registry validation, website tests and all
 16 assurance-selection tests passed. These durations are verification run times,
 not production performance measurements.
+
+## Abrupt removal while I/O is pending
+
+Each of the same 1,356 cut points now also suspends the flash future after exactly
+the selected byte prefix. The harness polls the real persistence turn, requires
+`Pending`, then drops that future. The request must still be pending, no write
+failure diagnostic may have occurred, and the published configuration must still
+be the confirmed value. The function then discards the owner, engine and mailbox;
+only the flash byte image is passed to the two fresh restore owners.
+
+The trace and complete flash image must exactly match the corresponding reported
+error trial. Independent flash-model tests poll suspended operations repeatedly
+to prove they neither finish nor repeat their storage mutation. Recovery uses the
+same commit-word oracle, including fully committed writes whose acknowledgement
+never reaches the owner. This adds owner cancellation during pending storage I/O,
+not recovery by resuming a cancelled owner in place or a whole-node reboot.
+
+The extension passed all 145 Embassy library tests, Embassy all-target clippy,
+format/docs, registry and website checks on macOS arm64. Both fault modes run in
+the existing registered recovery suite. No production source changed; the wider
+radio simulation, firmware matrix and Miri were not rerun for this test-only
+extension.

@@ -57,17 +57,36 @@ async fn baseline(campaign: Campaign) -> [u8; CAPACITY] {
 struct Outcome {
     image: [u8; CAPACITY],
     trace: Vec<Operation>,
-    completion: Result<(), EmbeddedPersistenceFailure>,
+    completion: Completion,
     published: DiscoveryGroupConfigurationSnapshot,
+    write_failures: usize,
 }
 
-async fn write(image: [u8; CAPACITY], cut: Option<Cut>) -> Outcome {
+#[derive(Debug, PartialEq, Eq)]
+enum Completion {
+    Settled(Result<(), EmbeddedPersistenceFailure>),
+    PowerRemoved,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Fault {
+    None,
+    ReportError(Cut),
+    RemovePower(Cut),
+}
+
+async fn write(image: [u8; CAPACITY], fault: Fault) -> Outcome {
     let exchange = DiscoveryGroupConfigurationStoreExchange::new();
     let control = Rc::new(RefCell::new(Control::new()));
+    let write_failures = Cell::new(0);
     let mut owner = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _>::with_discovery_group_store(
         Flash::boot(image, control.clone()), LAYOUT,
         EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
-        FixedRouteSnapshotKeys::new(), (|_| {}) as fn(EmbeddedPersistenceDiagnostic), &exchange,
+        FixedRouteSnapshotKeys::new(), |event| {
+            if matches!(event, EmbeddedPersistenceDiagnostic::WriteFailed { .. }) {
+                write_failures.set(write_failures.get() + 1);
+            }
+        }, &exchange,
     );
     let mut engine = EngineState::<crate::storage::GrowableHeap>::default();
     let mut remote = available_remote_control(&mut engine);
@@ -78,7 +97,11 @@ async fn write(image: [u8; CAPACITY], cut: Option<Cut>) -> Outcome {
         exchange.restored_now(),
         Some(discovery_group_snapshot("confirmed"))
     );
-    control.borrow_mut().arm(cut);
+    match fault {
+        Fault::None => control.borrow_mut().arm(None),
+        Fault::ReportError(cut) => control.borrow_mut().arm(Some(cut)),
+        Fault::RemovePower(cut) => control.borrow_mut().remove_power_at(cut),
+    }
     let interface =
         crate::interfaces::InterfaceId::new([0x42; crate::interfaces::INTERFACE_ID_LEN]);
     let candidate = discovery_group_snapshot("candidate");
@@ -91,11 +114,21 @@ async fn write(image: [u8; CAPACITY], cut: Option<Cut>) -> Outcome {
     assert!(core::future::Future::poll(completion.as_mut(), &mut context).is_pending());
     let mut result = None;
     for _ in 0..MAX_PROGRESS_STEPS {
-        owner.progress(&mut engine, WRITE_TIME).await;
+        let progress = {
+            let mut progress = core::pin::pin!(owner.progress(&mut engine, WRITE_TIME));
+            core::future::Future::poll(progress.as_mut(), &mut context)
+        };
+        if progress.is_pending() {
+            assert!(matches!(fault, Fault::RemovePower(_)));
+            assert!(control.borrow().power_removed());
+            assert!(core::future::Future::poll(completion.as_mut(), &mut context).is_pending());
+            result = Some(Completion::PowerRemoved);
+            break;
+        }
         if let core::task::Poll::Ready(value) =
             core::future::Future::poll(completion.as_mut(), &mut context)
         {
-            result = Some(value);
+            result = Some(Completion::Settled(value));
             break;
         }
     }
@@ -108,6 +141,7 @@ async fn write(image: [u8; CAPACITY], cut: Option<Cut>) -> Outcome {
         trace,
         completion,
         published,
+        write_failures: write_failures.get(),
     }
 }
 
@@ -144,7 +178,7 @@ fn queued_group_compaction_recovers_at_every_torn_io_boundary() {
 fn campaign(campaign: Campaign) {
     embassy_futures::block_on(async {
         let image = baseline(campaign).await;
-        let reference = write(image, None).await;
+        let reference = write(image, Fault::None).await;
         assert_eq!(
             reference
                 .trace
@@ -154,7 +188,8 @@ fn campaign(campaign: Campaign) {
         );
         let confirmed = discovery_group_snapshot("confirmed");
         let candidate = discovery_group_snapshot("candidate");
-        assert_eq!(reference.completion, Ok(()));
+        assert_eq!(reference.completion, Completion::Settled(Ok(())));
+        assert_eq!(reference.write_failures, 0);
         assert_eq!(reference.published, candidate);
         assert_eq!(reboot(reference.image).await, candidate);
         let commit = reference
@@ -178,14 +213,15 @@ fn campaign(campaign: Campaign) {
                     operation,
                     completed_bytes,
                 };
-                let outcome = write(image, Some(cut)).await;
+                let outcome = write(image, Fault::ReportError(cut)).await;
                 assert_eq!(outcome.trace, reference.trace[..=operation], "{cut:?}");
                 assert_eq!(
                     outcome.completion,
-                    Err(EmbeddedPersistenceFailure::Flash),
+                    Completion::Settled(Err(EmbeddedPersistenceFailure::Flash)),
                     "{cut:?}"
                 );
                 assert_eq!(outcome.published, confirmed, "{cut:?}");
+                assert!(outcome.write_failures > 0, "{cut:?}");
                 let durable = if operation > commit || (operation == commit && completed_bytes == 4)
                 {
                     candidate
@@ -195,11 +231,20 @@ fn campaign(campaign: Campaign) {
                 for _ in 0..2 {
                     assert_eq!(reboot(outcome.image).await, durable, "{cut:?}");
                 }
+                let removed = write(image, Fault::RemovePower(cut)).await;
+                assert_eq!(removed.trace, outcome.trace, "{cut:?}");
+                assert_eq!(removed.image, outcome.image, "{cut:?}");
+                assert_eq!(removed.completion, Completion::PowerRemoved, "{cut:?}");
+                assert_eq!(removed.write_failures, 0, "{cut:?}");
+                assert_eq!(removed.published, confirmed, "{cut:?}");
+                for _ in 0..2 {
+                    assert_eq!(reboot(removed.image).await, durable, "{cut:?}");
+                }
                 cuts += 1;
             }
         }
         std::eprintln!(
-            "verified {cuts} queued-owner {campaign:?} cuts and repeated durable recovery"
+            "verified {cuts} queued-owner {campaign:?} cuts with both reported errors and abrupt power removal"
         );
     });
 }
