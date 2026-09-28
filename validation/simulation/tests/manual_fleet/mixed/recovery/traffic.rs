@@ -103,9 +103,11 @@ pub(super) fn expire_at(
             .unwrap_or_else(|error| unreachable!("clock: {error}"))
             .tick
             .get();
-        assert!(runner
-            .advance_to_next_event(tick((now + 1).min(deadline.get())))
-            .is_ok());
+        if now < deadline.get() {
+            assert!(runner
+                .advance_to_next_event(tick((now + 1).min(deadline.get())))
+                .is_ok());
+        }
         assert_eq!(frames.now(), ble.now());
         let completed = settle(runner);
         if frames.now() == deadline {

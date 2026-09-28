@@ -3,6 +3,8 @@ use prns_simulation::ManualTaskCancellation;
 
 mod deadlines;
 mod mixed;
+mod retirement;
+use retirement::Retirement;
 
 #[derive(Clone, Copy)]
 enum ExchangeOrder {
@@ -18,12 +20,6 @@ impl ExchangeOrder {
             (Self::Alternating, _, Exchange::Response) => Exchange::Request,
         }
     }
-}
-
-#[derive(Clone, Copy)]
-enum Retirement {
-    KeepAll,
-    CancelMiddle,
 }
 
 const WAVES: usize = 3;
@@ -171,23 +167,7 @@ fn exercise(
                     assert_eq!(ble.active_connection_count(), 1);
                 }
                 assert_eq!(runner.task_count(), 3 + WAVES);
-                let mut live = WAVES;
-                if let Retirement::CancelMiddle = scenario.retirement {
-                    let clock = runner.snapshot().ok();
-                    let activity = ble.data_snapshots();
-                    assert_eq!(
-                        runner.cancel(pending[1].task).ok(),
-                        Some(ManualTaskCancellation::Cancelled)
-                    );
-                    assert_eq!(
-                        runner.cancel(pending[1].task).ok(),
-                        Some(ManualTaskCancellation::NotLive)
-                    );
-                    live -= 1;
-                    assert_eq!(runner.task_count(), 3 + live);
-                    assert_eq!(runner.snapshot().ok(), clock);
-                    assert_eq!(ble.data_snapshots(), activity);
-                }
+                let mut live = WAVES - scenario.retirement.apply(runner, frames, ble, &pending);
                 let mut batches = BTreeMap::<_, Vec<_>>::new();
                 for (index, request) in pending.into_iter().enumerate() {
                     batches
@@ -198,10 +178,7 @@ fn exercise(
                 for (index, (deadline, requests)) in batches.into_iter().enumerate() {
                     let mut expected = BTreeMap::new();
                     for &(admission, task) in &requests {
-                        if !matches!(
-                            (scenario.retirement, admission),
-                            (Retirement::CancelMiddle, 1)
-                        ) {
+                        if !scenario.retirement.cancels(admission) {
                             live -= 1;
                             expected.insert(
                                 task,

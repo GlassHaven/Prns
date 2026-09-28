@@ -721,6 +721,11 @@ later callers to retire before earlier ones. The [shared-deadline cases](measure
 require three staggered callers to settle as one exact batch. Both alternate
 request/response loss and recover before any old caller expires.
 
+The [shared-deadline cancellation cases](measurements/shared-deadline-cancellation.md)
+then retire the middle caller either before expiry or at the deadline tick
+before actor polling. The two survivors must still settle together, with no
+completion from the cancelled caller.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep
