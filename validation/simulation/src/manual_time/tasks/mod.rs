@@ -118,7 +118,7 @@ impl<'driver, T> ManualTaskRunner<'driver, T> {
     /// Completed outputs leave the runner immediately; there is no retained completion queue.
     /// An error after polling does not undo task effects or recover its output; discard the runner.
     pub fn poll_next(&mut self) -> Result<ManualTaskPoll<T>, ManualTimeError> {
-        let _ = self.driver.validate()?;
+        self.driver.validate()?;
         let Some(id) = ReadyTasks::lock(&self.ready).pop_next() else {
             return Ok(ManualTaskPoll::Idle);
         };
@@ -140,7 +140,7 @@ impl<'driver, T> ManualTaskRunner<'driver, T> {
                 }
             }
         };
-        let _ = self.driver.validate()?;
+        self.driver.validate()?;
         Ok(report)
     }
 
@@ -157,7 +157,7 @@ impl<'driver, T> ManualTaskRunner<'driver, T> {
         &mut self,
         not_after: SimulationTick,
     ) -> Result<ManualAdvance, ManualTimeError> {
-        let _ = self.driver.validate()?;
+        self.driver.validate()?;
         let count = ReadyTasks::lock(&self.ready).ready_count();
         if count != 0 {
             return Err(ManualTimeError::ReadyTasks { count });

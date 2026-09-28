@@ -115,6 +115,10 @@ concurrent connections owned by one supervisor without additional runtime contro
    sparse routed and BLE fleets. Retain correctness and cleanup assertions.
    [Initial BLE lifecycle timings](measurements/ble-fleet-scaling.md) now cover
    8, 32 and 128 real nodes; allocation/RSS and phase-level attribution remain open.
+   [Phase attribution](measurements/ble-fleet-phase-costs.md) subsequently exposed
+   redundant all-radio schedule scans during actor polls. Clock validation now
+   reads current ticks without searching for future events; peak-memory and
+   finer runtime/crypto attribution remain open.
 5. Add Wi-Fi, persistence/power-loss and sleep models, then connect selected
    workloads to ISA emulators. Native radio/controller behavior and RF remain
    separate evidence; board names on virtual protocol profiles do not cover it.

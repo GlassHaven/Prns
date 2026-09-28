@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::time::Instant;
 
-use crate::{MediumSchedule, SimulationTick};
+use crate::SimulationTick;
 
 mod error;
 mod medium;
@@ -60,7 +60,7 @@ impl ManualTimeDriver {
             let _entered = runtime.enter();
             Instant::now()
         };
-        let origin_tick = medium.schedule()?.now;
+        let origin_tick = medium.now()?;
         Ok(Self {
             runtime,
             medium,
@@ -73,7 +73,7 @@ impl ManualTimeDriver {
 
     /// Reports coordinated time, refusing external clock changes or live spawned async tasks.
     pub fn snapshot(&self) -> Result<ManualTimeSnapshot, ManualTimeError> {
-        let _ = self.validate()?;
+        self.validate()?;
         Ok(ManualTimeSnapshot {
             tick: self.tick,
             runtime_elapsed: self.instant_at(self.tick)? - self.origin_instant,
@@ -86,11 +86,11 @@ impl ManualTimeDriver {
         &mut self,
         mut future: Pin<&mut F>,
     ) -> Result<Poll<F::Output>, ManualTimeError> {
-        let _ = self.validate()?;
+        self.validate()?;
         let result = self.runtime.block_on(poll_fn(|context| {
             Poll::Ready(future.as_mut().poll(context))
         }));
-        let _ = self.validate()?;
+        self.validate()?;
         Ok(result)
     }
 
@@ -101,14 +101,14 @@ impl ManualTimeDriver {
         &mut self,
         not_after: SimulationTick,
     ) -> Result<ManualAdvance, ManualTimeError> {
-        let schedule = self.validate()?;
+        self.validate()?;
         if not_after < self.tick {
             return Err(ManualTimeError::BeforeCurrent {
                 current: self.tick,
                 requested: not_after,
             });
         }
-        let target = schedule.target_not_after(not_after);
+        let target = self.medium.schedule()?.target_not_after(not_after);
         let _ = self.instant_at(target)?;
         // The upper bound also keeps a changed schedule inside the prevalidated clock range.
         let report = self.medium.advance(target)?;
@@ -122,7 +122,7 @@ impl ManualTimeDriver {
         let duration = self.instant_at(to)? - self.instant_at(self.tick)?;
         self.runtime.block_on(tokio::time::advance(duration));
         self.tick = to;
-        let _ = self.validate()?;
+        self.validate()?;
         Ok(report)
     }
 
@@ -137,7 +137,7 @@ impl ManualTimeDriver {
             .ok_or(ManualTimeError::ClockRange { tick })
     }
 
-    fn validate(&self) -> Result<MediumSchedule, ManualTimeError> {
+    fn validate(&self) -> Result<(), ManualTimeError> {
         outside_runtime()?;
         let count = self.runtime.metrics().num_alive_tasks();
         if count != 0 {
@@ -154,14 +154,14 @@ impl ManualTimeDriver {
                 observed: observed.saturating_duration_since(self.origin_instant),
             });
         }
-        let schedule = self.medium.schedule()?;
-        if schedule.now != self.tick {
+        let observed = self.medium.now()?;
+        if observed != self.tick {
             return Err(ManualTimeError::MediumDrift {
                 expected: self.tick,
-                observed: schedule.now,
+                observed,
             });
         }
-        Ok(schedule)
+        Ok(())
     }
 }
 

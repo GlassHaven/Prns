@@ -37,10 +37,23 @@ fn measure<const NODES: usize>() {
         .map(|value| value.bytes.len())
         .sum();
     let mut elapsed = Vec::with_capacity(SAMPLES);
+    let mut phase_samples: [Vec<Duration>; phases::Phase::ALL.len()] =
+        std::array::from_fn(|_| Vec::with_capacity(SAMPLES));
     for _ in 0..SAMPLES {
         let started = Instant::now();
-        let actual = run::<NODES>(INPUTS);
+        let mut previous = started;
+        let mut expected_phases = phases::Phase::ALL.into_iter().enumerate();
+        let actual = run_observed::<NODES>(INPUTS, |phase| {
+            let now = Instant::now();
+            let (index, expected) = expected_phases
+                .next()
+                .unwrap_or_else(|| unreachable!("bounded phase sequence"));
+            assert_eq!(phase, expected);
+            phase_samples[index].push(now.duration_since(previous));
+            previous = now;
+        });
         elapsed.push(started.elapsed());
+        assert_eq!(expected_phases.next(), None);
         assert_replay(&actual, &expected);
     }
     elapsed.sort();
@@ -55,4 +68,13 @@ fn measure<const NODES: usize>() {
         elapsed[SAMPLES - 1].as_secs_f64() * 1000.0,
         responses as f64 / median.as_secs_f64(),
     );
+    for (phase, mut samples) in phases::Phase::ALL.into_iter().zip(phase_samples) {
+        samples.sort();
+        println!(
+            "nodes={NODES} phase={phase:?} min_ms={:.3} median_ms={:.3} max_ms={:.3}",
+            samples[0].as_secs_f64() * 1000.0,
+            samples[SAMPLES / 2].as_secs_f64() * 1000.0,
+            samples[SAMPLES - 1].as_secs_f64() * 1000.0,
+        );
+    }
 }

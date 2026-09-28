@@ -14,6 +14,21 @@ pub enum ManualMedium {
 }
 
 impl ManualMedium {
+    pub(super) fn now(&self) -> Result<SimulationTick, ManualTimeError> {
+        match self {
+            Self::Frames(medium) => Ok(medium.now()),
+            Self::Ble(lab) => Ok(lab.now()),
+            Self::FramesAndBle { frames, ble } => {
+                let frames = frames.now();
+                let ble = ble.now();
+                if frames != ble {
+                    return Err(ManualTimeError::MediaDisagree { frames, ble });
+                }
+                Ok(frames)
+            }
+        }
+    }
+
     pub(super) fn schedule(&self) -> Result<MediumSchedule, ManualTimeError> {
         match self {
             Self::Frames(medium) => Ok(medium.schedule()),

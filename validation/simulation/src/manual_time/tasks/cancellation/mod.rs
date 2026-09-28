@@ -35,7 +35,7 @@ impl<T> ManualTaskRunner<'_, T> {
     /// the actor is already gone and its effects cannot be rolled back; discard
     /// the runner just as for a post-poll validation failure.
     pub fn cancel(&mut self, id: ManualTaskId) -> Result<ManualTaskCancellation, ManualTimeError> {
-        let _ = self.driver.validate()?;
+        self.driver.validate()?;
         let Some(task) = self.tasks.remove(&id) else {
             return Ok(ManualTaskCancellation::NotLive);
         };
@@ -46,7 +46,7 @@ impl<T> ManualTaskRunner<'_, T> {
             let _entered = self.driver.runtime.enter();
             drop(task);
         }
-        let _ = self.driver.validate()?;
+        self.driver.validate()?;
         Ok(ManualTaskCancellation::Cancelled)
     }
 }

@@ -213,7 +213,7 @@ fn mixed_construction_rejects_unequal_origins_without_mutation() {
 }
 
 #[test]
-fn mixed_external_drift_on_either_medium_refuses_advancement_before_effects() {
+fn mixed_external_drift_refuses_observation_polling_and_advancement_before_effects() {
     for drift in [Drift::Frames, Drift::Ble, Drift::Both] {
         let (frames, ble, _backends) = media(2);
         let mut driver = driver(&frames, &ble);
@@ -230,14 +230,22 @@ fn mixed_external_drift_on_either_medium_refuses_advancement_before_effects() {
             }
         }
         let before = (frames.trace(), ble.trace());
-        match drift {
-            Drift::Frames | Drift::Ble => assert!(matches!(
-                driver.advance_to_next_event(tick(2)),
-                Err(ManualTimeError::MediaDisagree { .. })
-            )),
-            Drift::Both => assert!(
-                matches!(driver.advance_to_next_event(tick(2)), Err(ManualTimeError::MediumDrift { expected, observed }) if expected == tick(0) && observed == tick(1))
-            ),
+        let mut polled = false;
+        let poll_result = driver.poll(Box::pin(async { polled = true }).as_mut());
+        assert!(!polled);
+        for result in [
+            driver.snapshot().map(|_| ()),
+            poll_result.map(|_| ()),
+            driver.advance_to_next_event(tick(2)).map(|_| ()),
+        ] {
+            match drift {
+                Drift::Frames | Drift::Ble => {
+                    assert!(matches!(result, Err(ManualTimeError::MediaDisagree { .. })))
+                }
+                Drift::Both => assert!(
+                    matches!(result, Err(ManualTimeError::MediumDrift { expected, observed }) if expected == tick(0) && observed == tick(1))
+                ),
+            }
         }
         assert_eq!((frames.trace(), ble.trace()), before);
     }

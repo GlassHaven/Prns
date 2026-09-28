@@ -2,6 +2,7 @@ use super::*;
 use prns_simulation::{ManualTaskScheduling, SimulationSeed};
 use std::collections::BTreeSet;
 
+mod phases;
 mod scale;
 
 const TRACE_EVENTS_PER_NODE: usize = 32_768;
@@ -34,6 +35,13 @@ fn expected_peer(node: usize) -> Vec<(InterfaceId, ConnectionState)> {
 }
 
 fn run<const NODES: usize>(inputs: Inputs) -> FleetTranscript {
+    run_observed::<NODES>(inputs, |_| {})
+}
+
+fn run_observed<const NODES: usize>(
+    inputs: Inputs,
+    mut completed: impl FnMut(phases::Phase),
+) -> FleetTranscript {
     const { assert!(NODES >= 4 && NODES <= 128 && NODES.is_multiple_of(2)) };
     let pairs = NODES / 2;
     let capture = BleWireCapture::new(nonzero(NODES * CAPTURE_VALUES_PER_NODE));
@@ -81,6 +89,7 @@ fn run<const NODES: usize>(inputs: Inputs) -> FleetTranscript {
                 .unwrap_or_else(|error| unreachable!("destination: {error:?}"))
         })
         .collect();
+    completed(phases::Phase::Boot);
     for node in (0..NODES).step_by(2) {
         assert_eq!(
             lab.set_reachability(address(node), address(node + 1), Reachability::Reachable),
@@ -107,6 +116,7 @@ fn run<const NODES: usize>(inputs: Inputs) -> FleetTranscript {
                 *heard.borrow() == [destinations[node ^ 1]]
             })
     });
+    completed(phases::Phase::Discovery);
     let mut links = traffic::establish(
         &mut runner,
         &nodes,
@@ -124,6 +134,7 @@ fn run<const NODES: usize>(inputs: Inputs) -> FleetTranscript {
     let mut boundaries = vec![before.values.len()];
     let old_connections = connection_pairs::<NODES>(&before);
     assert_eq!(old_connections.len(), pairs);
+    completed(phases::Phase::InitialTraffic);
 
     assert_eq!(
         lab.set_reachability(address(0), address(1), Reachability::Isolated),
@@ -156,6 +167,7 @@ fn run<const NODES: usize>(inputs: Inputs) -> FleetTranscript {
         assert_eq!(old_connections.get(&pair(value)), Some(&value.connection));
     }
     boundaries.push(isolated.values.len());
+    completed(phases::Phase::IsolatedTraffic);
     assert_eq!(
         lab.set_reachability(address(0), address(1), Reachability::Reachable),
         Ok(TopologyMutation::Applied)
@@ -195,6 +207,7 @@ fn run<const NODES: usize>(inputs: Inputs) -> FleetTranscript {
         }
     }
     boundaries.push(recovered.values.len());
+    completed(phases::Phase::RecoveryTraffic);
 
     let expected: BTreeMap<_, _> = nodes
         .into_iter()
@@ -234,6 +247,7 @@ fn run<const NODES: usize>(inputs: Inputs) -> FleetTranscript {
     assert_eq!(attached, detached);
     let wire = capture.snapshot();
     assert_eq!(wire.discarded_values, 0);
+    completed(phases::Phase::Shutdown);
     FleetTranscript {
         discovery,
         wire,
