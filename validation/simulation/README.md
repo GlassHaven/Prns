@@ -707,6 +707,10 @@ The [early-recovery matrix](measurements/fragmented-early-recovery.md) reconnect
 before the old deadline, completes fresh concurrent traffic while an older
 request remains pending, then checks that only the older live caller times out.
 
+The [repeated-loss matrix](measurements/fragmented-staggered-timeouts.md) builds
+three outstanding lost exchanges across rapid reconnects. Fresh traffic fills
+the existing actor budget while each older caller retains its own deadline.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

@@ -6,6 +6,7 @@ use prns_simulation::{ManualTaskPoll, ManualTaskScheduling, SimulationSeed};
 
 mod cancellation;
 mod cancelled_loss;
+mod flapping;
 
 #[derive(Clone, Copy, Debug)]
 enum CutBoundary {
