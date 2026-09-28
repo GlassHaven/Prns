@@ -132,7 +132,10 @@ expected values. No production clock change was needed.
    from durable storage and actual power-loss behavior.
    The [journal foundation](measurements/journal-power-loss.md) covers 694
    compaction cut points and exact generation recovery from surviving bytes.
-   Runtime persistence-owner integration and full-node durable reboot remain open.
+   The [embedded restore follow-up](measurements/embedded-restore-cuts.md) adds
+   89 torn-update cuts through the real owner's group/timebase restore path.
+   Queued persistence writes, Tokio store parity and full-node durable reboot
+   remain open; concurrent embedded owners need isolation of the global exchange.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,

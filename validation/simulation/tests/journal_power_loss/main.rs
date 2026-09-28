@@ -2,6 +2,7 @@
 
 mod flash;
 mod model_tests;
+mod restore;
 
 use flash::{Cut, Error, Flash, Image, Operation, CAPACITY, PAGE};
 use prns_core::persistence::{
