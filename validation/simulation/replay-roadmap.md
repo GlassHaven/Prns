@@ -134,8 +134,10 @@ expected values. No production clock change was needed.
    compaction cut points and exact generation recovery from surviving bytes.
    The [embedded restore follow-up](measurements/embedded-restore-cuts.md) adds
    89 torn-update cuts through the real owner's group/timebase restore path.
-   Queued persistence writes, Tokio store parity and full-node durable reboot
-   remain open; concurrent embedded owners need isolation of the global exchange.
+   Per-node discovery-group exchanges now isolate embedded owners. The queued
+   owner campaign adds 65 append and 1,291 compaction/write cuts through admission,
+   settlement and repeated reboot. Tokio store parity, runtime activation/rollback
+   and full-node durable reboot remain open.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,

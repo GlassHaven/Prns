@@ -21,6 +21,8 @@ The [power-loss foundation](measurements/journal-power-loss.md) now exercises th
 production flash journal through torn writes, partial erases and byte-image reboot.
 The [embedded restore follow-up](measurements/embedded-restore-cuts.md) additionally
 checks decoded group settings and logical time through the real persistence owner.
+The [queued-owner campaign](measurements/queued-persistence-cuts.md) adds torn
+append and compaction recovery through real admission and completion handling.
 
 The medium intentionally makes its limits and faults explicit:
 
