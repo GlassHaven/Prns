@@ -7,7 +7,7 @@ use personal_rns::interfaces::bluetooth_auto::{
 };
 use tokio::sync::mpsc;
 
-use super::connection::ConnectionEndpoint;
+use super::connection::{ConnectionEndpoint, DataEvent};
 use super::VirtualBleError;
 
 #[cfg(test)]
@@ -126,12 +126,14 @@ impl BleSource for VirtualBleSource {
                 _ = closed.changed() => return Err(VirtualBleError::LinkClosed),
                 value = self.receiver.recv() => value.ok_or(VirtualBleError::LinkClosed)?,
             };
+            self.endpoint.incoming(DataEvent::ValueConsumed);
             let Some(fragment) = Fragment::decode(&value) else {
                 continue;
             };
             let Some(frame) = self.reassembler.absorb(&fragment) else {
                 continue;
             };
+            self.endpoint.incoming(DataEvent::FrameReassembled);
             return copy_received_frame(frame, out).map_err(|error| match error {
                 BleReceiveError::BufferTooSmall { length, capacity } => {
                     VirtualBleError::ReceiveBufferTooSmall {
@@ -182,6 +184,7 @@ impl BleSink for VirtualBleSink {
         }
         let mut closed = self.endpoint.connection.subscribe();
         let mut value = [0; BLE_HW_MTU + FRAGMENT_HEADER_LEN];
+        self.endpoint.outgoing(DataEvent::SendStarted);
         for fragment in fragments_of(frame, self.value_limit) {
             if *closed.borrow_and_update() {
                 return Err(VirtualBleError::LinkClosed);
@@ -194,9 +197,11 @@ impl BleSink for VirtualBleSink {
                 _ = closed.changed() => return Err(VirtualBleError::LinkClosed),
                 result = self.sender.send(value[..len].to_vec()) => {
                     result.map_err(|_| VirtualBleError::LinkClosed)?;
+                    self.endpoint.outgoing(DataEvent::FragmentQueued);
                 }
             }
         }
+        self.endpoint.outgoing(DataEvent::SendCompleted);
         Ok(())
     }
 }

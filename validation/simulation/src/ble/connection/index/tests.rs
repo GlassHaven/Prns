@@ -64,6 +64,7 @@ fn endpoint_loss_is_reclaimed_before_replacement_without_touching_other_radios()
     index.insert(old.clone());
     let endpoint = ConnectionEndpoint {
         connection: old.clone(),
+        side: super::super::ConnectionSide::Dialer,
     };
     drop(endpoint);
     assert_eq!(index.active_count(), 1);
@@ -86,6 +87,73 @@ fn endpoint_loss_is_reclaimed_before_replacement_without_touching_other_radios()
 }
 
 #[test]
+fn activity_snapshots_retire_closed_connections_and_do_not_alias_replacements() {
+    use super::super::{BleConnectionDataSnapshot, BleDataCounters, ConnectionSide, DataEvent};
+    let mut index = ConnectionIndex::default();
+    let old = Arc::new(Connection::new(FIRST, SECOND));
+    index.insert(old.clone());
+    let first = ConnectionEndpoint {
+        connection: old.clone(),
+        side: ConnectionSide::Dialer,
+    };
+    let second = ConnectionEndpoint {
+        connection: old.clone(),
+        side: ConnectionSide::Listener,
+    };
+    first.outgoing(DataEvent::FragmentQueued);
+    second.incoming(DataEvent::ValueConsumed);
+    second.outgoing(DataEvent::SendStarted);
+    let expected = BleConnectionDataSnapshot {
+        dialer: FIRST,
+        listener: SECOND,
+        dialer_to_listener: BleDataCounters {
+            fragments_queued: 1,
+            values_consumed: 1,
+            ..BleDataCounters::default()
+        },
+        listener_to_dialer: BleDataCounters {
+            sends_started: 1,
+            ..BleDataCounters::default()
+        },
+    };
+    assert_eq!(index.data_snapshots(), [expected]);
+    assert!(old.close());
+    assert!(index.data_snapshots().is_empty());
+    let replacement = Arc::new(Connection::new(FIRST, SECOND));
+    index.insert(replacement);
+    first.outgoing(DataEvent::SendCompleted);
+    assert_eq!(
+        index.data_snapshots(),
+        [BleConnectionDataSnapshot {
+            dialer: FIRST,
+            listener: SECOND,
+            dialer_to_listener: BleDataCounters::default(),
+            listener_to_dialer: BleDataCounters::default(),
+        }]
+    );
+}
+
+#[test]
+fn data_counter_overflow_is_explicit_and_does_not_wrap() {
+    use super::super::{BleDataCounters, DataEvent};
+    let mut counts = BleDataCounters {
+        fragments_queued: u64::MAX,
+        ..BleDataCounters::default()
+    };
+    counts.record(DataEvent::FragmentQueued);
+    counts.record(DataEvent::SendStarted);
+    assert_eq!(
+        counts,
+        BleDataCounters {
+            fragments_queued: u64::MAX,
+            sends_started: 1,
+            saturated: true,
+            ..BleDataCounters::default()
+        }
+    );
+}
+
+#[test]
 fn dormant_counterpart_entries_do_not_accumulate_across_churn() {
     let mut index = ConnectionIndex::default();
     for _ in 0..1_024 {
@@ -105,6 +173,7 @@ fn endpoint_teardown_during_disconnect_does_not_relock_the_registry() {
         let connection = Arc::new(Connection::new(FIRST, SECOND));
         let endpoint = Mutex::new(Some(ConnectionEndpoint {
             connection: connection.clone(),
+            side: super::super::ConnectionSide::Dialer,
         }));
         let mut index = ConnectionIndex::default();
         index.insert(connection);

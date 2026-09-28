@@ -295,6 +295,16 @@ impl VirtualBleLab {
         self.lock_network().connections.active_count()
     }
 
+    /// One bounded counter snapshot per active connection, including connections
+    /// still handshaking. Closed connections are omitted; replacements start at
+    /// zero. Each connection is sampled independently, not one atomic fleet instant.
+    /// Counters describe events, not queue occupancy; concurrent send/receive
+    /// execution may be sampled between their individual accounting updates.
+    #[must_use]
+    pub fn data_snapshots(&self) -> Vec<super::BleConnectionDataSnapshot> {
+        self.lock_network().connections.data_snapshots()
+    }
+
     pub fn disconnect_between(
         &self,
         first: BleAddress,
@@ -677,6 +687,7 @@ fn link_pair(
             peer_signal_strength_dbm: signal_strength_b,
             endpoint: Arc::new(ConnectionEndpoint {
                 connection: lifecycle.clone(),
+                side: super::connection::ConnectionSide::Dialer,
             }),
         },
         VirtualBleLink {
@@ -690,6 +701,7 @@ fn link_pair(
             peer_signal_strength_dbm: signal_strength_a,
             endpoint: Arc::new(ConnectionEndpoint {
                 connection: lifecycle,
+                side: super::connection::ConnectionSide::Listener,
             }),
         },
     )

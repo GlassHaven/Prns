@@ -675,6 +675,12 @@ frame queue, before the bridge polls it. It distinguishes losing the remaining
 BLE path from cutting a frame hop the response has already completed, with an
 uninterrupted control at every selected boundary.
 
+The [partial-GATT request matrix](measurements/mixed-fragmented-outages.md)
+uses bounded per-connection data counters to cut after two fragments are queued
+or consumed, before a complete frame exists. Both request directions recover on
+the original logical links. These counters retain no packet history and reset
+with connection replacement; saturation is explicit.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

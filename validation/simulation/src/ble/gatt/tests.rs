@@ -14,8 +14,12 @@ fn endpoints() -> (Arc<ConnectionEndpoint>, Arc<ConnectionEndpoint>) {
     (
         Arc::new(ConnectionEndpoint {
             connection: connection.clone(),
+            side: super::super::connection::ConnectionSide::Dialer,
         }),
-        Arc::new(ConnectionEndpoint { connection }),
+        Arc::new(ConnectionEndpoint {
+            connection,
+            side: super::super::connection::ConnectionSide::Listener,
+        }),
     )
 }
 
@@ -26,6 +30,125 @@ fn data_pair(value_limit: usize) -> (VirtualBleSink, VirtualBleSource) {
         VirtualBleSink::new(sender, BLE_HW_MTU, value_limit, first),
         VirtualBleSource::new(receiver, second),
     )
+}
+
+#[tokio::test]
+async fn data_counters_prove_partial_send_then_exact_reassembly() {
+    use crate::ble::BleDataCounters;
+    let (mut sink, mut source) = data_pair(10);
+    let connection = sink.endpoint.connection.clone();
+    let mut output = [0xcc; 11];
+    let mut sending = std::pin::pin!(sink.send_frame(b"hello-world"));
+    poll_fn(|cx| {
+        assert!(sending.as_mut().poll(cx).is_pending());
+        Poll::Ready(())
+    })
+    .await;
+    let mut expected = BleDataCounters {
+        sends_started: 1,
+        fragments_queued: 1,
+        ..BleDataCounters::default()
+    };
+    assert_eq!(connection.data_snapshot().dialer_to_listener, expected);
+    {
+        let mut receiving = std::pin::pin!(source.recv_frame(&mut output));
+        poll_fn(|cx| {
+            assert!(receiving.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+    }
+    expected.values_consumed = 1;
+    assert_eq!(connection.data_snapshot().dialer_to_listener, expected);
+    assert_eq!(output, [0xcc; 11]);
+    let (sent, received) = tokio::join!(sending, source.recv_frame(&mut output));
+    assert_eq!((sent, received, output), (Ok(()), Ok(11), *b"hello-world"));
+    expected.sends_completed = 1;
+    expected.fragments_queued = 3;
+    expected.values_consumed = 3;
+    expected.frames_reassembled = 1;
+    let snapshot = connection.data_snapshot();
+    assert_eq!(snapshot.dialer_to_listener, expected);
+    assert_eq!(snapshot.listener_to_dialer, BleDataCounters::default());
+}
+
+#[tokio::test]
+async fn data_counters_keep_cancellation_and_refusals_distinct() {
+    use crate::ble::BleDataCounters;
+    let (mut sink, mut source) = data_pair(10);
+    let connection = sink.endpoint.connection.clone();
+    assert_eq!(sink.send_frame(&[]).await, Err(VirtualBleError::EmptyFrame));
+    assert_eq!(
+        sink.send_frame(&[0; BLE_HW_MTU + 1]).await,
+        Err(VirtualBleError::FrameTooLong {
+            length: BLE_HW_MTU + 1,
+            maximum: BLE_HW_MTU
+        })
+    );
+    assert_eq!(
+        connection.data_snapshot().dialer_to_listener,
+        BleDataCounters::default()
+    );
+    {
+        let mut sending = std::pin::pin!(sink.send_frame(b"abandoned"));
+        poll_fn(|cx| {
+            assert!(sending.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+    }
+    assert_eq!(
+        connection.data_snapshot().dialer_to_listener,
+        BleDataCounters {
+            sends_started: 1,
+            fragments_queued: 1,
+            ..BleDataCounters::default()
+        }
+    );
+    let mut output = [0xcc; 1];
+    let (sent, received) = tokio::join!(sink.send_frame(b"fresh"), source.recv_frame(&mut output));
+    assert_eq!(sent, Ok(()));
+    assert_eq!(
+        received,
+        Err(VirtualBleError::ReceiveBufferTooSmall {
+            frame: 5,
+            buffer: 1
+        })
+    );
+    assert_eq!(output, [0xcc]);
+    assert_eq!(
+        connection.data_snapshot().dialer_to_listener,
+        BleDataCounters {
+            sends_started: 2,
+            sends_completed: 1,
+            fragments_queued: 2,
+            values_consumed: 2,
+            frames_reassembled: 1,
+            saturated: false,
+        }
+    );
+}
+
+#[tokio::test]
+async fn malformed_consumed_values_do_not_claim_reassembled_frames() {
+    use crate::ble::BleDataCounters;
+    let (mut sink, mut source) = data_pair(10);
+    let connection = sink.endpoint.connection.clone();
+    sink.sender.send(vec![0xff]).await.unwrap();
+    let mut output = [0xcc; 5];
+    let (sent, received) = tokio::join!(sink.send_frame(b"fresh"), source.recv_frame(&mut output));
+    assert_eq!((sent, received, output), (Ok(()), Ok(5), *b"fresh"));
+    assert_eq!(
+        connection.data_snapshot().dialer_to_listener,
+        BleDataCounters {
+            sends_started: 1,
+            sends_completed: 1,
+            fragments_queued: 1,
+            values_consumed: 2,
+            frames_reassembled: 1,
+            saturated: false,
+        }
+    );
 }
 
 #[test]

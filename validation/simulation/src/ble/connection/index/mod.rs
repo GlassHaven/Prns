@@ -12,6 +12,20 @@ pub(in crate::ble) struct ConnectionIndex {
 }
 
 impl ConnectionIndex {
+    pub(in crate::ble) fn data_snapshots(&self) -> Vec<super::BleConnectionDataSnapshot> {
+        self.by_radio
+            .iter()
+            .flat_map(|(address, connections)| {
+                connections
+                    .iter()
+                    .filter(|connection| {
+                        connection.addresses[0] == *address && !connection.is_closed()
+                    })
+                    .map(|connection| connection.data_snapshot())
+            })
+            .collect()
+    }
+
     pub(in crate::ble) fn insert(&mut self, connection: Arc<Connection>) {
         for address in connection.addresses {
             let connections = self.by_radio.entry(address).or_default();
