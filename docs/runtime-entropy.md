@@ -37,8 +37,12 @@ fresh executable remains supported.
 its position, source and reseed health without another seed read. The host does
 not accept a raw seed or an unbranded random-output callback. Controlled sources
 are appropriate only for isolated validation; normal node construction remains
-OS-backed. This host-level seam does not yet configure all entropy owners in a
-complete node or establish packet-level simulator replay.
+OS-backed. `PrnsNode::new_with_host` and `new_with_handle_and_host` carry that
+host through node execution without erasing its source type. The caller owns
+the supplied timeline, including its agreement with any restored persistence.
+These constructors do not override handle/interface or path-ID sources.
+A bounded frame-only simulator exchange now repeats packet bytes, but general
+node replay still requires control of the other owners and execution inputs.
 
 ## Reseeding
 

@@ -137,7 +137,10 @@ impl NodePersistence {
         &self.vault
     }
 
-    pub fn restore<St, R, F, S>(&self, node: &mut PrnsNode<St, R, F, S>) -> PersistenceRestoreReport
+    pub fn restore<St, R, F, S, E: prns_core::entropy::EntropySource>(
+        &self,
+        node: &mut PrnsNode<St, R, F, S, E>,
+    ) -> PersistenceRestoreReport
     where
         R: RequestEndpointSet<St>,
         F: FnMut(PrnsEvent<'_>, &St),
@@ -146,9 +149,9 @@ impl NodePersistence {
         self.restore_reporting(node, |_| {})
     }
 
-    pub fn restore_reporting<St, R, F, S>(
+    pub fn restore_reporting<St, R, F, S, E: prns_core::entropy::EntropySource>(
         &self,
-        node: &mut PrnsNode<St, R, F, S>,
+        node: &mut PrnsNode<St, R, F, S, E>,
         progress: impl FnMut(RouteSeedProgress),
     ) -> PersistenceRestoreReport
     where

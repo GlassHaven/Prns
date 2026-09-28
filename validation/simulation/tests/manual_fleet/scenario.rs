@@ -7,7 +7,7 @@ use personal_rns::engine::{
 };
 use personal_rns::identity::{Zeroizing, IDENTITY_SECRET_KEY_LEN};
 use personal_rns::interfaces::InterfaceId;
-use personal_rns::manifold::tokio::TokioClock;
+use personal_rns::manifold::tokio::{TokioClock, TokioHost};
 use personal_rns::request_endpoints;
 use personal_rns::routing::links::LinkId;
 use personal_rns::routing::request_handlers::RequestPathHash;
@@ -23,6 +23,7 @@ use personal_rns::runtime::{
 use personal_rns::storage::GrowableHeap;
 use personal_rns::units::DurationMillis;
 use personal_rns::wire::DestinationHash;
+use prns_core::entropy::EntropySource;
 use prns_simulation::{ManualTaskId, ManualTaskPoll, ManualTaskRunner};
 use tokio::sync::oneshot;
 
@@ -121,6 +122,19 @@ pub fn add_node<F: FnOnce(&PrnsNodeHandle) + 'static>(
     runner: &mut ManualTaskRunner<'_, Completion>,
     spec: NodeSpec<F>,
 ) -> (ManualTaskId, oneshot::Receiver<NodeControl>) {
+    add_node_with_host(runner, spec, TokioHost::start_at)
+}
+
+pub fn add_node_with_host<F, E, H>(
+    runner: &mut ManualTaskRunner<'_, Completion>,
+    spec: NodeSpec<F>,
+    host: H,
+) -> (ManualTaskId, oneshot::Receiver<NodeControl>)
+where
+    F: FnOnce(&PrnsNodeHandle) + 'static,
+    E: EntropySource + 'static,
+    H: FnOnce(InstantMillis) -> TokioHost<E> + 'static,
+{
     let elapsed = runner
         .snapshot()
         .unwrap_or_else(|error| unreachable!("node admission clock: {error}"))
@@ -144,41 +158,44 @@ pub fn add_node<F: FnOnce(&PrnsNodeHandle) + 'static>(
     let (shutdown, stopping) = oneshot::channel();
     let task = runner
         .insert(async move {
-            let node = PrnsNode::new(PrnsNodeRecipe {
-                remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
-                transport_identity: match role {
-                    NodeRole::Endpoint => None,
-                    NodeRole::Transport => {
-                        let mut secret = [0xB8; IDENTITY_SECRET_KEY_LEN];
-                        secret[..8].copy_from_slice(&(index as u64).to_be_bytes());
-                        Some(Zeroizing::new(secret))
-                    }
-                },
-                pre_configured_destinations: [destination(index)],
-                app_state: NoRemoteControlHostControls,
-                storage: GrowableHeap,
-                request_endpoints: request_endpoints![Echo],
-                on_event: move |event, _state| {
-                    if let PrnsEvent::Diagnostic(Diagnostic::AnnounceHeard {
-                        destination, ..
-                    }) = event
-                    {
-                        let mut heard = heard.borrow_mut();
-                        if !heard.contains(&destination) {
-                            assert!(
-                                heard.len() < heard_capacity.get(),
-                                "announce inventory must stay bounded"
-                            );
-                            heard.push(destination);
-                            heard.sort_by_key(|destination| *destination.as_bytes());
+            let node = PrnsNode::new_with_host(
+                PrnsNodeRecipe {
+                    remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+                    transport_identity: match role {
+                        NodeRole::Endpoint => None,
+                        NodeRole::Transport => {
+                            let mut secret = [0xB8; IDENTITY_SECRET_KEY_LEN];
+                            secret[..8].copy_from_slice(&(index as u64).to_be_bytes());
+                            Some(Zeroizing::new(secret))
                         }
-                    }
+                    },
+                    pre_configured_destinations: [destination(index)],
+                    app_state: NoRemoteControlHostControls,
+                    storage: GrowableHeap,
+                    request_endpoints: request_endpoints![Echo],
+                    on_event: move |event, _state| {
+                        if let PrnsEvent::Diagnostic(Diagnostic::AnnounceHeard {
+                            destination,
+                            ..
+                        }) = event
+                        {
+                            let mut heard = heard.borrow_mut();
+                            if !heard.contains(&destination) {
+                                assert!(
+                                    heard.len() < heard_capacity.get(),
+                                    "announce inventory must stay bounded"
+                                );
+                                heard.push(destination);
+                                heard.sort_by_key(|destination| *destination.as_bytes());
+                            }
+                        }
+                    },
+                    interfaces: attach_interfaces,
+                    persistence: NoPersistence,
                 },
-                interfaces: attach_interfaces,
-                persistence: NoPersistence,
-            })
-            .with_crypto_pool(CryptoPoolConfig::Inline)
-            .with_timeline_origin(timeline_origin);
+                host(timeline_origin),
+            )
+            .with_crypto_pool(CryptoPoolConfig::Inline);
             let clock = node.clock();
             let origin = clock.now();
             assert!(ready

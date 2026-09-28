@@ -10,6 +10,7 @@ use std::task::{Context, Poll, Wake, Waker};
 
 use futures_util::task::AtomicWaker;
 use futures_util::FutureExt;
+use prns_core::entropy::EntropySource;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 
@@ -75,10 +76,10 @@ fn notify_accepted_announce(
 /// (synchronous: it wires the engine and spawns each interface), then driven by
 /// [`run`](Self::run) or [`run_until`](Self::run_until). Hold [`handle`](Self::handle)
 /// clones to drive it from other tasks or threads while either method owns the loop.
-pub struct PrnsNode<St, R, F, S: StorageLayout> {
+pub struct PrnsNode<St, R, F, S: StorageLayout, E = crate::runtime::OsEntropySource> {
     handle: PrnsNodeHandle,
     local_commands: Option<manifold_driver::LocalCommandProducer>,
-    pub(super) host: TokioHost,
+    pub(super) host: TokioHost<E>,
     pub(super) node: AssembledNode<St, R, F, S>,
     manifold_wake: manifold_driver::ManifoldWakeReceiver,
     command_rx: UnboundedReceiver<HostCommand>,
@@ -100,7 +101,7 @@ pub enum NonRoutingIdentityError {
 
 pub type SharedInstanceIdentityError = NonRoutingIdentityError;
 
-impl<St, R, F> PrnsNode<St, R, F, GrowableHeap>
+impl<St, R, F, E: EntropySource> PrnsNode<St, R, F, GrowableHeap, E>
 where
     R: RequestEndpointSet<St>,
     F: FnMut(PrnsEvent<'_>, &St),
@@ -434,6 +435,56 @@ where
         P: persistence::PersistenceIntent,
         B: FnOnce(PrnsNodeHandle) -> PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
     {
+        Self::assemble_with_host(build_recipe, |persistence| {
+            TokioHost::start_at(
+                persistence
+                    .map(persistence::NodePersistence::timeline_origin)
+                    .unwrap_or_else(persistence::wall_clock_timeline_origin),
+            )
+        })
+    }
+}
+
+impl<St, R, F, S: StorageLayout, E: EntropySource> PrnsNode<St, R, F, S, E>
+where
+    R: RequestEndpointSet<St>,
+    F: FnMut(PrnsEvent<'_>, &St),
+{
+    /// Constructs a node with an explicitly owned host. Its timeline must agree with any
+    /// restored persistence. Handle/interface randomness and path IDs remain OS-backed.
+    pub fn new_with_host<'a, D, I, P>(
+        recipe: PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
+        host: TokioHost<E>,
+    ) -> Self
+    where
+        D: IntoIterator<Item = PreConfiguredDestination<'a>>,
+        I: AttachIntent,
+        P: persistence::PersistenceIntent,
+    {
+        Self::new_with_handle_and_host(|_| recipe, host)
+    }
+
+    /// Like [`Self::new_with_host`], with access to the handle while constructing the recipe.
+    pub fn new_with_handle_and_host<'a, D, I, P, B>(build_recipe: B, host: TokioHost<E>) -> Self
+    where
+        D: IntoIterator<Item = PreConfiguredDestination<'a>>,
+        I: AttachIntent,
+        P: persistence::PersistenceIntent,
+        B: FnOnce(PrnsNodeHandle) -> PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
+    {
+        Self::assemble_with_host(build_recipe, |_| host)
+    }
+
+    fn assemble_with_host<'a, D, I, P, B>(
+        build_recipe: B,
+        host: impl FnOnce(Option<&persistence::NodePersistence>) -> TokioHost<E>,
+    ) -> Self
+    where
+        D: IntoIterator<Item = PreConfiguredDestination<'a>>,
+        I: AttachIntent,
+        P: persistence::PersistenceIntent,
+        B: FnOnce(PrnsNodeHandle) -> PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
+    {
         let (manifold_wake_tx, manifold_wake_rx) = manifold_driver::manifold_wake();
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (local_commands, local_command_rx) =
@@ -466,12 +517,7 @@ where
         PrnsNode {
             local_commands: Some(local_commands),
             handle,
-            host: TokioHost::start_at(
-                node_persistence
-                    .as_ref()
-                    .map(persistence::NodePersistence::timeline_origin)
-                    .unwrap_or_else(persistence::wall_clock_timeline_origin),
-            ),
+            host: host(node_persistence.as_ref()),
             node,
             manifold_wake: manifold_wake_rx,
             command_rx,
