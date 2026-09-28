@@ -1,8 +1,11 @@
-use core::cell::RefCell;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::blocking_mutex::Mutex as BlockingMutex;
-use embassy_sync::mutex::Mutex as AsyncMutex;
-use embassy_sync::signal::Signal;
+#[cfg(test)]
+use super::discovery_group_store::{
+    restored_discovery_group_configuration_now, restored_discovery_groups_now,
+    store_discovery_group_configuration, DISCOVERY_GROUP_CONFIGURATION_STORES,
+};
+use super::discovery_group_store::{
+    DiscoveryGroupConfigurationStoreExchange, GlobalDiscoveryGroupStore,
+};
 use embedded_storage_async::nor_flash::NorFlash;
 use heapless::Vec as HeaplessVec;
 
@@ -93,304 +96,6 @@ impl DiscoveryGroupConfigurationChange {
         snapshot: &mut DiscoveryGroupConfigurationSnapshot,
     ) -> Result<(), DiscoveryGroupConfigurationSnapshotError> {
         snapshot.upsert(self.interface_id, self.groups)
-    }
-}
-
-struct RestoredDiscoveryGroupConfiguration {
-    complete: bool,
-    snapshot: Option<DiscoveryGroupConfigurationSnapshot>,
-}
-
-enum DiscoveryGroupConfigurationStoreState {
-    Idle,
-    Pending(DiscoveryGroupConfigurationChange),
-    Processing,
-}
-
-pub(super) struct DiscoveryGroupConfigurationStoreExchange {
-    caller: AsyncMutex<CriticalSectionRawMutex, ()>,
-    state: BlockingMutex<CriticalSectionRawMutex, RefCell<DiscoveryGroupConfigurationStoreState>>,
-    request_ready: Signal<CriticalSectionRawMutex, ()>,
-    completed: Signal<CriticalSectionRawMutex, Result<(), EmbeddedPersistenceFailure>>,
-    restored: BlockingMutex<CriticalSectionRawMutex, RefCell<RestoredDiscoveryGroupConfiguration>>,
-    restored_changed: Signal<CriticalSectionRawMutex, ()>,
-}
-
-impl DiscoveryGroupConfigurationStoreExchange {
-    const fn new() -> Self {
-        Self {
-            caller: AsyncMutex::new(()),
-            state: BlockingMutex::new(RefCell::new(DiscoveryGroupConfigurationStoreState::Idle)),
-            request_ready: Signal::new(),
-            completed: Signal::new(),
-            restored: BlockingMutex::new(RefCell::new(RestoredDiscoveryGroupConfiguration {
-                complete: false,
-                snapshot: None,
-            })),
-            restored_changed: Signal::new(),
-        }
-    }
-
-    pub(super) fn publish_restored(&self, snapshot: Option<DiscoveryGroupConfigurationSnapshot>) {
-        self.restored.lock(|state| {
-            let mut state = state.borrow_mut();
-            state.complete = true;
-            state.snapshot = snapshot;
-        });
-        self.restored_changed.signal(());
-    }
-
-    fn restored_now(&self) -> Option<DiscoveryGroupConfigurationSnapshot> {
-        self.restored.lock(|state| {
-            let state = state.borrow();
-            state.complete.then(|| state.snapshot.unwrap_or_default())
-        })
-    }
-
-    fn groups_now(
-        &self,
-        interface_id: crate::interfaces::InterfaceId,
-    ) -> Option<Option<crate::interfaces::DiscoveryGroupSet>> {
-        self.restored.lock(|state| {
-            let state = state.borrow();
-            state.complete.then(|| {
-                state
-                    .snapshot
-                    .as_ref()
-                    .and_then(|snapshot| snapshot.groups_for(interface_id))
-                    .cloned()
-            })
-        })
-    }
-
-    fn encode_restored(
-        &self,
-        output: &mut [u8; DISCOVERY_GROUP_CONFIGURATION_SNAPSHOT_MAX_LEN],
-    ) -> Option<usize> {
-        self.restored.lock(|state| {
-            let state = state.borrow();
-            state
-                .snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.encode_into_max(output))
-        })
-    }
-
-    fn encode_projected(
-        &self,
-        change: &DiscoveryGroupConfigurationChange,
-        output: &mut [u8; DISCOVERY_GROUP_CONFIGURATION_SNAPSHOT_MAX_LEN],
-    ) -> Result<usize, DiscoveryGroupConfigurationSnapshotError> {
-        self.restored.lock(|state| {
-            let state = state.borrow();
-            let mut projected = state.snapshot.unwrap_or_default();
-            change.apply_to(&mut projected)?;
-            Ok(projected.encode_into_max(output))
-        })
-    }
-
-    pub(super) fn commit_change(
-        &self,
-        change: &DiscoveryGroupConfigurationChange,
-    ) -> Result<(), DiscoveryGroupConfigurationSnapshotError> {
-        let result = self.restored.lock(|state| {
-            let mut state = state.borrow_mut();
-            let snapshot = state.snapshot.get_or_insert_default();
-            change.apply_to(snapshot)
-        });
-        if result.is_ok() {
-            self.restored_changed.signal(());
-        }
-        result
-    }
-
-    fn submit(&self, change: DiscoveryGroupConfigurationChange) -> bool {
-        let submitted = self.state.lock(|state| {
-            let mut state = state.borrow_mut();
-            match &*state {
-                DiscoveryGroupConfigurationStoreState::Idle => {
-                    *state = DiscoveryGroupConfigurationStoreState::Pending(change);
-                    true
-                }
-                DiscoveryGroupConfigurationStoreState::Pending(_)
-                | DiscoveryGroupConfigurationStoreState::Processing => false,
-            }
-        });
-        if submitted {
-            self.completed.reset();
-            self.request_ready.signal(());
-        }
-        submitted
-    }
-
-    fn take_pending(&self) -> Option<DiscoveryGroupConfigurationChange> {
-        self.state.lock(|state| {
-            let mut state = state.borrow_mut();
-            let current =
-                core::mem::replace(&mut *state, DiscoveryGroupConfigurationStoreState::Idle);
-            match current {
-                DiscoveryGroupConfigurationStoreState::Pending(change) => {
-                    *state = DiscoveryGroupConfigurationStoreState::Processing;
-                    Some(change)
-                }
-                other => {
-                    *state = other;
-                    None
-                }
-            }
-        })
-    }
-
-    pub(super) fn try_take_request(&self) -> Option<DiscoveryGroupConfigurationChange> {
-        let pending = self.take_pending();
-        if pending.is_some() {
-            self.request_ready.reset();
-        }
-        pending
-    }
-
-    pub(super) fn has_pending_request(&self) -> bool {
-        self.state.lock(|state| {
-            matches!(
-                &*state.borrow(),
-                DiscoveryGroupConfigurationStoreState::Pending(_)
-            )
-        })
-    }
-
-    pub(super) async fn wait_until_request_ready(&self) {
-        loop {
-            if self.has_pending_request() {
-                return;
-            }
-            self.request_ready.wait().await;
-        }
-    }
-
-    pub(super) fn resignal_request(&self, change: DiscoveryGroupConfigurationChange) {
-        let resignal = self.state.lock(|state| {
-            let mut state = state.borrow_mut();
-            if matches!(*state, DiscoveryGroupConfigurationStoreState::Processing) {
-                *state = DiscoveryGroupConfigurationStoreState::Pending(change);
-                true
-            } else {
-                false
-            }
-        });
-        debug_assert!(
-            resignal,
-            "only a processing group change can be rescheduled"
-        );
-        if resignal {
-            self.request_ready.signal(());
-        }
-    }
-
-    pub(super) fn settle(&self, result: Result<(), EmbeddedPersistenceFailure>) {
-        let settled = self.state.lock(|state| {
-            let mut state = state.borrow_mut();
-            if matches!(*state, DiscoveryGroupConfigurationStoreState::Processing) {
-                // Publish completion before reopening admission so a cancelled caller cannot let
-                // its stale result race a newer request's reset.
-                self.completed.signal(result);
-                *state = DiscoveryGroupConfigurationStoreState::Idle;
-                true
-            } else {
-                false
-            }
-        });
-        debug_assert!(settled, "only a processing group change can be settled");
-    }
-
-    #[cfg(test)]
-    fn reset_for_test(&self) {
-        self.state.lock(|state| {
-            *state.borrow_mut() = DiscoveryGroupConfigurationStoreState::Idle;
-        });
-        self.request_ready.reset();
-        self.completed.reset();
-        self.restored.lock(|state| {
-            *state.borrow_mut() = RestoredDiscoveryGroupConfiguration {
-                complete: false,
-                snapshot: None,
-            };
-        });
-        self.restored_changed.reset();
-    }
-}
-
-pub(super) static DISCOVERY_GROUP_CONFIGURATION_STORES: DiscoveryGroupConfigurationStoreExchange =
-    DiscoveryGroupConfigurationStoreExchange::new();
-
-pub async fn restored_discovery_group_configuration() -> DiscoveryGroupConfigurationSnapshot {
-    loop {
-        if let Some(snapshot) = DISCOVERY_GROUP_CONFIGURATION_STORES.restored_now() {
-            return snapshot;
-        }
-        DISCOVERY_GROUP_CONFIGURATION_STORES
-            .restored_changed
-            .wait()
-            .await;
-    }
-}
-
-#[must_use]
-pub fn restored_discovery_group_configuration_now() -> Option<DiscoveryGroupConfigurationSnapshot> {
-    DISCOVERY_GROUP_CONFIGURATION_STORES.restored_now()
-}
-
-pub async fn restored_discovery_groups(
-    interface_id: crate::interfaces::InterfaceId,
-) -> Option<crate::interfaces::DiscoveryGroupSet> {
-    loop {
-        if let Some(groups) = DISCOVERY_GROUP_CONFIGURATION_STORES.groups_now(interface_id) {
-            return groups;
-        }
-        DISCOVERY_GROUP_CONFIGURATION_STORES
-            .restored_changed
-            .wait()
-            .await;
-    }
-}
-
-/// Returns `None` until journal restoration is complete, then the optional durable set.
-#[must_use]
-pub fn restored_discovery_groups_now(
-    interface_id: crate::interfaces::InterfaceId,
-) -> Option<Option<crate::interfaces::DiscoveryGroupSet>> {
-    DISCOVERY_GROUP_CONFIGURATION_STORES.groups_now(interface_id)
-}
-
-pub fn store_discovery_group_configuration(
-    change: DiscoveryGroupConfigurationChange,
-) -> impl core::future::Future<Output = Result<(), EmbeddedPersistenceFailure>> + Unpin {
-    let caller = DISCOVERY_GROUP_CONFIGURATION_STORES.caller.try_lock().ok();
-    let admitted = caller.is_some() && DISCOVERY_GROUP_CONFIGURATION_STORES.submit(change);
-    let immediate_failure = (!admitted).then_some(EmbeddedPersistenceFailure::Capacity);
-    DiscoveryGroupConfigurationStoreFuture {
-        _caller: caller,
-        immediate_failure,
-    }
-}
-
-struct DiscoveryGroupConfigurationStoreFuture {
-    _caller: Option<embassy_sync::mutex::MutexGuard<'static, CriticalSectionRawMutex, ()>>,
-    immediate_failure: Option<EmbeddedPersistenceFailure>,
-}
-
-impl core::future::Future for DiscoveryGroupConfigurationStoreFuture {
-    type Output = Result<(), EmbeddedPersistenceFailure>;
-
-    fn poll(
-        self: core::pin::Pin<&mut Self>,
-        context: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<Self::Output> {
-        if let Some(failure) = self.immediate_failure {
-            return core::task::Poll::Ready(Err(failure));
-        }
-        let completed = DISCOVERY_GROUP_CONFIGURATION_STORES.completed.wait();
-        let mut completed = core::pin::pin!(completed);
-        completed.as_mut().poll(context)
     }
 }
 
@@ -625,12 +330,18 @@ struct EncodedDelta {
     len: usize,
 }
 
-pub struct EmbeddedFlashPersistence<F, Keys, Observe, const PENDING: usize>
-where
+pub struct EmbeddedFlashPersistence<
+    F,
+    Keys,
+    Observe,
+    const PENDING: usize,
+    Groups = GlobalDiscoveryGroupStore,
+> where
     F: NorFlash,
     Keys: RouteSnapshotKeys,
     Observe: FnMut(EmbeddedPersistenceDiagnostic),
 {
+    groups: Groups,
     flash: Option<F>,
     journal: Option<FlashJournal<F>>,
     layout: FlashJournalLayout,
@@ -673,7 +384,38 @@ where
         compaction_route_keys: Keys,
         observe_diagnostic: Observe,
     ) -> Self {
+        Self::with_discovery_group_store(
+            flash,
+            layout,
+            policy,
+            compaction_route_keys,
+            observe_diagnostic,
+            GlobalDiscoveryGroupStore,
+        )
+    }
+}
+
+impl<F, Keys, Observe, const PENDING: usize, Groups>
+    EmbeddedFlashPersistence<F, Keys, Observe, PENDING, Groups>
+where
+    F: NorFlash,
+    Keys: RouteSnapshotKeys,
+    Observe: FnMut(EmbeddedPersistenceDiagnostic),
+    Groups: AsRef<DiscoveryGroupConfigurationStoreExchange>,
+{
+    /// Uses one node's exchange for restore publication and all group persistence work.
+    /// The exchange must not be shared with another active persistence owner.
+    #[must_use]
+    pub fn with_discovery_group_store(
+        flash: F,
+        layout: FlashJournalLayout,
+        policy: EmbeddedPersistencePolicy,
+        compaction_route_keys: Keys,
+        observe_diagnostic: Observe,
+        groups: Groups,
+    ) -> Self {
         Self {
+            groups,
             flash: Some(flash),
             journal: None,
             layout,
@@ -762,14 +504,15 @@ where
         .await;
         let Ok((mut journal, restored)) = opened else {
             report.warning = Some(FlashJournalWarning::Corrupt);
-            DISCOVERY_GROUP_CONFIGURATION_STORES.publish_restored(None);
+            self.groups.as_ref().publish_restored(None);
             (self.observe_diagnostic)(EmbeddedPersistenceDiagnostic::Restored(report));
             return report;
         };
         report.warning = restored.warning;
         self.remote_control_controller_grants_snapshot = controller_grants_snapshot;
         self.remote_control_target_accesses_snapshot = target_accesses_snapshot;
-        DISCOVERY_GROUP_CONFIGURATION_STORES
+        self.groups
+            .as_ref()
             .publish_restored(discovery_group_configuration_snapshot);
         let initialization_failed =
             restored.active_epoch.is_none() && journal.initialize_empty().await.is_err();
@@ -795,7 +538,7 @@ where
         logical_start: InstantMillis,
         warning: Option<FlashJournalWarning>,
     ) -> EmbeddedPersistenceRestoreReport {
-        DISCOVERY_GROUP_CONFIGURATION_STORES.publish_restored(None);
+        self.groups.as_ref().publish_restored(None);
         let report = EmbeddedPersistenceRestoreReport {
             logical_start,
             route_seeded_count: 0,
@@ -935,8 +678,7 @@ where
     }
 
     fn next_deadline(&self, now: InstantMillis) -> Option<InstantMillis> {
-        let group_configuration_pending =
-            DISCOVERY_GROUP_CONFIGURATION_STORES.has_pending_request();
+        let group_configuration_pending = self.groups.as_ref().has_pending_request();
         if self.journal.is_none() {
             return group_configuration_pending.then_some(now);
         }
@@ -1007,22 +749,24 @@ where
         engine: &mut EngineState<S>,
         now: InstantMillis,
     ) {
-        if let Some(change) = DISCOVERY_GROUP_CONFIGURATION_STORES.try_take_request() {
+        if let Some(change) = self.groups.as_ref().try_take_request() {
             match self
                 .store_discovery_group_configuration_change(engine, &change, now)
                 .await
             {
                 StoreRemoteControlAuthorizationSnapshotOutcome::Stored => {
-                    let result = DISCOVERY_GROUP_CONFIGURATION_STORES
+                    let result = self
+                        .groups
+                        .as_ref()
                         .commit_change(&change)
                         .map_err(|_| EmbeddedPersistenceFailure::Codec);
-                    DISCOVERY_GROUP_CONFIGURATION_STORES.settle(result);
+                    self.groups.as_ref().settle(result);
                 }
                 StoreRemoteControlAuthorizationSnapshotOutcome::CompactionInProgress => {
-                    DISCOVERY_GROUP_CONFIGURATION_STORES.resignal_request(change);
+                    self.groups.as_ref().resignal_request(change);
                 }
                 StoreRemoteControlAuthorizationSnapshotOutcome::Failed { failure, .. } => {
-                    DISCOVERY_GROUP_CONFIGURATION_STORES.settle(Err(failure));
+                    self.groups.as_ref().settle(Err(failure));
                 }
             }
             return;
@@ -1212,7 +956,7 @@ where
             )
             .await;
         if outcome == StoreRemoteControlAuthorizationSnapshotOutcome::Stored {
-            DISCOVERY_GROUP_CONFIGURATION_STORES.publish_restored(Some(*snapshot));
+            self.groups.as_ref().publish_restored(Some(*snapshot));
         }
         outcome
     }
@@ -1225,9 +969,7 @@ where
         now: InstantMillis,
     ) -> StoreRemoteControlAuthorizationSnapshotOutcome {
         let mut encoded = [0u8; DISCOVERY_GROUP_CONFIGURATION_SNAPSHOT_MAX_LEN];
-        let Ok(written) =
-            DISCOVERY_GROUP_CONFIGURATION_STORES.encode_projected(change, &mut encoded)
-        else {
+        let Ok(written) = self.groups.as_ref().encode_projected(change, &mut encoded) else {
             return StoreRemoteControlAuthorizationSnapshotOutcome::Failed {
                 failure: EmbeddedPersistenceFailure::Codec,
                 retry_at: None,
@@ -1526,9 +1268,7 @@ where
             }
             CompactionPhase::DiscoveryGroupConfigurations => {
                 let mut encoded = [0u8; DISCOVERY_GROUP_CONFIGURATION_SNAPSHOT_MAX_LEN];
-                let Some(written) =
-                    DISCOVERY_GROUP_CONFIGURATION_STORES.encode_restored(&mut encoded)
-                else {
+                let Some(written) = self.groups.as_ref().encode_restored(&mut encoded) else {
                     self.compaction = Some(CompactionPhase::Commit);
                     return;
                 };
@@ -1665,6 +1405,7 @@ where
 }
 
 pub(crate) trait ManifoldPersistence<S: StorageLayout> {
+    fn has_pending_discovery_group_change(&self) -> bool;
     fn observe(&mut self, journaled: &Journaled<'_>, now: InstantMillis);
     fn deadline(&mut self, now: InstantMillis) -> Option<InstantMillis>;
     async fn wait_for_work(&self) {
@@ -1684,14 +1425,19 @@ pub(crate) trait ManifoldPersistence<S: StorageLayout> {
     ) -> StoreRemoteControlAuthorizationSnapshotOutcome;
 }
 
-impl<S, F, Keys, Observe, const PENDING: usize> ManifoldPersistence<S>
-    for EmbeddedFlashPersistence<F, Keys, Observe, PENDING>
+impl<S, F, Keys, Observe, const PENDING: usize, Groups> ManifoldPersistence<S>
+    for EmbeddedFlashPersistence<F, Keys, Observe, PENDING, Groups>
 where
     S: StorageLayout,
     F: NorFlash,
     Keys: RouteSnapshotKeys,
     Observe: FnMut(EmbeddedPersistenceDiagnostic),
+    Groups: AsRef<DiscoveryGroupConfigurationStoreExchange>,
 {
+    fn has_pending_discovery_group_change(&self) -> bool {
+        self.groups.as_ref().has_pending_request()
+    }
+
     fn observe(&mut self, journaled: &Journaled<'_>, now: InstantMillis) {
         self.observe_journaled(journaled, now);
     }
@@ -1701,9 +1447,7 @@ where
     }
 
     async fn wait_for_work(&self) {
-        DISCOVERY_GROUP_CONFIGURATION_STORES
-            .wait_until_request_ready()
-            .await;
+        self.groups.as_ref().wait_until_request_ready().await;
     }
 
     fn observe_remote_control_pairing_failure(
@@ -1734,6 +1478,10 @@ where
 pub(crate) struct NoManifoldPersistence;
 
 impl<S: StorageLayout> ManifoldPersistence<S> for NoManifoldPersistence {
+    fn has_pending_discovery_group_change(&self) -> bool {
+        false
+    }
+
     fn observe(&mut self, _journaled: &Journaled<'_>, _now: InstantMillis) {}
 
     fn deadline(&mut self, _now: InstantMillis) -> Option<InstantMillis> {
@@ -3130,6 +2878,70 @@ mod tests {
         assert_eq!(discovery_group_configuration_snapshot, Some(expected));
         assert!(report.discovery_group_configuration_restored);
         assert_eq!(report.discovery_group_configuration_refused_count, 1);
+    }
+
+    #[test]
+    fn isolated_group_owners_keep_admission_completion_and_durable_state_separate() {
+        embassy_futures::block_on(async {
+            let stores = [
+                DiscoveryGroupConfigurationStoreExchange::new(),
+                DiscoveryGroupConfigurationStoreExchange::new(),
+            ];
+            let (flash, fail_write) = TestFlash::controlled();
+            let mut owners = [(flash, &stores[0]), (TestFlash::new(), &stores[1])].map(|(flash, store)| {
+                EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _>::with_discovery_group_store(
+                    flash, LAYOUT,
+                    EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
+                    FixedRouteSnapshotKeys::new(), (|_| {}) as fn(EmbeddedPersistenceDiagnostic), store,
+                )
+            });
+            let mut engines = core::array::from_fn::<_, 2, _>(|_| {
+                EngineState::<crate::storage::GrowableHeap>::default()
+            });
+            for (owner, engine) in owners.iter_mut().zip(&mut engines) {
+                let mut remote_control = available_remote_control(engine);
+                owner
+                    .restore(engine, &mut remote_control, InstantMillis(0))
+                    .await;
+            }
+            let interface =
+                crate::interfaces::InterfaceId::new([0x42; crate::interfaces::INTERFACE_ID_LEN]);
+            let groups = crate::interfaces::DiscoveryGroupSet::reticulum();
+            let change = || DiscoveryGroupConfigurationChange::upsert(interface, groups);
+            let first = stores[0].store(change());
+            let second = stores[1].store(change());
+            assert_eq!(
+                stores[0].store(change()).await,
+                Err(EmbeddedPersistenceFailure::Capacity)
+            );
+            fail_write.set(true);
+            owners[0].progress(&mut engines[0], InstantMillis(1)).await;
+            assert_eq!(first.await, Err(EmbeddedPersistenceFailure::Flash));
+            assert_eq!(stores[0].groups_now(interface), Some(None));
+            assert!(stores[1].has_pending_request());
+            assert_eq!(stores[1].groups_now(interface), Some(None));
+            owners[1].progress(&mut engines[1], InstantMillis(1)).await;
+            assert_eq!(second.await, Ok(()));
+            assert_eq!(stores[1].groups_now(interface), Some(Some(groups)));
+            assert_eq!(stores[0].groups_now(interface), Some(None));
+
+            let abandoned = stores[1].store(change());
+            drop(abandoned);
+            assert_eq!(
+                stores[1].store(change()).await,
+                Err(EmbeddedPersistenceFailure::Capacity)
+            );
+            owners[1].progress(&mut engines[1], InstantMillis(2)).await;
+            let next = stores[1].store(change());
+            fail_write.set(true);
+            let retry = stores[0].store(change());
+            owners[0].progress(&mut engines[0], InstantMillis(3)).await;
+            assert_eq!(retry.await, Err(EmbeddedPersistenceFailure::Flash));
+            assert!(stores[1].has_pending_request());
+            owners[1].progress(&mut engines[1], InstantMillis(3)).await;
+            assert_eq!(next.await, Ok(()));
+        });
+        assert_eq!(core::mem::size_of::<GlobalDiscoveryGroupStore>(), 0);
     }
 
     #[test]

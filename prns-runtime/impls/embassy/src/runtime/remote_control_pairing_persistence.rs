@@ -20,7 +20,6 @@ use crate::storage::StorageLayout;
 use super::embedded_persistence::{
     EmbeddedPersistenceFailure, ManifoldPersistence, RemoteControlAuthorizationSnapshot,
     RemoteControlAuthorizationSnapshotKind, StoreRemoteControlAuthorizationSnapshotOutcome,
-    DISCOVERY_GROUP_CONFIGURATION_STORES,
 };
 use super::node_facade::PrnsNodeHandle;
 use super::remote_control_pairing_authorizations::{
@@ -423,6 +422,10 @@ where
     M: RawMutex,
     P: ManifoldPersistence<S>,
 {
+    fn has_pending_discovery_group_change(&self) -> bool {
+        self.persistence.has_pending_discovery_group_change()
+    }
+
     fn observe(&mut self, journaled: &Journaled<'_>, now: crate::engine::InstantMillis) {
         self.persistence.observe(journaled, now);
     }
@@ -491,7 +494,7 @@ where
                 .observe_remote_control_pairing_failure(failure);
             return;
         }
-        if DISCOVERY_GROUP_CONFIGURATION_STORES.has_pending_request() {
+        if self.persistence.has_pending_discovery_group_change() {
             self.persistence.progress(engine, now).await;
             return;
         }
@@ -1248,6 +1251,10 @@ mod tests {
     }
 
     impl ManifoldPersistence<GrowableHeap> for ScriptedPersistence {
+        fn has_pending_discovery_group_change(&self) -> bool {
+            false
+        }
+
         fn observe(&mut self, _journaled: &Journaled<'_>, _now: InstantMillis) {}
 
         fn deadline(&mut self, _now: InstantMillis) -> Option<InstantMillis> {

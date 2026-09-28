@@ -10,7 +10,7 @@ use prns_core::remote_control::RemoteControlService;
 use prns_core::storage::GrowableHeap;
 use prns_core::units::InstantMillis;
 use prns_runtime_embassy::runtime::{
-    configure_remote_control_service, restored_discovery_group_configuration_now,
+    configure_remote_control_service, DiscoveryGroupConfigurationStoreExchange,
     EmbeddedCompactionPolicy, EmbeddedFlashPersistence, EmbeddedPersistenceDiagnostic,
     EmbeddedPersistencePolicy, EmbeddedPersistenceRestoreReport, FixedRouteSnapshotKeys,
 };
@@ -82,8 +82,19 @@ async fn boot(
     EmbeddedPersistenceRestoreReport,
     DiscoveryGroupConfigurationSnapshot,
 ) {
+    let groups = DiscoveryGroupConfigurationStoreExchange::new();
+    boot_into(image, &groups).await
+}
+
+async fn boot_into(
+    image: Image,
+    groups: &DiscoveryGroupConfigurationStoreExchange,
+) -> (
+    EmbeddedPersistenceRestoreReport,
+    DiscoveryGroupConfigurationSnapshot,
+) {
     let mut diagnostics = Vec::new();
-    let mut persistence = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4>::new(
+    let mut persistence = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _>::with_discovery_group_store(
         Flash::boot(image),
         LAYOUT,
         EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
@@ -92,6 +103,7 @@ async fn boot(
             assert!(diagnostics.is_empty(), "one restore diagnostic");
             diagnostics.push(event);
         },
+        groups,
     );
     let mut engine = EngineState::<GrowableHeap>::default();
     let mut remote_control =
@@ -99,7 +111,7 @@ async fn boot(
     let report = persistence
         .restore(&mut engine, &mut remote_control, RAW_BOOT)
         .await;
-    let restored = restored_discovery_group_configuration_now().unwrap();
+    let restored = groups.restored_now().unwrap();
     assert!(!persistence.state_not_saved());
     drop(persistence);
     assert_eq!(
@@ -107,6 +119,43 @@ async fn boot(
         vec![EmbeddedPersistenceDiagnostic::Restored(report)]
     );
     (report, restored)
+}
+
+#[tokio::test]
+async fn embedded_nodes_restore_identical_interface_ids_without_sharing_groups() {
+    let nodes = [
+        DiscoveryGroupConfigurationStoreExchange::new(),
+        DiscoveryGroupConfigurationStoreExchange::new(),
+    ];
+    let snapshots = [snapshot(&["alpha"]), snapshot(&["bravo", "reticulum"])];
+    let mut images = Vec::new();
+    for snapshot in &snapshots {
+        let (mut journal, _, _) = open(Flash::boot(Image([0xff; CAPACITY]))).await;
+        journal.initialize_empty().await.unwrap();
+        journal
+            .append(Kind::DiscoveryGroupConfigurations, &encode(snapshot))
+            .await
+            .unwrap();
+        images.push(journal.release().into_image());
+    }
+    assert!(nodes.iter().all(|node| node.restored_now().is_none()));
+    for order in [[0, 1], [1, 0]] {
+        for index in order {
+            assert_eq!(
+                boot_into(images[index].clone(), &nodes[index]).await.1,
+                snapshots[index]
+            );
+        }
+        for index in 0..2 {
+            assert_eq!(nodes[index].restored_now(), Some(snapshots[index]));
+        }
+    }
+    boot_into(Image([0xff; CAPACITY]), &nodes[0]).await;
+    assert_eq!(
+        nodes[0].restored_now(),
+        Some(DiscoveryGroupConfigurationSnapshot::empty())
+    );
+    assert_eq!(nodes[1].restored_now(), Some(snapshots[1]));
 }
 
 #[tokio::test]
