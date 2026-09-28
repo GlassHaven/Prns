@@ -731,6 +731,10 @@ cancel the earliest deadline, the latest deadline, or every pending caller.
 They check silent cancelled boundaries and fresh traffic between deadlines,
 including when no old callers remain to drive timer progress.
 
+The [partial deadline batches](measurements/partial-deadline-batches.md) combine
+two equal deadlines with a distinct third deadline. They check both batch
+orders and cancellation of one paired caller while retaining the other batch.
+
 Independent conflicting whole-Resource peers still have direct core-engine
 fixtures, not mixed-runtime injections. Pooled worker scheduling, complete
 byte-for-byte replay, thousands of production nodes and Wi-Fi/physical-reset/flash/sleep

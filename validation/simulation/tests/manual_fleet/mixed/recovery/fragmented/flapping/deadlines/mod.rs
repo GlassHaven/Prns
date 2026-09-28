@@ -1,9 +1,14 @@
 use super::*;
 
+mod grouped;
+
+#[derive(Clone, Copy)]
 pub(super) enum DeadlineOrder {
     Admission,
     Reverse,
     Shared,
+    OuterPairFirst,
+    OuterPairLast,
 }
 
 impl DeadlineOrder {
@@ -21,6 +26,12 @@ impl DeadlineOrder {
                 tick(origin.get() + FIRST_EXPIRY_MS + (WAVES - 1 - wave) as u64 * EXPIRY_GAP_MS)
             }
             Self::Shared => tick(origin.get() + FIRST_EXPIRY_MS),
+            Self::OuterPairFirst => {
+                tick(origin.get() + FIRST_EXPIRY_MS + if wave == 1 { EXPIRY_GAP_MS } else { 0 })
+            }
+            Self::OuterPairLast => {
+                tick(origin.get() + FIRST_EXPIRY_MS + if wave == 1 { 0 } else { EXPIRY_GAP_MS })
+            }
         }
     }
 }
