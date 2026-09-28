@@ -3,12 +3,16 @@ use std::task::Waker;
 
 use critical_section::Mutex;
 use embassy_time_driver::Driver;
-use embassy_time_queue_utils::Queue;
+mod queue;
+use queue::ObservedQueue;
+pub(crate) use queue::QueueStats;
+
+const TIMER_CAPACITY: usize = 1024;
 
 struct State {
     now: u64,
     next: Option<u64>,
-    queue: Queue,
+    queue: ObservedQueue<TIMER_CAPACITY>,
 }
 
 impl State {
@@ -16,7 +20,7 @@ impl State {
         Self {
             now: 0,
             next: None,
-            queue: Queue::new(),
+            queue: ObservedQueue::new(),
         }
     }
 
@@ -38,7 +42,11 @@ impl Driver for SimulationClock {
     fn schedule_wake(&self, at: u64, waker: &Waker) {
         critical_section::with(|cs| {
             let mut state = self.0.borrow_ref_mut(cs);
-            state.queue.schedule_wake(at, waker);
+            assert_eq!(
+                state.queue.schedule_wake(at, waker),
+                Ok(()),
+                "Embassy simulation timer admission"
+            );
             state.settle();
         });
     }
@@ -50,6 +58,10 @@ pub(super) fn reset() {
 
 pub(super) fn next_deadline() -> Option<u64> {
     critical_section::with(|cs| CLOCK.0.borrow_ref(cs).next)
+}
+
+pub(super) fn stats() -> QueueStats {
+    critical_section::with(|cs| CLOCK.0.borrow_ref(cs).queue.stats())
 }
 
 pub(super) fn advance(micros: u64) {

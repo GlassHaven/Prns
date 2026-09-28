@@ -23,6 +23,54 @@ fn clock() -> ManualTimeDriver {
 }
 
 #[test]
+fn distinct_waiters_beyond_the_old_capacity_sleep_until_their_deadline() {
+    const WAITERS: usize = 128;
+    let lease = ClockLease::acquire();
+    let mut driver = clock();
+    let mut tasks = EmbassyTasks::with_limits(
+        &mut driver,
+        lease,
+        NonZeroUsize::new(WAITERS).unwrap(),
+        NonZeroUsize::new(WAITERS * 4).unwrap(),
+        prns_simulation::ManualTaskScheduling::Cyclic,
+    );
+    let completed = std::rc::Rc::new(std::cell::Cell::new(0));
+    for _ in 0..WAITERS {
+        let completed = completed.clone();
+        tasks.insert(async move {
+            embassy_time::Timer::after_millis(50).await;
+            assert_eq!(Instant::now().as_millis(), 50);
+            completed.set(completed.get() + 1);
+            std::future::pending::<()>().await;
+        });
+    }
+    tasks.settle();
+    assert_eq!(completed.get(), 0);
+    assert_eq!(
+        tasks.timer_stats(),
+        QueueStats {
+            pending: WAITERS,
+            peak: WAITERS,
+            capacity: 1024
+        }
+    );
+    tasks
+        .advance_to_next_wake(SimulationTick::from_ticks(86_400_000))
+        .unwrap();
+    assert_eq!(tasks.snapshot().tick, SimulationTick::from_ticks(50));
+    tasks.settle();
+    assert_eq!(completed.get(), WAITERS);
+    assert_eq!(
+        tasks.timer_stats(),
+        QueueStats {
+            pending: 0,
+            peak: WAITERS,
+            capacity: 1024
+        }
+    );
+}
+
+#[test]
 fn embassy_and_tokio_timers_rearm_on_one_day_long_timeline() {
     let lease = ClockLease::acquire();
     let mut driver = clock();

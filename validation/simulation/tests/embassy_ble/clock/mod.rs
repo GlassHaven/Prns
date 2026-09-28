@@ -10,6 +10,7 @@ use prns_simulation::{
 
 static CLOCK_OWNER: Mutex<()> = Mutex::new(());
 mod driver;
+pub(super) use driver::QueueStats;
 mod tests;
 const ACTOR_CAPACITY: usize = 8;
 const SETTLEMENT_POLL_BUDGET: usize = 128;
@@ -87,6 +88,10 @@ impl<'driver> EmbassyTasks<'driver> {
         let result = self.runner.cancel(task).unwrap();
         assert_eq!(self.snapshot(), before);
         result
+    }
+
+    pub(super) fn timer_stats(&self) -> QueueStats {
+        driver::stats()
     }
 
     #[track_caller]

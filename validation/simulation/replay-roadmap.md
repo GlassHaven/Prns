@@ -57,6 +57,10 @@ This is a current-status guide, not another chronological list of test slices.
   real nodes, under cyclic and two seeded actor orders. A process-isolated heap
   probe measures each size, including retained static storage. This is bounded
   paired traffic, not routed meshes or thousand-node Embassy capacity.
+- Embassy timer admission is now guarded before upstream full-queue eviction,
+  with pending/peak occupancy reporting and a bounded 1,024-waiter host queue.
+  A 128-waiter clock test crosses the previous limit; 8/16-node fleets prove
+  concurrent exact response deadlines and successful traffic after expiry.
 
 ## Input audit
 
@@ -142,6 +146,11 @@ fixture gaps without treating Tokio results as Embassy evidence.
   until process exit, not unsafely reclaimed or described as a production leak.
   The paired-fleet probe now measures 8/16 nodes in isolated child processes.
   Larger Embassy fleets and repeated lifecycle memory behavior remain open.
+- Timer pressure: the [capacity follow-up](measurements/embassy-timer-capacity.md)
+  retains upstream deadline/coalescing policy, but fails the simulation on excess
+  distinct waiter admission instead of evicting an existing waiter early. Canceled
+  timer registrations remain resident until expiry/reset; this is not an unbounded
+  or constant-cost queue, nor a separate hardware timer model per node.
 - Shared ownership: retain the common medium, wire capture, actor scheduling,
   clock validation and protocol-core fixes. Each new milestone should identify
   evidence for both adapters, or name the specific unresolved adapter limitation.

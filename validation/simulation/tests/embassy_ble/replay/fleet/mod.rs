@@ -1,4 +1,5 @@
 use super::*;
+mod deadlines;
 #[cfg(feature = "heap-profile")]
 mod heap;
 use personal_rns::interfaces::bluetooth_auto::BleAddress;
@@ -17,6 +18,13 @@ struct FleetTranscript {
     wire: BleWireSnapshot,
     discovery: BleTraceSnapshot,
     responses: Vec<Vec<u8>>,
+    expirations: Vec<u64>,
+    timers: crate::clock::QueueStats,
+}
+
+enum Workload {
+    Echo,
+    ExpiredReplies,
 }
 
 async fn together<T>(futures: Vec<impl Future<Output = T>>) -> Vec<T> {
@@ -49,6 +57,14 @@ fn address(index: usize) -> BleAddress {
 }
 
 fn run<const NODES: usize>(scheduling: ManualTaskScheduling, marker: u8) -> FleetTranscript {
+    run_workload::<NODES>(scheduling, marker, Workload::Echo)
+}
+
+fn run_workload<const NODES: usize>(
+    scheduling: ManualTaskScheduling,
+    marker: u8,
+    workload: Workload,
+) -> FleetTranscript {
     const {
         assert!(NODES >= 4 && NODES <= 16 && NODES.is_multiple_of(2));
     }
@@ -163,6 +179,10 @@ fn run<const NODES: usize>(scheduling: ManualTaskScheduling, marker: u8) -> Flee
         })
         .collect();
     let links = tasks.complete_ready(together(connect));
+    let expirations = match workload {
+        Workload::Echo => Vec::new(),
+        Workload::ExpiredReplies => deadlines::expire(&mut tasks, &nodes, &links),
+    };
     let requests = nodes
         .iter()
         .zip(links)
@@ -185,6 +205,7 @@ fn run<const NODES: usize>(scheduling: ManualTaskScheduling, marker: u8) -> Flee
         })
         .collect();
     let responses = tasks.complete_ready(together(requests));
+    let timers = tasks.timer_stats();
     for node in nodes {
         node.stop(&mut tasks);
     }
@@ -195,6 +216,8 @@ fn run<const NODES: usize>(scheduling: ManualTaskScheduling, marker: u8) -> Flee
         wire: capture.snapshot(),
         discovery: lab.trace(),
         responses,
+        expirations,
+        timers,
     };
     assert_eq!(transcript.wire.discarded_values, 0);
     assert_eq!(transcript.discovery.discarded_events, 0);
