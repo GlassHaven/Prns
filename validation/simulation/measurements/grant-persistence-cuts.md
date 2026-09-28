@@ -50,3 +50,33 @@ On macOS arm64, the registered recovery suite passed all 34 tests and the full
 Embassy library passed all 146 tests. All-target Embassy clippy, registry and
 website checks passed. The radio simulation, full workspace, Miri and firmware
 matrix were not rerun for this test-only extension.
+
+## Pairing rollback with the real persistence owner
+
+The transaction follow-up connects `RemoteControlPairingPersistenceProgress`,
+the authorization store exchange, its manifold adapter and the real flash owner.
+It begins with a durable existing operator grant and prepares a permission change.
+Preparation and a failed initial flash write must leave the complete live table
+unchanged. The test verifies the exact failure-settlement command; its engine
+acknowledgement is scripted, rather than executing a pairing link lifecycle.
+
+Rollback then uses the real queue and journal. The first rollback write also fails.
+The pending request must not complete before durability recovers, and no write may
+consume the armed fault before the original retry deadline. A second retry deadline
+must likewise be honored. Successful rollback returns the original typed initial
+storage error, releases the progress state, and preserves prior live authority.
+
+Journal inspection requires two complete copies of the confirmed snapshot: the
+original and the newly persisted rollback. This prevents a false pass from merely
+leaving the original record untouched. Two fresh restore owners must recover the
+prior table. This is transient flash-failure coverage for the pairing transaction,
+not abrupt power removal during rollback, remote grant-management admission,
+successful pairing activation, or an end-to-end radio handshake.
+
+Production impact remains none; the test now connects previously separate
+transaction and storage assurances without changing their implementation.
+
+The follow-up passed the registered recovery suite (35 tests), all 147 Embassy
+library tests, all-target Embassy clippy, registry and website checks on macOS
+arm64. No radio-simulation, full-workspace, Miri or firmware run is claimed for
+this owner-local test extension.
