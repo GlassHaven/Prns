@@ -933,6 +933,17 @@ inputs = ["validation/platforms/host-workspaces.sh"]
 artifacts = "validation-artifacts/results/host-workspaces"
 
 [[suite]]
+id = "linux-halow-data-plane"
+domain = "platforms"
+tiers = ["pr", "release", "scheduled"]
+platform = "linux"
+toolchain = "stable"
+timeout_seconds = 600
+command = ["bash", "validation/platforms/linux-halow.sh"]
+inputs = ["validation/platforms/linux-halow.sh", "prns-core/src/interfaces/wifi_halow", "prns-core/src/interfaces/status/radio.rs", "prns-ffi", "prns-interfaces/impls/tokio"]
+artifacts = "validation-artifacts/results/linux-halow-data-plane"
+
+[[suite]]
 id = "embedded-builds"
 domain = "platform"
 group = "embedded"

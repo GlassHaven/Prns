@@ -3,7 +3,9 @@
 This records the implementation contract and remaining work after the
 2026-09-29 three-device experiments. The running headless application is still
 TCP-only. The G4 build task and web installation guide exist; the native HaLoW
-transport below is a proposed next implementation, not an available feature.
+transport is not yet attached to the runtime. The portable peer identity and
+Linux/Tokio datagram backend now exist under `interfaces::wifi_halow` and the
+`wifi-halow` feature; they are exercised by the bounded `halow_datagram` example.
 
 ## Product shape
 
@@ -26,11 +28,13 @@ or custom chip firmware is needed for this path. Linux supplies the source MAC
 alongside the received data. Keep platform FFI in `prns-ffi`, asynchronous I/O
 in `prns-interfaces-tokio`, and transport policy independent of Linux.
 
-The proposed peer key is a length-delimited stable local interface instance tag
+The peer key is a versioned, length-delimited stable local interface instance tag
 plus the remote source MAC. Hash that with a new peer `InterfaceKind` through
-the existing `InterfaceId::from_channel_tag` contract. Do not use the transient
-Linux interface index. This identity choice is awaiting the user's explicit
-confirmation before implementation.
+the existing `InterfaceId::from_channel_tag` contract. It does not use the transient
+Linux interface index. The scope is explicit, nonempty, and at most 64 bytes.
+The user approved proceeding with this source-MAC design. HaLoW has distinct
+interface kinds and a `RadioFamily::HaLow` status classification; unavailable
+RSSI remains a radio indication, never `NotRadio`.
 
 A valid first frame from an unseen source must attach the peer and deliver that
 same frame in order. It must not wait for a station-table polling interval or a
@@ -152,7 +156,7 @@ any helper; do not turn it into an unauthenticated local command proxy.
 
 ## Implementation gates
 
-1. Confirm MAC-based peer identity. Add shared-radio egress and first-frame
+1. MAC-based peer identity is implemented. Add shared-radio egress and first-frame
    admission tests before writing the Linux adapter around that contract.
 2. Prove one broadcast reaches both Heltecs, while direct frames address one
    peer, including startup with no peers, first unicast without a peer-list

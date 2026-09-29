@@ -38,6 +38,8 @@ prns_macros::iterable_enum! {
         I2pPeer = 31,
         Weave = 32,
         WeavePeer = 33,
+        WifiHaLow = 34,
+        WifiHaLowPeer = 35,
     }
 }
 
@@ -79,6 +81,8 @@ impl InterfaceKind {
             31 => Some(Self::I2pPeer),
             32 => Some(Self::Weave),
             33 => Some(Self::WeavePeer),
+            34 => Some(Self::WifiHaLow),
+            35 => Some(Self::WifiHaLowPeer),
             _ => None,
         }
     }
@@ -120,6 +124,8 @@ impl InterfaceKind {
             Self::I2pPeer => "i2p-peer",
             Self::Weave => "weave",
             Self::WeavePeer => "weave-peer",
+            Self::WifiHaLow => "wifi-halow",
+            Self::WifiHaLowPeer => "wifi-halow-peer",
         }
     }
 
@@ -136,6 +142,7 @@ impl InterfaceKind {
             Self::WifiAware => Some(Self::WifiAwarePeer),
             Self::I2p => Some(Self::I2pPeer),
             Self::Weave => Some(Self::WeavePeer),
+            Self::WifiHaLow => Some(Self::WifiHaLowPeer),
             _ => None,
         }
     }
@@ -153,6 +160,7 @@ impl InterfaceKind {
             Self::WifiAwarePeer => Some(Self::WifiAware),
             Self::I2pPeer => Some(Self::I2p),
             Self::WeavePeer => Some(Self::Weave),
+            Self::WifiHaLowPeer => Some(Self::WifiHaLow),
             _ => None,
         }
     }
