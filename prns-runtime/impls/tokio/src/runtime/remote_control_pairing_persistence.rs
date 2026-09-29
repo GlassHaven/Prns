@@ -241,13 +241,6 @@ pub(super) fn activate_controller_grant_change(
     }
 }
 
-pub(super) fn rollback_controller_grant_change(
-    remote_control: &mut AssembledRemoteControl,
-    mutation: ControllerGrantMutation,
-) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
-    rollback_controller_grant(remote_control, mutation)
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TargetAccessSpec {
     target_public_keys: IdentityPublicKeys,
@@ -840,7 +833,7 @@ mod tests {
                 .grants_in_identity_hash_order(),
             &[grant]
         );
-        rollback_controller_grant_change(&mut remote_control, mutation).unwrap();
+        rollback_controller_grant(&mut remote_control, mutation).unwrap();
         assert!(remote_control.controller_grants().unwrap().is_empty());
     }
 
@@ -873,7 +866,7 @@ mod tests {
 
         activate_controller_grant_change(&mut remote_control, mutation).unwrap();
         assert!(remote_control.controller_grants().unwrap().is_empty());
-        rollback_controller_grant_change(&mut remote_control, mutation).unwrap();
+        rollback_controller_grant(&mut remote_control, mutation).unwrap();
         assert_eq!(
             remote_control
                 .controller_grants()

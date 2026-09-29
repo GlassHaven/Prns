@@ -367,6 +367,11 @@ impl core::fmt::Display for RemoteControlAuthorizationPersistenceError {
 }
 
 impl RemoteControlAuthorizationPersistence {
+    #[cfg(test)]
+    pub(crate) fn pause_test_storage(&self) -> impl Drop + '_ {
+        self.storage.lock().expect("test storage is not poisoned")
+    }
+
     pub(crate) async fn store(
         &self,
         region: SnapshotRegion,

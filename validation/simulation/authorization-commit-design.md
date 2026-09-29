@@ -23,7 +23,7 @@ The source owners are:
 - `prns-runtime/impls/embassy/src/runtime/remote_control_pairing_persistence.rs`
 - `prns-runtime/impls/embassy/src/runtime/remote_control_pairing_authorizations.rs`
 - `prns-runtime/impls/tokio/src/runtime/remote_control_pairing_persistence.rs`
-- `prns-runtime/impls/tokio/src/runtime/remote_control_controller_grants.rs`
+- `prns-runtime/impls/tokio/src/runtime/remote_control_controller_grants/mod.rs`
 
 Snapshot atomicity is not transaction atomicity. Neither choosing an older valid
 snapshot on boot nor persisting a rollback marker only after rejection closes the
@@ -233,3 +233,47 @@ tests, and the registered 39-test embedded persistence recovery suite passed.
 Core and both runtimes passed all-target clippy; the no-default-features ARM core
 check passed. Cargo runs used `CARGO_INCREMENTAL=0`. Firmware/resource builds,
 physical devices, full workspace, Miri and Kani were not run for this slice.
+
+## Rollout checkpoint: grant-management response loss
+
+Tokio and Embassy no longer undo a successfully stored and activated controller
+grant change because a local caller cancelled or a remote response failed. This
+covers grant creation, replacement and revocation. In particular, losing the
+response to a committed revocation must not resurrect the controller.
+
+Cancellation before command processing retains the existing no-mutation behavior.
+Once storage succeeds, both adapters finish activation independently of the
+completion receiver. The existing response failure handling remains in place;
+neither path claims the peer received a result. Initial-store and activation
+failures still use their existing recovery paths and remain subject to the open
+indeterminate-write audit. No shared-core state or storage format changes here:
+the removed rollback decisions belong to runtime delivery mechanisms.
+
+The new Tokio test pauses the real storage worker with its existing mutex before
+polling the application future. It proves the old snapshot remains readable while
+the write is pending, cancels the local receiver, then releases the worker. Six
+cases cover add/replace/revoke with either local cancellation or a missing remote
+node. Each compares the complete live table and decodes the file through two new
+store instances, preserving an unrelated administrator. The pause accessor is
+test-only; it adds no shipping state or storage backend. No sleeps or scheduler
+timing guesses determine the cancellation boundary.
+
+The existing Tokio router test now injects an actual response settlement failure
+and checks both live and stored authority. Embassy tests drop actual local request
+futures during pending storage and fill the command queue to reject a remote
+response. They verify the full table, ready state where directly available, and
+absence of a newly queued rollback store. Embassy storage completion is scripted
+in these router tests; the NOR owner campaign remains separate evidence. Host file
+reopening is not filesystem power-loss or full-node boot evidence.
+
+Verification on macOS arm64: all 273 active Tokio library tests (one ignored),
+all 152 Embassy library tests, and all-target clippy for both runtimes passed.
+The narrow filters were `remote_control_controller_grants` on Tokio (7 tests)
+and `request_runner` on Embassy (11 tests). Cargo commands used
+`CARGO_INCREMENTAL=0`. The full firmware/resource matrix, Miri, Kani and physical
+hardware were not run for this adapter-only change.
+
+Remaining production work: indeterminate storage and missing pairing settlement
+acknowledgements, activation inconsistency after commit, controller-side target-
+access transactions, and completion-retention/retry semantics. Grant-management
+response-loss rollback is now fixed; full crash-consistency closure is not claimed.

@@ -741,18 +741,7 @@ where
                 };
                 return None;
             };
-            if !commands.settle_remote_control_controller_grant(id, success) {
-                if applied.roll_back(remote_control).is_err() {
-                    progress.state = ControllerGrantPersistenceState::Unrecoverable;
-                    return None;
-                }
-                if submit_controller_grant_rollback(remote_control, stores) {
-                    progress.state =
-                        ControllerGrantPersistenceState::WaitingRollbackStore { settlement: None };
-                } else {
-                    progress.state = ControllerGrantPersistenceState::Unrecoverable;
-                }
-            }
+            let _settled = commands.settle_remote_control_controller_grant(id, success);
             None
         }
         ControllerGrantSettlement::Remote(pending) => {
@@ -760,19 +749,7 @@ where
                 pending,
                 VerifiedControllerGrantPersistenceOutcome::Committed,
             );
-            if respond_verified_controller_grant(commands, ready) {
-                return None;
-            }
-            if applied.roll_back(remote_control).is_err() {
-                progress.state = ControllerGrantPersistenceState::Unrecoverable;
-                return None;
-            }
-            if submit_controller_grant_rollback(remote_control, stores) {
-                progress.state =
-                    ControllerGrantPersistenceState::WaitingRollbackStore { settlement: None };
-            } else {
-                progress.state = ControllerGrantPersistenceState::Unrecoverable;
-            }
+            let _responded = respond_verified_controller_grant(commands, ready);
             None
         }
     }
@@ -2130,7 +2107,7 @@ mod tests {
     }
 
     #[test]
-    fn remote_administrator_grant_rolls_back_when_its_success_response_cannot_be_queued() {
+    fn remote_administrator_grant_survives_when_its_success_response_cannot_be_queued() {
         use crate::remote_control::{
             RemoteControlControllerAuthority, RemoteControlControllerGrant,
             RemoteControlControllerGrantTable, RemoteControlRequest, RemoteControlRequestKind,
@@ -2185,20 +2162,32 @@ mod tests {
             Some(&authorization_stores),
             handle,
         );
-        let persist = async {
-            authorization_stores.settle_next_test_store(Ok(())).await;
-            authorization_stores.settle_next_test_store(Ok(())).await;
-        };
-        match block_on(select(persist, router)) {
-            Either::First(()) => {}
-            Either::Second(()) => panic!("router returned"),
+        {
+            use core::future::Future;
+            let mut router = core::pin::pin!(router);
+            let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+            assert!(router.as_mut().poll(&mut context).is_pending());
+            block_on(authorization_stores.settle_next_test_store(Ok(())));
+            assert!(router.as_mut().poll(&mut context).is_pending());
+            let mut unexpected_rollback =
+                core::pin::pin!(authorization_stores.wait_for_next_test_store());
+            assert!(unexpected_rollback.as_mut().poll(&mut context).is_pending());
         }
-
-        assert!(remote_control
-            .controller_grants()
-            .unwrap()
-            .grant_for(&operator.identity_hash())
-            .is_none());
+        let expected_operator = RemoteControlControllerGrant::new(
+            operator,
+            RemoteControlControllerAuthority::Operator,
+            RemoteControlRequestSet::only(RemoteControlRequestKind::Describe),
+        )
+        .unwrap();
+        let mut expected = [administrator, expected_operator];
+        expected.sort_by_key(|grant| *grant.controller().identity_hash().as_bytes());
+        assert_eq!(
+            remote_control
+                .controller_grants()
+                .unwrap()
+                .grants_in_identity_hash_order(),
+            &expected
+        );
         let Ok(issued) = commands.try_receive() else {
             panic!("prefilled command remains queued")
         };
@@ -2207,6 +2196,96 @@ mod tests {
             PrnsCommand::CloseLink(close) if close.link_id == LinkId::new([0x91; 16])
         ));
         assert!(commands.try_receive().is_err());
+    }
+
+    #[test]
+    fn cancelled_local_grant_changes_keep_the_committed_table_without_a_rollback_store() {
+        use crate::remote_control::{RemoteControlControllerGrantTable, RemoteControlRequestKind};
+        use crate::runtime::RemoteControlControllerGrantControl;
+        use core::future::Future;
+        enum Change {
+            Add,
+            Replace,
+            Revoke,
+        }
+        for change in [Change::Add, Change::Replace, Change::Revoke] {
+            type M = CriticalSectionRawMutex;
+            let commands = Channel::<M, crate::engine::IssuedCommand, 1>::new();
+            let completions = crate::runtime::CompletionPool::<M, 0>::new();
+            let handle = PrnsNodeHandle::new(commands.sender(), &completions);
+            let stores = RemoteControlAuthorizationStoreExchange::new();
+            let mut remote = remote_control();
+            let prior = super::super::node_facade::test_remote_control_grant(
+                RemoteControlRequestKind::Describe,
+            );
+            let candidate = super::super::node_facade::test_remote_control_grant(
+                RemoteControlRequestKind::AnnounceSelf,
+            );
+            let administrator = crate::remote_control::RemoteControlControllerGrant::new(
+                controller(0x53),
+                crate::remote_control::RemoteControlControllerAuthority::Administrator,
+                crate::remote_control::RemoteControlRequestSet::all(),
+            )
+            .unwrap();
+            remote.set_controller_grant(administrator).unwrap();
+            if !matches!(change, Change::Add) {
+                remote.set_controller_grant(prior).unwrap();
+            }
+            let mut changing = std::boxed::Box::pin(async {
+                match change {
+                    Change::Add | Change::Replace => {
+                        handle
+                            .set_remote_control_controller_grant(candidate)
+                            .await
+                            .unwrap();
+                    }
+                    Change::Revoke => {
+                        handle
+                            .revoke_remote_control_controller(*prior.controller())
+                            .await
+                            .unwrap();
+                    }
+                }
+            });
+            let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+            assert!(changing.as_mut().poll(&mut context).is_pending());
+            let command = block_on(handle.next_remote_control_controller_grant_command());
+            let mut progress = ControllerGrantPersistenceProgress::new();
+            begin_controller_grant_persistence(
+                &mut progress,
+                &mut remote,
+                &RemoteControlPairingAuthorizationTransactionState::new(),
+                Some(&stores),
+                handle,
+                command,
+            );
+            assert!(progress.is_waiting_for_store());
+            block_on(stores.wait_for_next_test_store());
+            drop(changing);
+            assert!(progress_controller_grant_persistence(
+                &mut progress,
+                &mut remote,
+                &stores,
+                handle,
+                Ok(())
+            )
+            .is_none());
+            assert!(progress.is_ready());
+            let mut unexpected_rollback = core::pin::pin!(stores.wait_for_next_test_store());
+            assert!(unexpected_rollback.as_mut().poll(&mut context).is_pending());
+            let mut expected = std::vec![administrator];
+            if !matches!(change, Change::Revoke) {
+                expected.push(candidate);
+            }
+            expected.sort_by_key(|grant| *grant.controller().identity_hash().as_bytes());
+            assert_eq!(
+                remote
+                    .controller_grants()
+                    .unwrap()
+                    .grants_in_identity_hash_order(),
+                expected.as_slice()
+            );
+        }
     }
 
     #[test]
