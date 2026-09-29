@@ -63,6 +63,11 @@ identity file. They require permission to bind localhost sockets.
 
 ## ThinkNode G4
 
+The [web installation guide](docs/g4-installation.md) is also embedded in the
+website's `/flash/thinknode-g4` page. The
+[HaLoW integration contract](docs/halow-integration.md) records the proposed
+transport semantics, radio default, additional interfaces, and qualification work.
+
 See the [bring-up and installer procedure](docs/thinknode-g4.md) for the tested
 cross-build, hardware evidence, temporary deployment, and remaining requirements
 before offering persistent installation or firmware flashing to other users.

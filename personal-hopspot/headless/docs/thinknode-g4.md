@@ -1,8 +1,9 @@
 # ThinkNode G4: headless bring-up and future installer procedure
 
-Status: physical TCP bring-up verified on one G4, 2026-09-29. HaLow group-frame
-behavior, sustained-load performance, firmware replacement, and physical restore
-remain unqualified. This is a development procedure, not a shipping board entry.
+Status: physical TCP bring-up verified on one G4, 2026-09-29. Separate three-node
+HaLow experiments measured group delivery and unicast throughput. The native
+Prns HaLow interface, persistent installation, firmware replacement, and physical
+restore remain unqualified. This is a development procedure, not a shipping board entry.
 
 ## Observed platform
 
@@ -28,19 +29,23 @@ aarch64-macos archive used during development had SHA-256
 That digest identifies that exact host archive, not every Zig distribution.
 
 Install and verify the toolchain artifacts separately. From the repository root,
-set `ZIG` to the verified executable and run:
+use the repository task to build an application bundle:
 
 ```sh
-export CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_LINKER="$PWD/personal-hopspot/headless/scripts/mipsel-musl-cc"
-export CC_mipsel_unknown_linux_musl="$CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_LINKER"
-export CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_RUSTFLAGS='-C link-self-contained=no -C target-feature=+crt-static'
-cargo +nightly build --locked --release \
-  --manifest-path personal-hopspot/headless/Cargo.toml \
-  --target mipsel-unknown-linux-musl -Z build-std=std,panic_abort \
-  --bin personal-hopspot-headless
+./tools/prns build hopspot g4 -- \
+  --zig "$ZIG" --output target/hopspot-g4/candidate
 ```
 
-The wrapper selects `mipsel-linux-musleabi`, `mips32r2`, and `-msoft-float`.
+The task checks the compiler commit and Zig version, uses a locked Cargo build
+with `build-std=std,panic_abort`, and rejects the wrong ELF architecture or a
+dynamic loader. `--toolchain` may name an already installed alias, but its compiler
+must match the pinned commit. The output directory must be new. The bundle includes
+the executable, this procedure, licenses, third-party notices, `build.json`, and
+`SHA256SUMS`.
+It is unsigned development output; checksums do not establish release authenticity
+or independent reproducibility. No upload or device modification occurs.
+
+The linker wrapper selects `mipsel-linux-musleabi`, `mips32r2`, and `-msoft-float`.
 The binary is statically linked; this does not qualify dynamic compatibility
 with the device's musl. Portable 64-bit atomics preserve the runtime's values
 and orderings on this CPU. Their fallback is not assumed to be lock-free.
@@ -96,10 +101,12 @@ or write a firmware image. That temporary service is not an installed product.
 
 ## What an installer could automate
 
-An application installer is a reasonable first product: keep the working vendor
-radio stack and install a versioned Hopspot service. Native SSH tooling or a
-small desktop helper is a better initial fit than assuming a browser can speak
-SSH. The existing browser flasher is not yet a G4 transport or recovery solution.
+The existing web flasher is the installation entry point: select this Linux
+appliance, obtain a verified application bundle, and follow its installation
+guide. Keep the working vendor radio stack and install a versioned Hopspot
+service. The first supported transfer may use local SSH tooling; later options
+include an authenticated device upload endpoint or a local helper launched from
+the web workflow. The browser flasher is not yet a G4 transport or recovery solution.
 
 The installer should own a staged transaction: inspect hardware/ABI/firmware;
 verify a signed, compatible artifact; acquire authenticated management access;

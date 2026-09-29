@@ -1,3 +1,4 @@
+mod appliance;
 mod bridge;
 mod contract;
 mod model;
@@ -85,7 +86,8 @@ pub fn FlashBoardPage(board: String) -> Element {
 #[component]
 fn FlashExperience(selected_slug: Option<String>) -> Element {
     let selected_target = selected_slug.as_deref().and_then(board_target_by_slug);
-    let missing_selection = selected_slug.is_some() && selected_target.is_none();
+    let g4_selected = selected_slug.as_deref() == Some(appliance::G4_SLUG);
+    let missing_selection = selected_slug.is_some() && selected_target.is_none() && !g4_selected;
 
     rsx! {
         header { class: "mb-10",
@@ -99,14 +101,16 @@ fn FlashExperience(selected_slug: Option<String>) -> Element {
                 "Beta"
             }
             h1 { class: "mt-3 text-3xl md:text-4xl font-semibold tracking-tight text-paper",
-                "Flash a Personal Hopspot"
+                "Install a Personal Hopspot"
             }
             p { class: "mt-4 max-w-3xl leading-relaxed text-soft",
-                "Choose your exact board and flash a signed release straight from your browser: every byte is verified locally before it touches the device. Update keeps your device's data. Fresh install erases everything, and asks for its own confirmation first."
+                "Choose your exact board. Supported firmware targets install a signed release from your browser, with every byte verified locally before it touches the device. Linux appliances use an application installation guide."
             }
         }
 
-        if let Some(target) = selected_target {
+        if g4_selected {
+            appliance::G4InstallationGuide {}
+        } else if let Some(target) = selected_target {
             if target.is_flashable() && local_development::board_is_included(target.slug) {
                 GuidedFlasher { key: "{target.slug}", target }
             } else if target.is_flashable() && local_development::enabled() {
@@ -121,7 +125,9 @@ fn FlashExperience(selected_slug: Option<String>) -> Element {
             }
         }
 
-        section { class: if selected_target.is_some() { "mt-12" } else { "mt-4" },
+        appliance::LinuxApplianceCard {}
+
+        section { class: if selected_target.is_some() || g4_selected { "mt-12" } else { "mt-4" },
             h2 { class: "text-2xl font-semibold tracking-tight text-paper",
                 if selected_target.is_some() { "Change board" } else { "Select the exact board" }
             }

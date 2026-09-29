@@ -40,6 +40,7 @@ cargo_lock_workspaces = [
     "personal-hopspot/desktop",
     "personal-hopspot/embedded/esp32",
     "personal-hopspot/embedded/nrf52840",
+    "personal-hopspot/headless",
     "personal-hopspot/mobile/android/rust",
     "personal-hopspot/mobile/ios/rust",
     "prns-config",
@@ -94,6 +95,7 @@ cargo_manifests = [
     "personal-hopspot/embedded/nrf52840/vendor/nrf-softdevice/nrf-softdevice-s140-v6/Cargo.toml",
     "personal-hopspot/embedded/nrf52840/vendor/nrf-softdevice/nrf-softdevice-s140-v7/Cargo.toml",
     "personal-hopspot/flasher/Cargo.toml",
+    "personal-hopspot/headless/Cargo.toml",
     "personal-hopspot/memory/Cargo.toml",
     "personal-hopspot/mobile/android/rust/Cargo.toml",
     "personal-hopspot/mobile/ios/rust/Cargo.toml",
@@ -137,6 +139,7 @@ format_manifests = [
     "personal-hopspot/desktop/Cargo.toml",
     "personal-hopspot/embedded/esp32/Cargo.toml",
     "personal-hopspot/embedded/nrf52840/Cargo.toml",
+    "personal-hopspot/headless/Cargo.toml",
     "personal-hopspot/mobile/android/rust/Cargo.toml",
     "personal-hopspot/mobile/ios/rust/Cargo.toml",
     "prns-config/Cargo.toml",
@@ -413,7 +416,7 @@ platform = "any"
 toolchain = "python"
 timeout_seconds = 300
 command = ["__RUNNER_PYTHON__", "-m", "unittest", "discover", "-s", "validation/tests", "-p", "test_*.py", "-v"]
-inputs = ["validation/run.py", "validation/tests"]
+inputs = ["validation/run.py", "validation/tests", "tools/build/hopspot-g4.py"]
 artifacts = "validation-artifacts/results/validation-self-tests"
 
 [[suite]]

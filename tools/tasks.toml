@@ -94,6 +94,17 @@ requires = ["bash", "cmake", "git", "make", "python3", "xtensa-esp-elf-gcc"]
 setup = "Set IDF_PATH to the exact ESP-IDF checkout named by the committed recipe, source its export.sh, and install that ESP-IDF release's pinned esp32s3 tools."
 
 [[task]]
+id = "build.hopspot.g4"
+summary = "Cross-build and package the headless G4 Linux application with hashes and build metadata."
+domain = "build"
+effect = "workspace-write"
+platforms = ["linux", "macos"]
+audience = ["developer", "ci"]
+entrypoint = ["python3", "tools/build/hopspot-g4.py"]
+requires = ["cargo", "git", "python3", "rustc", "rustup"]
+setup = "Install nightly-2026-06-01 with rust-src and separately verify Zig 0.15.2. Pass --zig and a new --output directory. This produces a development application, not firmware."
+
+[[task]]
 id = "build.hopspot.t096"
 summary = "Build the Heltec T096 firmware and package its recovery-compatible developer UF2."
 domain = "build"
