@@ -471,12 +471,13 @@ async fn finalize_controller_grant(
     };
     match settled {
         Ok(RemoteControlTargetPairingFinalization::CompletionDispatched { .. }) => Ok(()),
-        Err(failure @ (crate::engine::SettleRemoteControlTargetPairingAuthorizationFailure::NoAuthorizationOwed { .. }
-            | crate::engine::SettleRemoteControlTargetPairingAuthorizationFailure::AttemptMismatch { .. })) => Err(
-            RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantSettlement { failure },
-        ),
         Err(failure) if failure.is_completion_delivery_failure() => Err(
             RemoteControlAuthorizationPersistenceFailure::CommittedCompletionDelivery { failure },
+        ),
+        Err(failure) => Err(
+            RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantSettlement {
+                failure,
+            },
         ),
         Ok(RemoteControlTargetPairingFinalization::AuthorizationRollbackRequired { .. }) => {
             rollback_controller_grant(remote_control, mutation)?;
@@ -485,8 +486,7 @@ async fn finalize_controller_grant(
             }
             Ok(())
         }
-        Ok(RemoteControlTargetPairingFinalization::AuthorizationFailureRecorded { .. })
-        | Err(_) => {
+        Ok(RemoteControlTargetPairingFinalization::AuthorizationFailureRecorded { .. }) => {
             rollback_controller_grant(remote_control, mutation)?;
             if let Some(persistence) = persistence {
                 restore_controller_grants_snapshot(persistence, rollback).await?;

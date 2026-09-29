@@ -15,7 +15,7 @@ enum Acknowledgement {
 }
 
 #[tokio::test]
-async fn committed_target_grants_survive_unavailable_and_stale_settlement() {
+async fn committed_target_grants_survive_unavailable_and_rejected_settlement() {
     let attempt_id = RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x81; 32]);
     for acknowledgement in [
         Acknowledgement::Lost,
@@ -26,6 +26,17 @@ async fn committed_target_grants_survive_unavailable_and_stale_settlement() {
         Acknowledgement::Rejected(Failure::AttemptMismatch {
             settled: attempt_id,
             active: RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x82; 32]),
+        }),
+        Acknowledgement::Rejected(Failure::TargetSignerUnavailable {
+            attempt_id,
+            target_identity: crate::identity::IdentityHash::new([0x83; 16]),
+        }),
+        Acknowledgement::Rejected(Failure::CompletionSigningFailed {
+            attempt_id,
+            error: crate::remote_control::RemoteControlPairingCompletionSigningError::TargetIdentityMismatch {
+                expected: crate::identity::IdentityHash::new([0x83; 16]),
+                found: crate::identity::IdentityHash::new([0x84; 16]),
+            },
         }),
     ] {
         for prior in [None, Some(RemoteControlRequestKind::Describe)] {

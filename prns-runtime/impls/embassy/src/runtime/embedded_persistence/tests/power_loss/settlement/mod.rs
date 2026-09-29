@@ -70,6 +70,25 @@ fn rejected_pairing_settlement_restores_authority_and_waits_for_durable_rollback
     verify(Finalize::RollBack);
 }
 
+#[test]
+fn committed_authority_survives_completion_signing_failure() {
+    let attempt_id = crate::runtime::node_facade::test_remote_control_pairing_attempt(0x92);
+    let target_identity = crate::identity::IdentityHash::new([0x96; 16]);
+    verify(Finalize::SettlementRejected(
+        SettleRemoteControlTargetPairingAuthorizationFailure::TargetSignerUnavailable {
+            attempt_id,
+            target_identity,
+        },
+    ));
+    verify(Finalize::SettlementRejected(SettleRemoteControlTargetPairingAuthorizationFailure::CompletionSigningFailed {
+        attempt_id,
+        error: crate::remote_control::RemoteControlPairingCompletionSigningError::TargetIdentityMismatch {
+            expected: target_identity,
+            found: crate::identity::IdentityHash::new([0x97; 16]),
+        },
+    }));
+}
+
 fn verify(finalize: Finalize) -> Outcome {
     embassy_futures::block_on(async {
         let commands = Channel::<CriticalSectionRawMutex, IssuedCommand, 1>::new();

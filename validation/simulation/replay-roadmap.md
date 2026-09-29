@@ -165,8 +165,9 @@ expected values. No production clock change was needed.
    Both runtimes also retain committed controller-side target access when its
    settlement fails, and retain committed target grants when their settlement
    acknowledgement is unavailable. Indeterminate storage, activation failures,
-   signing/finalization rejection and completion retries remain open. Stale or
+   inconsistent finalization and completion retries remain open. Stale or
    absent target attempt errors now preserve committed grants on both runtimes;
+   completion-signing errors do the same without claiming pairing succeeded;
    see the design's rollout checkpoint for exact evidence and remaining scope.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.

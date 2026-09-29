@@ -976,28 +976,12 @@ where
                         finalization,
                     )),
                 },
-                Err(RemoteControlPairingSettlementFailure::Failed(failure)) if failure.is_completion_delivery_failure() => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
-                    failure: target_settlement_failure(attempt_id, EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted, RemoteControlPairingSettlementFailure::Failed(failure)),
-                },
-                Err(failure @ RemoteControlPairingSettlementFailure::Failed(
-                    SettleRemoteControlTargetPairingAuthorizationFailure::NoAuthorizationOwed { .. }
-                    | SettleRemoteControlTargetPairingAuthorizationFailure::AttemptMismatch { .. }
-                )) => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
-                    failure: target_settlement_failure(attempt_id, EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted, failure),
-                },
-                Err(failure @ (RemoteControlPairingSettlementFailure::Busy | RemoteControlPairingSettlementFailure::NodeStopped)) => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
+                Err(failure) => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
                     failure: target_settlement_failure(
                         attempt_id,
                         EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
                         failure,
                     ),
-                },
-                Err(failure) => ActivatedAuthorizationSettlement::RollBack {
-                    failure: Some(target_settlement_failure(
-                        attempt_id,
-                        EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
-                        failure,
-                    )),
                 },
             }
         }

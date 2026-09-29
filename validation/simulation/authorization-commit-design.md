@@ -409,3 +409,42 @@ Verification on macOS arm64 with `CARGO_INCREMENTAL=0`:
 
 Root/workspace suites, firmware/resource builds, hardware, Miri and Kani were not
 run for this adapter-only change.
+
+## Rollout checkpoint: completion-signing failure after commit
+
+Both adapters retain a successfully stored and activated controller grant when
+settlement reports `TargetSignerUnavailable` or `CompletionSigningFailed`.
+These failures concern the completion receipt, not the stored controller's
+authorization. Normal engine admission already prepares that receipt before
+storage; the errors remain available through the unprepared compatibility path.
+No pre-storage validation or signing checks were weakened.
+
+Tokio returns the exact failure in `CommittedTargetGrantSettlement`. Embassy
+releases transaction ownership and returns its typed target-settlement error.
+All target settlement errors now preserve the committed grant, simplifying the
+previous per-error branches. Explicit rollback and inconsistent successful
+finalizations retain their existing handling and remain distinct audit items.
+
+The new regressions failed against the previous adapters and pass after the fix.
+The Tokio file-worker fixture covers twelve add/replace cases across unavailable,
+stale and signing failures, checking exact errors and full live/durable tables.
+The Embassy flash-owner fixture injects both signing errors, verifies released
+ownership and no rollback request, checks the exact prior/candidate record order,
+and restores the full candidate table twice. Settlement errors are scripted;
+this does not establish a physical signer failure or whole-node power-loss result.
+The shared authorization-preparation tests still prove signing refusal before
+commit. No shared-core production code or storage format changed.
+
+Indeterminate writes, activation failure recovery, inconsistent finalizations,
+explicit rollback durability and completion retries remain open. Full transaction
+crash consistency is not claimed.
+
+Verification on macOS arm64 with `CARGO_INCREMENTAL=0`: focused pairing-persistence
+tests passed on Tokio (five), and the new signing-failure regression passed on
+Embassy. Full `cargo test --locked --manifest-path <runtime>/Cargo.toml --lib`
+runs passed 275 Tokio tests (one ignored) and 156 Embassy tests. Both runtimes
+passed `cargo clippy --locked --manifest-path <runtime>/Cargo.toml --all-targets -- -D warnings`.
+`cargo test --locked -p prns-core authorization_preparation` passed six tests.
+`python3 validation/run.py run --suite embedded-persistence-recovery` passed 43.
+Formatting, both registries and website tests passed. Root/workspace suites,
+firmware/resource builds, hardware, Miri and Kani were not run for this adapter slice.
