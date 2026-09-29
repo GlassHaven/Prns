@@ -162,7 +162,9 @@ expected values. No production clock change was needed.
    Target grant admission now prepares completion before storage in shared core,
    and both runtimes retain committed grants on delivery failure. Grant management
    now also retains committed changes after caller cancellation or response loss.
-   Indeterminate storage and target-access persistence remain open;
+   Both runtimes also retain committed controller-side target access when its
+   settlement fails. Indeterminate storage, activation failures and target-side
+   missing settlement acknowledgements remain open;
    see the design's rollout checkpoint for exact evidence and remaining scope.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.

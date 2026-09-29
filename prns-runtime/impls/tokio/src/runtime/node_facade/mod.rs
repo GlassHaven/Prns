@@ -4,6 +4,8 @@ mod interface_lifecycle;
 mod node_lifecycle;
 mod path_discovery;
 mod persistence;
+#[cfg(test)]
+pub(crate) use persistence::TestDirectory;
 mod remote_control;
 mod request_response;
 mod resource_admission;

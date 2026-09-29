@@ -1,0 +1,173 @@
+use super::*;
+use crate::engine::{
+    PrnsCommand, SettleRemoteControlControllerPairingPersistenceFailure as Failure, Settlement,
+};
+use crate::identity::{IdentityEncryptionPublicKey, IdentitySigningPublicKey};
+use crate::manifold::driver::HostCommand;
+use crate::persistence::{read_remote_control_target_accesses_snapshot, FileStore, PersistedStore};
+use crate::remote_control::RemoteControlTargetAccessTable;
+use crate::routing::links::LinkId;
+use crate::runtime::node_facade::{NodePersistence, TestDirectory};
+
+enum Acknowledgement {
+    Completed,
+    Lost,
+    Mismatch,
+    NotOwed,
+    Rejected,
+}
+
+fn access(fill: u8, request: RemoteControlRequestKind) -> RemoteControlTargetAccess {
+    RemoteControlTargetAccess::new(
+        RemoteControlTargetIdentity::new(IdentityPublicKeys {
+            encryption: IdentityEncryptionPublicKey::new(crate::crypto::X25519PublicKey(
+                [fill; 32],
+            )),
+            signing: IdentitySigningPublicKey::new(crate::crypto::Ed25519PublicKey([fill; 32])),
+        }),
+        RemoteControlControllerAuthority::Operator,
+        RemoteControlRequestSet::only(request),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn committed_target_access_survives_missing_and_rejected_settlement() {
+    for acknowledgement in [
+        Acknowledgement::Completed,
+        Acknowledgement::Lost,
+        Acknowledgement::Mismatch,
+        Acknowledgement::NotOwed,
+        Acknowledgement::Rejected,
+    ] {
+        for prior in [None, Some(RemoteControlRequestKind::Describe)] {
+            let directory = TestDirectory::new();
+            let (commands, mut command_rx) = mpsc::unbounded_channel();
+            let node = PrnsNodeHandle::over(commands);
+            let worker = NodePersistence::custom_dir(directory.path())
+                .unwrap()
+                .worker(node.clone());
+            let persistence = worker.remote_control_authorization_persistence();
+            let mut remote = remote_control();
+            remote
+                .set_target_access(access(0x51, RemoteControlRequestKind::Describe))
+                .unwrap();
+            if let Some(request) = prior {
+                remote.set_target_access(access(0x52, request)).unwrap();
+            }
+            persistence
+                .store(
+                    SnapshotRegion::RemoteControlTargetAccesses,
+                    target_accesses_snapshot(&remote).unwrap(),
+                )
+                .await
+                .unwrap();
+            let attempt_id =
+                RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x53; 32]);
+            let other =
+                RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x54; 32]);
+            let candidate = || access(0x52, RemoteControlRequestKind::AnnounceSelf);
+            let mut expected = vec![
+                access(0x51, RemoteControlRequestKind::Describe),
+                candidate(),
+            ];
+            expected.sort_by_key(|access| *access.target().identity_hash().as_bytes());
+            let applying = persist_target_access(
+                &mut remote,
+                Some(&persistence),
+                &node,
+                attempt_id,
+                candidate(),
+            );
+            let acknowledge = async {
+                let Some(HostCommand::AwaitedEngine { issued, completion }) =
+                    command_rx.recv().await
+                else {
+                    panic!("awaited pairing settlement");
+                };
+                assert_eq!(
+                    issued.command,
+                    PrnsCommand::SettleRemoteControlControllerPairingPersistence(
+                        SettleRemoteControlControllerPairingPersistence {
+                            attempt_id,
+                            persistence: RemoteControlControllerPairingPersistence::Persisted
+                        }
+                    )
+                );
+                let store = FileStore::new(directory.path());
+                let mut bytes = vec![0; remote_control_target_accesses_snapshot_capacity(2)];
+                let loaded = store
+                    .load(SnapshotRegion::RemoteControlTargetAccesses, &mut bytes)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    read_remote_control_target_accesses_snapshot(loaded)
+                        .unwrap()
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+                let result = match acknowledgement {
+                    Acknowledgement::Lost => {
+                        drop(completion);
+                        return Err(RemoteControlAuthorizationPersistenceFailure::CommittedTargetAccessSettlementUnavailable);
+                    }
+                    Acknowledgement::Completed => {
+                        Ok(RemoteControlControllerPairingFinalization::Completed {
+                            attempt_id,
+                            retired_link: LinkId::new([0x55; 16]),
+                            access: candidate(),
+                        })
+                    }
+                    Acknowledgement::Mismatch => Err(Failure::AttemptMismatch {
+                        settled: attempt_id,
+                        active: other,
+                    }),
+                    Acknowledgement::NotOwed => Err(Failure::NoPersistenceOwed {
+                        settled: attempt_id,
+                    }),
+                    Acknowledgement::Rejected => Ok(
+                        RemoteControlControllerPairingFinalization::PersistenceFailureRecorded {
+                            attempt_id,
+                            retired_link: LinkId::new([0x55; 16]),
+                            access: candidate(),
+                        },
+                    ),
+                };
+                let expected_result = match &result {
+                    Ok(RemoteControlControllerPairingFinalization::Completed { .. }) => Ok(()),
+                    Ok(RemoteControlControllerPairingFinalization::PersistenceFailureRecorded { .. }) => Err(RemoteControlAuthorizationPersistenceFailure::CommittedTargetAccessFinalizationMismatch),
+                    Err(failure) => Err(RemoteControlAuthorizationPersistenceFailure::CommittedTargetAccessSettlement { failure: *failure }),
+                };
+                completion
+                    .send(Settlement::SettleRemoteControlControllerPairingPersistence(
+                        result,
+                    ))
+                    .unwrap();
+                expected_result
+            };
+            let (result, expected_result) = tokio::join!(applying, acknowledge);
+            assert_eq!(result, expected_result);
+            assert_eq!(
+                remote
+                    .target_accesses()
+                    .unwrap()
+                    .accesses_in_identity_hash_order(),
+                expected.as_slice()
+            );
+            for _ in 0..2 {
+                let store = FileStore::new(directory.path());
+                let mut bytes = vec![0; remote_control_target_accesses_snapshot_capacity(2)];
+                let loaded = store
+                    .load(SnapshotRegion::RemoteControlTargetAccesses, &mut bytes)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    read_remote_control_target_accesses_snapshot(loaded)
+                        .unwrap()
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+            }
+        }
+    }
+}

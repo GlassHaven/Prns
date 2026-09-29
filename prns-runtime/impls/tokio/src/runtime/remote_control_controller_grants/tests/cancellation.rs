@@ -7,38 +7,10 @@ use crate::remote_control::{
     RemoteControlControllerAuthority, RemoteControlControllerGrant,
     RemoteControlControllerIdentity, RemoteControlRequestSet,
 };
-use crate::runtime::node_facade::NodePersistence;
+use crate::runtime::node_facade::{NodePersistence, TestDirectory};
 use crate::runtime::request_endpoints::RespondToken;
 use std::future::Future;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Waker};
-
-struct Directory(PathBuf);
-
-impl Directory {
-    fn new() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        loop {
-            let id = NEXT.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "prns-grant-cancellation-{}-{id}",
-                std::process::id()
-            ));
-            match std::fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("create test directory: {error}"),
-            }
-        }
-    }
-}
-
-impl Drop for Directory {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).expect("remove owned test directory");
-    }
-}
 
 enum Change {
     Add,
@@ -60,11 +32,11 @@ async fn committed_grant_changes_survive_cancelled_callers_and_failed_remote_res
 }
 
 async fn verify(change: &Change, delivery: &Delivery) {
-    let directory = Directory::new();
+    let directory = TestDirectory::new();
     let (commands, command_rx) = mpsc::unbounded_channel();
     let node = PrnsNodeHandle::over(commands);
     drop(command_rx);
-    let worker = NodePersistence::custom_dir(&directory.0)
+    let worker = NodePersistence::custom_dir(directory.path())
         .unwrap()
         .worker(node.clone());
     let persistence = worker.remote_control_authorization_persistence();
@@ -152,7 +124,7 @@ async fn verify(change: &Change, delivery: &Delivery) {
         .is_pending());
     let mut bytes = vec![0; snapshot.len()];
     assert_eq!(
-        FileStore::new(&directory.0)
+        FileStore::new(directory.path())
             .load(SnapshotRegion::RemoteControlControllerGrants, &mut bytes)
             .unwrap(),
         Some(snapshot.as_slice())
@@ -178,7 +150,7 @@ async fn verify(change: &Change, delivery: &Delivery) {
         expected.as_slice()
     );
     for _ in 0..2 {
-        let store = FileStore::new(&directory.0);
+        let store = FileStore::new(directory.path());
         let mut bytes =
             vec![0; crate::persistence::remote_control_controller_grants_snapshot_capacity(2)];
         let loaded = store

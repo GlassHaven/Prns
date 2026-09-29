@@ -787,7 +787,7 @@ impl RemoteControlPairingPersistenceProgress {
                 ActivatedAuthorizationSettlement::Release => {
                     release_authorization_locally(authorization, attempt_id)
                 }
-                ActivatedAuthorizationSettlement::CommittedDeliveryFailed { failure } => {
+                ActivatedAuthorizationSettlement::CommittedSettlementFailed { failure } => {
                     release_authorization_locally(authorization, attempt_id)?;
                     Err(failure)
                 }
@@ -897,7 +897,7 @@ fn release_authorization_locally(
 
 enum ActivatedAuthorizationSettlement {
     Release,
-    CommittedDeliveryFailed {
+    CommittedSettlementFailed {
         failure: EmbeddedRemoteControlPairingPersistenceFailure,
     },
     RollBack {
@@ -925,7 +925,7 @@ where
         ActivatedAuthorizationSettlement::Release => {
             release_authorization_locally(authorization, attempt_id)
         }
-        ActivatedAuthorizationSettlement::CommittedDeliveryFailed { failure } => {
+        ActivatedAuthorizationSettlement::CommittedSettlementFailed { failure } => {
             release_authorization_locally(authorization, attempt_id)?;
             Err(failure)
         }
@@ -976,7 +976,7 @@ where
                         finalization,
                     )),
                 },
-                Err(RemoteControlPairingSettlementFailure::Failed(failure)) if failure.is_completion_delivery_failure() => ActivatedAuthorizationSettlement::CommittedDeliveryFailed {
+                Err(RemoteControlPairingSettlementFailure::Failed(failure)) if failure.is_completion_delivery_failure() => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
                     failure: target_settlement_failure(attempt_id, EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted, RemoteControlPairingSettlementFailure::Failed(failure)),
                 },
                 Err(failure) => ActivatedAuthorizationSettlement::RollBack {
@@ -1004,22 +1004,21 @@ where
                 Ok(RemoteControlControllerPairingFinalization::PersistenceFailureRecorded {
                     attempt_id,
                     ..
-                }) => ActivatedAuthorizationSettlement::RollBack {
-                    failure: Some(
+                }) => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
+                    failure:
                         EmbeddedRemoteControlPairingPersistenceFailure::UnexpectedControllerFinalization {
                             attempt_id,
                             operation:
                                 EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
                             finalization: EmbeddedRemoteControlControllerPairingFinalization::PersistenceFailureRecorded,
                         },
-                    ),
                 },
-                Err(failure) => ActivatedAuthorizationSettlement::RollBack {
-                    failure: Some(controller_settlement_failure(
+                Err(failure) => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
+                    failure: controller_settlement_failure(
                         attempt_id,
                         EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
                         failure,
-                    )),
+                    ),
                 },
             }
         }

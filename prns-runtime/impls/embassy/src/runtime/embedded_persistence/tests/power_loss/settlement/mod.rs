@@ -342,3 +342,4 @@ fn verify(finalize: Finalize) -> Outcome {
 }
 
 mod interrupted;
+mod target_accesses;

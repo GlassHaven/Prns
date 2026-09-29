@@ -1,5 +1,10 @@
 mod host;
 
+#[cfg(test)]
+mod test_directory;
+#[cfg(test)]
+pub(crate) use test_directory::TestDirectory;
+
 pub use host::{
     DefaultLocationError, FlushFailurePolicy, NodePersistence, PersistenceEvent,
     PersistenceFlushStatus, PersistenceIntent, PersistenceRestoreReport, PersistenceTrigger,

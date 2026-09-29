@@ -22,7 +22,7 @@ The source owners are:
 - `prns-core/src/remote_control/pairing/target_pairing/state.rs`
 - `prns-runtime/impls/embassy/src/runtime/remote_control_pairing_persistence.rs`
 - `prns-runtime/impls/embassy/src/runtime/remote_control_pairing_authorizations.rs`
-- `prns-runtime/impls/tokio/src/runtime/remote_control_pairing_persistence.rs`
+- `prns-runtime/impls/tokio/src/runtime/remote_control_pairing_persistence/mod.rs`
 - `prns-runtime/impls/tokio/src/runtime/remote_control_controller_grants/mod.rs`
 
 Snapshot atomicity is not transaction atomicity. Neither choosing an older valid
@@ -277,3 +277,52 @@ Remaining production work: indeterminate storage and missing pairing settlement
 acknowledgements, activation inconsistency after commit, controller-side target-
 access transactions, and completion-retention/retry semantics. Grant-management
 response-loss rollback is now fixed; full crash-consistency closure is not claimed.
+
+## Rollout checkpoint: controller-side target-access settlement
+
+Both adapters now retain successfully stored and activated target access when
+the subsequent engine settlement fails. Tokio reports distinct typed errors for
+a missing acknowledgement, rejected settlement, or inconsistent finalization.
+Embassy releases transaction ownership and returns its existing typed settlement
+error without scheduling a rollback. Neither adapter reports successful pairing
+when settlement failed. This does not introduce a completion retry mechanism.
+
+Shared controller pairing already preserves its prepared access in `Persisting`
+through link closure and expiry; these rollback decisions belonged to the adapters.
+Initial-store and activation failure recovery are unchanged and remain subject
+to the indeterminate-write audit.
+
+The Tokio test exercises the real file worker for add and replacement, preserving
+an unrelated target. It checks committed contents before scripted acknowledgement,
+the entire live table afterward, and two fresh file readers. Cases cover success,
+lost acknowledgement, attempt mismatch, no persistence owed, and unexpected failure
+finalization. These are not filesystem power-loss tests.
+
+The Embassy test exercises the actual flash-journal owner for the same add/replace
+cases. It checks success, attempt mismatch, no persistence owed, unexpected failure
+finalization, and an occupied pairing-settlement slot. It verifies released
+transaction ownership, no queued rollback, exactly the prior and candidate records,
+and the complete candidate table on two fresh restores. Engine acknowledgements
+are scripted; these restores do not claim whole-node boot or hardware coverage.
+
+Remaining work includes indeterminate storage, target-side missing settlement
+acknowledgements, activation inconsistency after commit, completion-retention/retry
+semantics, and whole-node crash coverage. Full crash-consistency closure is not
+claimed.
+
+Verification on macOS arm64, with `CARGO_INCREMENTAL=0` for Cargo runs:
+
+- `cargo test --locked --manifest-path prns-runtime/impls/tokio/Cargo.toml --lib`:
+  274 passed, one ignored; the focused `remote_control_pairing_persistence` filter
+  passed all four tests.
+- `cargo test --locked --manifest-path prns-runtime/impls/embassy/Cargo.toml --lib`:
+  153 passed.
+- `cargo clippy --locked --manifest-path <runtime>/Cargo.toml --all-targets -- -D warnings`:
+  passed for both runtime paths above.
+- `python3 validation/run.py run --suite embedded-persistence-recovery`:
+  all 40 tests passed.
+- `./tools/prns verify`, `python3 validation/run.py verify`, and
+  `cargo test --locked --manifest-path docs/website/Cargo.toml`: passed.
+
+No shared-core code changed. Root/workspace tests, firmware/resource builds,
+physical hardware, Miri and Kani were not run for this adapter-only slice.
