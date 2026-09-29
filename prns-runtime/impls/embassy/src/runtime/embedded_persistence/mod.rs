@@ -1029,6 +1029,7 @@ where
                 }
                 Ok(crate::persistence::FlashJournalCommitResolution::NotCommitted) => {
                     self.pending_confirmation = None;
+                    self.note_write_failure(now, EmbeddedPersistenceFailure::Flash);
                     return StoreRemoteControlAuthorizationSnapshotOutcome::Failed {
                         failure: EmbeddedPersistenceFailure::Flash,
                         retry_at: self.retry_not_before,
@@ -1059,7 +1060,11 @@ where
                 retry_at: None,
             };
         };
-        match journal.append(record_kind, payload).await {
+        // Retain the exact record before I/O: cancellation can hide a completed commit.
+        self.pending_confirmation = journal.active_append_offset().map(|at| (at, record_kind));
+        let appended = journal.append(record_kind, payload).await;
+        self.pending_confirmation = None;
+        match appended {
             Ok(()) => StoreRemoteControlAuthorizationSnapshotOutcome::Stored,
             Err(FlashJournalError::CommitUnconfirmed { at, .. }) => {
                 self.pending_confirmation = Some((at, record_kind));

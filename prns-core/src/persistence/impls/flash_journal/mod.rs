@@ -304,6 +304,13 @@ impl<F: NorFlash> FlashJournal<F> {
     }
 
     #[must_use]
+    /// Capture before `append` when the owner may need to confirm a cancelled write.
+    /// This is a cursor position, not a guarantee that the next record fits.
+    pub fn active_append_offset(&self) -> Option<u32> {
+        self.active.map(|cursor| cursor.append_at)
+    }
+
+    #[must_use]
     pub fn active_remaining_bytes(&self) -> Option<usize> {
         self.active.map(|cursor| {
             (self.layout.arenas[cursor.index].end as usize)
@@ -370,7 +377,7 @@ impl<F: NorFlash> FlashJournal<F> {
         Ok(())
     }
 
-    /// Resolve a completed append whose commit readback failed. The owner must
+    /// Resolve an append whose completion was lost or whose commit readback failed. The owner must
     /// exclude other writes and compaction until this exact record is resolved.
     pub async fn confirm_append(
         &mut self,

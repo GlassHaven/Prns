@@ -89,6 +89,7 @@ fn cancelled_appends_and_compaction_cannot_reprogram_an_uncertain_tail() {
             if !matches!(phase, WritePhase::Append) {
                 journal.begin_compaction().unwrap();
             }
+            let candidate_at = journal.active_append_offset().unwrap();
             {
                 let mut write = core::pin::pin!(async {
                     match phase {
@@ -109,6 +110,19 @@ fn cancelled_appends_and_compaction_cannot_reprogram_an_uncertain_tail() {
                 assert!(core::future::Future::poll(write.as_mut(), &mut context).is_pending());
             }
             let image = journal.flash.inner.bytes;
+            if matches!(phase, WritePhase::Append) {
+                assert_eq!(
+                    journal
+                        .confirm_append(
+                            candidate_at,
+                            FlashJournalRecordKind::RouteUpsert,
+                            b"candidate"
+                        )
+                        .await,
+                    Ok(FlashJournalCommitResolution::Committed)
+                );
+                assert_eq!(journal.flash.inner.bytes, image);
+            }
             if !matches!(phase, WritePhase::Append) {
                 assert_eq!(
                     journal

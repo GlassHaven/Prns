@@ -19,7 +19,7 @@ fn grant(fill: u8, authority: Authority, request: Request) -> Grant {
     .unwrap()
 }
 
-fn snapshot(grants: &[Grant]) -> RemoteControlAuthorizationSnapshot {
+pub(super) fn snapshot(grants: &[Grant]) -> RemoteControlAuthorizationSnapshot {
     let mut engine = EngineState::<crate::storage::GrowableHeap>::default();
     let mut remote = available_remote_control(&mut engine);
     for grant in grants {
@@ -28,7 +28,7 @@ fn snapshot(grants: &[Grant]) -> RemoteControlAuthorizationSnapshot {
     controller_grants_snapshot(&remote)
 }
 
-async fn image(
+pub(super) async fn image(
     snapshot: &RemoteControlAuthorizationSnapshot,
     campaign: Campaign,
 ) -> [u8; CAPACITY] {

@@ -802,3 +802,36 @@ adapter/backend recovery evidence, not a complete node-level crash campaign.
 Remaining recovery work includes Embassy cancellation with flash I/O outstanding,
 pre-commit rollback crash durability and end-to-end controlled-node reboot
 campaigns. These are distinct from the now-removed post-commit rollback paths.
+
+## Recovery checkpoint: retain confirmation across cancelled append I/O
+
+The Embassy critical-snapshot owner now captures the shared journal's append
+offset into its existing pending-confirmation state before awaiting flash.
+Previously, dropping that future after the commit word reached flash left no
+confirmation state: a retry encountered the journal's deliberately poisoned tail
+and entered compaction instead of confirming the durable candidate. The focused
+committed-cancellation regression failed on that implementation.
+
+Resumption now uses read-only exact-record confirmation before any new write.
+A committed record updates the retained snapshot and acknowledges its owner;
+an uncommitted record returns a typed failure with a retry deadline. Retaining
+that deadline also matters for required rollback: cancellation must not turn a
+retryable rollback into a permanently parked continuation. Cancellation during
+confirmation itself leaves the same ownership intact.
+
+The new campaign runs the real Embassy manifold persistence wrapper and flash
+journal across 133 append cancellation boundaries: every write prefix and the
+start/end of every read. Each case cancels a second time during confirmation,
+checks read-only resolution, verifies the complete retained snapshot and restores
+the expected authority on two fresh boots. Separate focused cases cover the
+fully written commit and a cancelled rollback progressing through its retry.
+This uses the deterministic pending-I/O fixture with storage made available
+again; it does not claim that physical flash drivers can survive arbitrary
+cancellation or power restoration without their documented recovery.
+
+Shared core already owns poisoned-tail protection and exact confirmation. This
+slice exposes its cursor for the adapter's existing confirmation state; it adds
+no journal field or snapshot buffer. Tokio uses its separately owned file-store
+transaction and does not use this flash append path. Cancellation while starting
+or advancing compaction, and full controlled-node reboot campaigns, remain
+separate work rather than being implied by this append/resume campaign.
