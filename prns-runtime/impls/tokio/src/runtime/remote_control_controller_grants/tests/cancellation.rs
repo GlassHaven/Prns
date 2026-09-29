@@ -70,13 +70,16 @@ async fn verify(change: &Change, delivery: &Delivery) {
         .unwrap()
         .unwrap();
     snapshot.truncate(len);
-    persistence
+    let baseline = persistence.begin().await.unwrap();
+    baseline
         .store(
             SnapshotRegion::RemoteControlControllerGrants,
             snapshot.clone(),
         )
         .await
+        .unwrap()
         .unwrap();
+    baseline.finish().await.unwrap();
 
     let (set_completion, set_receiver) = oneshot::channel();
     let (revoke_completion, revoke_receiver) = oneshot::channel();

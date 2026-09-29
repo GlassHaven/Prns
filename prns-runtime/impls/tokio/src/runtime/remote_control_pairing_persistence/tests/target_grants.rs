@@ -55,16 +55,18 @@ async fn committed_target_grants_survive_unavailable_and_rejected_settlement() {
                 remote.set_controller_grant(grant(request)).unwrap();
             }
             let candidate = grant(RemoteControlRequestKind::AnnounceSelf);
-            persistence
+            let transaction = persistence.begin().await.unwrap();
+            transaction
                 .store(
                     SnapshotRegion::RemoteControlControllerGrants,
                     controller_grants_snapshot(&remote).unwrap(),
                 )
                 .await
+                .unwrap()
                 .unwrap();
             let apply = persist_controller_grant(
                 &mut remote,
-                Some(&persistence),
+                Some(&transaction),
                 &node,
                 attempt_id,
                 candidate,

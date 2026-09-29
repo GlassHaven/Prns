@@ -75,6 +75,7 @@ pub use persistence::{
     RemoteControlAuthorizationSeedReport, RouteSeedProgress, RouteSeedReport, SaveOnLearn,
     SaveOnLearnWiring, TunnelSeedReport,
 };
+pub(crate) use persistence::{AuthorizationOwnerError, AuthorizationTransaction};
 pub use remote_control::{RemoteControlHandle, RemoteControlTargetHandle};
 pub use request_response::{RequestOptions, ResponseSendError};
 pub use resource_admission::{ResourceAdmissionPeer, ResourceOfferAdmission, ResourceOfferMonitor};

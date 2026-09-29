@@ -690,3 +690,58 @@ The focused backend suite passed 14 tests; the root run included 2,126 passing
 core tests with three ignored, and Tokio passed 275 with one ignored. Windows,
 Linux, firmware, Miri, ISA and hardware checks were not run for this std-only
 backend slice. The changed file backend is outside the configured mutation surface.
+
+## Recovery checkpoint: Tokio transaction ownership and confirmation
+
+Tokio now reserves the shared file-store owner before an authorization command
+prepares its mutation and releases it only after the command settles successfully.
+Pairing in both directions and local/remote controller-grant changes share this
+path. The owner token survives cancellation of its awaiting future, including
+cancellation while a blocking file operation is still running. An abandoned or
+fatally failed owner remains fenced until node restart; this is fail-closed
+recovery, not automatic in-process resumption of abandoned work.
+
+Post-publication durability errors now enter exact candidate confirmation, with
+250 ms asynchronous waits between attempts. Confirmation does not rewrite or
+roll back the candidate. Missing/different values and read/sync failures remain
+unresolved. Only exact confirmed durability returns write success; definite
+pre-publication errors retain the existing failure/rollback path. Loss of the
+blocking worker is a fatal ownership failure, not permission to overwrite a
+potentially committed candidate. No blocking thread is retained during retry waits.
+
+Background flushes capture an authorization revision before preparing snapshots
+and recheck it under the storage lock before writing any region. Owned or stale
+flushes are deferred without triggering the background exit-on-failure policy;
+an explicit startup/shutdown flush cannot report success for deferred work.
+Read-only authorization snapshot requests do not acquire ownership or invalidate
+their own prepared flush. Explicit transaction completion permits fresh flushes,
+but never rehabilitates an older revision.
+
+The new tests exercise the actual Tokio owner and file store with injected lost
+acknowledgement/readback outcomes, both authorization regions, paused Tokio time,
+stale prepared flushes, cancellation across a blocking-write barrier, worker
+failure, and read-only snapshot behavior. Existing adapter regressions continue
+checking activation and cancelled response delivery. This is runtime/backend
+evidence, not a new whole-node power-cut simulator campaign. Explicit rollback
+crash durability, post-commit activation inconsistency, and complete node-level
+reboot recovery remain open; Embassy's outstanding-flash-I/O cancellation boundary
+also remains distinct from its already implemented lost-readback confirmation.
+
+Verification on macOS arm64 passed with incremental compilation disabled:
+
+```console
+CARGO_INCREMENTAL=0 cargo test --locked --manifest-path prns-runtime/impls/tokio/Cargo.toml --lib --quiet
+CARGO_INCREMENTAL=0 cargo clippy --locked --manifest-path prns-runtime/impls/tokio/Cargo.toml --all-targets -- -D warnings
+CARGO_INCREMENTAL=0 cargo test --locked --manifest-path validation/integration/Cargo.toml --test runtime_persistence --test runtime_remote_control_pairing --quiet
+CARGO_INCREMENTAL=0 cargo test --locked --quiet
+CARGO_INCREMENTAL=0 python3 validation/run.py run --suite authorization-commit-recovery --suite virtual-device-simulation
+cargo fmt --manifest-path prns-runtime/impls/tokio/Cargo.toml -- --check
+git diff --check
+```
+
+Tokio passed 280 tests with one ignored; persistence/pairing integration passed
+six, and the registered recovery and simulation suites passed. The integration
+tests initially could not bind loopback sockets in the sandbox and passed after
+rerunning with that permission. No firmware, hardware, Miri, ISA, Linux or Windows
+run is implied. This slice changes only the Tokio adapter, outside the configured
+mutation surface; the shared file confirmation primitive remains the prior slice.

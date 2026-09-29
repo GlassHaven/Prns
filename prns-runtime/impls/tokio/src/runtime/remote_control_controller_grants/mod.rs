@@ -1,3 +1,4 @@
+use super::node_facade::AuthorizationTransaction;
 use std::sync::Arc;
 
 use tokio::sync::mpsc::{self, error::TrySendError};
@@ -135,11 +136,33 @@ impl RemoteControlControllerGrantCommand {
         remote_control: &mut AssembledRemoteControl,
         persistence: Option<&RemoteControlAuthorizationPersistence>,
     ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
+        if matches!(&self, Self::Snapshot { .. }) {
+            return self.apply_owned(remote_control, None).await;
+        }
+        match &self {
+            Self::SetControllerGrant { completion, .. } if completion.is_closed() => return Ok(()),
+            Self::RevokeController { completion, .. } if completion.is_closed() => return Ok(()),
+            _ => {}
+        }
+        let transaction = match persistence {
+            Some(persistence) => Some(persistence.begin().await?),
+            None => None,
+        };
+        self.apply_owned(remote_control, transaction.as_ref())
+            .await?;
+        if let Some(transaction) = transaction {
+            transaction.finish().await?;
+        }
+        Ok(())
+    }
+
+    async fn apply_owned(
+        self,
+        remote_control: &mut AssembledRemoteControl,
+        persistence: Option<&AuthorizationTransaction>,
+    ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
         match self {
             Self::SetControllerGrant { grant, completion } => {
-                if completion.is_closed() {
-                    return Ok(());
-                }
                 let prepared = match prepare_controller_grant_set(remote_control, grant) {
                     Ok(prepared) => prepared,
                     Err(error) => {
@@ -166,7 +189,7 @@ impl RemoteControlControllerGrantCommand {
                 let (mutation, projected, rollback) = prepared.into_parts();
                 if persistence
                     .store(SnapshotRegion::RemoteControlControllerGrants, projected)
-                    .await
+                    .await?
                     .is_err()
                 {
                     restore_controller_grants_snapshot(persistence, rollback).await?;
@@ -188,9 +211,6 @@ impl RemoteControlControllerGrantCommand {
                 controller,
                 completion,
             } => {
-                if completion.is_closed() {
-                    return Ok(());
-                }
                 let prepared = match prepare_controller_revocation(remote_control, controller) {
                     Ok(prepared) => prepared,
                     Err(error) => {
@@ -215,7 +235,7 @@ impl RemoteControlControllerGrantCommand {
                 let (mutation, projected, rollback) = prepared.into_parts();
                 if persistence
                     .store(SnapshotRegion::RemoteControlControllerGrants, projected)
-                    .await
+                    .await?
                     .is_err()
                 {
                     restore_controller_grants_snapshot(persistence, rollback).await?;
@@ -366,7 +386,7 @@ impl RemoteControlControllerGrantCommand {
 
 async fn apply_remote_controller_grant_transaction(
     remote_control: &mut AssembledRemoteControl,
-    persistence: Option<&RemoteControlAuthorizationPersistence>,
+    persistence: Option<&AuthorizationTransaction>,
     node: &PrnsNodeHandle,
     responder: RespondToken,
     prepared: super::remote_control_pairing_persistence::PreparedControllerGrantChange,
@@ -384,7 +404,7 @@ async fn apply_remote_controller_grant_transaction(
     let (mutation, projected, rollback) = prepared.into_parts();
     if persistence
         .store(SnapshotRegion::RemoteControlControllerGrants, projected)
-        .await
+        .await?
         .is_err()
     {
         restore_controller_grants_snapshot(persistence, rollback).await?;

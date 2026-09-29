@@ -1,4 +1,6 @@
+mod authorization;
 mod host;
+pub(crate) use authorization::{AuthorizationOwnerError, AuthorizationTransaction};
 
 #[cfg(test)]
 mod test_directory;

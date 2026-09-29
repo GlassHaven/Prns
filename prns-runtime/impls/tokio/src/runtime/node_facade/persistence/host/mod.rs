@@ -5,7 +5,10 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
 use crate::identity::vault::FileVault;
-use crate::persistence::{FileStore, FileStoreError, PersistedStore, SnapshotRegion};
+use crate::persistence::{FileStore, FileStoreError};
+
+pub use super::authorization::RemoteControlAuthorizationPersistence;
+use super::authorization::{AuthorizationOwnerError, AuthorizationRevision, AuthorizationState};
 use crate::storage::StorageLayout;
 use crate::wire::DestinationHash;
 
@@ -26,6 +29,9 @@ use super::{
 const WRITE_PROBE: &str = ".write-probe";
 const DEFAULT_FLUSH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const SAVE_ON_LEARN_DEBOUNCE: Duration = Duration::from_secs(2);
+
+#[cfg(test)]
+mod tests;
 
 pub struct NodePersistence {
     store: FileStore,
@@ -179,6 +185,7 @@ impl NodePersistence {
                 store: self.store,
                 vault: self.vault,
                 mark: FlushMark::default(),
+                authorization: AuthorizationState::new(),
             })),
             flush_interval: DEFAULT_FLUSH_INTERVAL,
             rotations: None,
@@ -340,56 +347,29 @@ impl PersistenceFlushStatus {
     }
 }
 
-struct WorkerStorage {
-    store: FileStore,
+pub(super) struct WorkerStorage {
+    pub(super) store: FileStore,
     vault: FileVault,
     mark: FlushMark,
-}
-
-#[derive(Clone)]
-pub struct RemoteControlAuthorizationPersistence {
-    storage: Arc<Mutex<WorkerStorage>>,
+    pub(super) authorization: AuthorizationState,
 }
 
 #[derive(Debug)]
-pub(crate) enum RemoteControlAuthorizationPersistenceError {
-    Store(FileStoreError),
-    Task,
+pub(super) enum FlushCommit {
+    AuthorizationChanged,
+    Completed(Result<FlushReport, FlushError<FileStoreError>>),
 }
 
-impl core::fmt::Display for RemoteControlAuthorizationPersistenceError {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Store(error) => write!(formatter, "{error}"),
-            Self::Task => formatter.write_str("authorization persistence task stopped"),
+impl WorkerStorage {
+    pub(super) fn commit_flush(
+        &mut self,
+        revision: &AuthorizationRevision,
+        prepared: super::PreparedFlush,
+    ) -> FlushCommit {
+        if !self.authorization.accepts_flush(revision) {
+            return FlushCommit::AuthorizationChanged;
         }
-    }
-}
-
-impl RemoteControlAuthorizationPersistence {
-    #[cfg(test)]
-    pub(crate) fn pause_test_storage(&self) -> impl Drop + '_ {
-        self.storage.lock().expect("test storage is not poisoned")
-    }
-
-    pub(crate) async fn store(
-        &self,
-        region: SnapshotRegion,
-        snapshot: Vec<u8>,
-    ) -> Result<(), RemoteControlAuthorizationPersistenceError> {
-        let storage = Arc::clone(&self.storage);
-        tokio::task::spawn_blocking(move || {
-            let mut storage = match storage.lock() {
-                Ok(storage) => storage,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            storage
-                .store
-                .store(region, &snapshot)
-                .map_err(RemoteControlAuthorizationPersistenceError::Store)
-        })
-        .await
-        .map_err(|_| RemoteControlAuthorizationPersistenceError::Task)?
+        FlushCommit::Completed(prepared.commit_to_store(&mut self.store, &mut self.mark))
     }
 }
 
@@ -461,7 +441,8 @@ impl PersistenceWorker {
             PersistenceTrigger::Startup,
             on_event,
         )
-        .await;
+        .await
+        .required();
         if let PersistenceFlushStatus::NodeStopped = state {
             return state;
         }
@@ -500,7 +481,7 @@ impl PersistenceWorker {
             tokio::select! {
                 biased;
                 () = &mut shutdown => {
-                    let state = flush_state(&handle, &storage, PersistenceTrigger::Shutdown, on_event).await;
+                    let state = flush_state(&handle, &storage, PersistenceTrigger::Shutdown, on_event).await.required();
                     if let PersistenceFlushStatus::NodeStopped = state {
                         return state;
                     }
@@ -526,8 +507,8 @@ impl PersistenceWorker {
                                 while changes.try_recv().is_ok() {}
                             }
                             let status = flush_state(&handle, &storage, PersistenceTrigger::RouteChange, on_event).await;
-                            if should_exit(status, failure_policy) {
-                                return status;
+                            if status.should_exit(failure_policy) {
+                                return status.required();
                             }
                         }
                         None => changes_open = false,
@@ -535,8 +516,8 @@ impl PersistenceWorker {
                 }
                 _ = ticker.tick() => {
                     let status = flush_state(&handle, &storage, PersistenceTrigger::Interval, on_event).await;
-                    if should_exit(status, failure_policy) {
-                        return status;
+                    if status.should_exit(failure_policy) {
+                        return status.required();
                     }
                 }
             }
@@ -559,21 +540,71 @@ async fn recv_or_pending<T>(receiver: Option<&mut mpsc::UnboundedReceiver<T>>) -
     }
 }
 
+enum StateFlush {
+    Completed(PersistenceFlushStatus),
+    Deferred,
+}
+
+impl StateFlush {
+    fn required(self) -> PersistenceFlushStatus {
+        match self {
+            Self::Completed(status) => status,
+            Self::Deferred => PersistenceFlushStatus::Failed,
+        }
+    }
+
+    fn should_exit(&self, policy: FlushFailurePolicy) -> bool {
+        match self {
+            Self::Completed(status) => should_exit(*status, policy),
+            Self::Deferred => false,
+        }
+    }
+}
+
 async fn flush_state(
     handle: &PrnsNodeHandle,
     storage: &Arc<Mutex<WorkerStorage>>,
     trigger: PersistenceTrigger,
     on_event: &mut (dyn FnMut(PersistenceEvent<'_>) + Send),
-) -> PersistenceFlushStatus {
+) -> StateFlush {
+    let revision_storage = Arc::clone(storage);
+    let revision = tokio::task::spawn_blocking(move || {
+        revision_storage
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .authorization
+            .flush_revision()
+    })
+    .await;
+    let revision = match revision {
+        Ok(Ok(revision)) => revision,
+        Ok(Err(AuthorizationOwnerError::Busy)) => return StateFlush::Deferred,
+        Ok(Err(error)) => {
+            on_event(PersistenceEvent::FlushFailed {
+                trigger,
+                error: &error,
+            });
+            return StateFlush::Completed(PersistenceFlushStatus::Failed);
+        }
+        Err(error) => {
+            on_event(PersistenceEvent::FlushFailed {
+                trigger,
+                error: &error,
+            });
+            return StateFlush::Completed(PersistenceFlushStatus::Failed);
+        }
+    };
     let prepared = match handle.prepare_flush().await {
         Ok(prepared) => prepared,
-        Err(PrepareFlushError::NodeStopped) => return PersistenceFlushStatus::NodeStopped,
+        Err(PrepareFlushError::NodeStopped) => {
+            return StateFlush::Completed(PersistenceFlushStatus::NodeStopped)
+        }
         Err(PrepareFlushError::AuthorizationSnapshot(error)) => {
             on_event(PersistenceEvent::FlushFailed {
                 trigger,
                 error: &AuthorizationSnapshotFlushError(error),
             });
-            return PersistenceFlushStatus::Failed;
+            return StateFlush::Completed(PersistenceFlushStatus::Failed);
         }
     };
     let storage = Arc::clone(storage);
@@ -582,36 +613,38 @@ async fn flush_state(
             Ok(storage) => storage,
             Err(poisoned) => poisoned.into_inner(),
         };
-        let WorkerStorage { store, mark, .. } = &mut *storage;
-        prepared.commit_to_store(store, mark)
+        storage.commit_flush(&revision, prepared)
     })
     .await;
     match committed {
-        Ok(Ok(report)) => {
+        Ok(FlushCommit::AuthorizationChanged) => StateFlush::Deferred,
+        Ok(FlushCommit::Completed(Ok(report))) => {
             on_event(PersistenceEvent::Flushed { trigger, report });
-            PersistenceFlushStatus::Landed
+            StateFlush::Completed(PersistenceFlushStatus::Landed)
         }
-        Ok(Err(FlushError::NodeStopped)) => PersistenceFlushStatus::NodeStopped,
-        Ok(Err(FlushError::AuthorizationSnapshot(error))) => {
+        Ok(FlushCommit::Completed(Err(FlushError::NodeStopped))) => {
+            StateFlush::Completed(PersistenceFlushStatus::NodeStopped)
+        }
+        Ok(FlushCommit::Completed(Err(FlushError::AuthorizationSnapshot(error)))) => {
             on_event(PersistenceEvent::FlushFailed {
                 trigger,
                 error: &AuthorizationSnapshotFlushError(error),
             });
-            PersistenceFlushStatus::Failed
+            StateFlush::Completed(PersistenceFlushStatus::Failed)
         }
-        Ok(Err(FlushError::Store(error))) => {
+        Ok(FlushCommit::Completed(Err(FlushError::Store(error)))) => {
             on_event(PersistenceEvent::FlushFailed {
                 trigger,
                 error: &error,
             });
-            PersistenceFlushStatus::Failed
+            StateFlush::Completed(PersistenceFlushStatus::Failed)
         }
         Err(error) => {
             on_event(PersistenceEvent::FlushFailed {
                 trigger,
                 error: &error,
             });
-            PersistenceFlushStatus::Failed
+            StateFlush::Completed(PersistenceFlushStatus::Failed)
         }
     }
 }

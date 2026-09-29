@@ -55,12 +55,14 @@ async fn committed_target_access_survives_missing_and_rejected_settlement() {
             if let Some(request) = prior {
                 remote.set_target_access(access(0x52, request)).unwrap();
             }
-            persistence
+            let transaction = persistence.begin().await.unwrap();
+            transaction
                 .store(
                     SnapshotRegion::RemoteControlTargetAccesses,
                     target_accesses_snapshot(&remote).unwrap(),
                 )
                 .await
+                .unwrap()
                 .unwrap();
             let attempt_id =
                 RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x53; 32]);
@@ -74,7 +76,7 @@ async fn committed_target_access_survives_missing_and_rejected_settlement() {
             expected.sort_by_key(|access| *access.target().identity_hash().as_bytes());
             let applying = persist_target_access(
                 &mut remote,
-                Some(&persistence),
+                Some(&transaction),
                 &node,
                 attempt_id,
                 candidate(),

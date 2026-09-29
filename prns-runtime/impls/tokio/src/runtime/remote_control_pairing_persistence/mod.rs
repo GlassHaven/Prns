@@ -1,3 +1,4 @@
+use super::node_facade::AuthorizationTransaction;
 use tokio::sync::mpsc;
 
 use crate::engine::{
@@ -47,6 +48,7 @@ pub(super) struct RemoteControlPairingPersistenceReceiver {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemoteControlAuthorizationPersistenceFailure {
+    PersistenceOwnership,
     SnapshotUnavailable,
     SnapshotSeal(SnapshotSealError),
     RuntimeState,
@@ -69,6 +71,9 @@ pub enum RemoteControlAuthorizationPersistenceFailure {
 impl std::fmt::Display for RemoteControlAuthorizationPersistenceFailure {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::PersistenceOwnership => {
+                formatter.write_str("authorization persistence ownership could not be settled")
+            }
             Self::SnapshotUnavailable => {
                 formatter.write_str("the remote-control service became unavailable")
             }
@@ -104,6 +109,14 @@ impl std::fmt::Display for RemoteControlAuthorizationPersistenceFailure {
 }
 
 impl std::error::Error for RemoteControlAuthorizationPersistenceFailure {}
+
+impl From<super::node_facade::AuthorizationOwnerError>
+    for RemoteControlAuthorizationPersistenceFailure
+{
+    fn from(_: super::node_facade::AuthorizationOwnerError) -> Self {
+        Self::PersistenceOwnership
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ControllerGrantMutation {
@@ -387,6 +400,24 @@ impl RemoteControlPairingPersistenceCommand {
         persistence: Option<&RemoteControlAuthorizationPersistence>,
         node: &PrnsNodeHandle,
     ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
+        let transaction = match persistence {
+            Some(persistence) => Some(persistence.begin().await?),
+            None => None,
+        };
+        self.apply_owned(remote_control, transaction.as_ref(), node)
+            .await?;
+        if let Some(transaction) = transaction {
+            transaction.finish().await?;
+        }
+        Ok(())
+    }
+
+    async fn apply_owned(
+        self,
+        remote_control: &mut AssembledRemoteControl,
+        persistence: Option<&AuthorizationTransaction>,
+        node: &PrnsNodeHandle,
+    ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
         match self {
             Self::ControllerGrant { attempt_id, grant } => {
                 persist_controller_grant(remote_control, persistence, node, attempt_id, grant).await
@@ -415,7 +446,7 @@ impl RemoteControlPairingPersistenceCommand {
 
 async fn persist_controller_grant(
     remote_control: &mut AssembledRemoteControl,
-    persistence: Option<&RemoteControlAuthorizationPersistence>,
+    persistence: Option<&AuthorizationTransaction>,
     node: &PrnsNodeHandle,
     attempt_id: RemoteControlPairingAttemptId,
     grant: RemoteControlControllerGrant,
@@ -432,7 +463,7 @@ async fn persist_controller_grant(
     if let Some(persistence) = persistence {
         if persistence
             .store(SnapshotRegion::RemoteControlControllerGrants, projected)
-            .await
+            .await?
             .is_err()
         {
             restore_controller_grants_snapshot(persistence, rollback).await?;
@@ -458,7 +489,7 @@ async fn persist_controller_grant(
 
 async fn finalize_controller_grant(
     remote_control: &mut AssembledRemoteControl,
-    persistence: Option<&RemoteControlAuthorizationPersistence>,
+    persistence: Option<&AuthorizationTransaction>,
     mutation: ControllerGrantMutation,
     rollback: Vec<u8>,
     settled: Option<
@@ -497,18 +528,18 @@ async fn finalize_controller_grant(
 }
 
 pub(super) async fn restore_controller_grants_snapshot(
-    persistence: &RemoteControlAuthorizationPersistence,
+    persistence: &AuthorizationTransaction,
     rollback: Vec<u8>,
 ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
     persistence
         .store(SnapshotRegion::RemoteControlControllerGrants, rollback)
-        .await
+        .await?
         .map_err(|_| RemoteControlAuthorizationPersistenceFailure::DurableRollback)
 }
 
 async fn persist_target_access(
     remote_control: &mut AssembledRemoteControl,
-    persistence: Option<&RemoteControlAuthorizationPersistence>,
+    persistence: Option<&AuthorizationTransaction>,
     node: &PrnsNodeHandle,
     attempt_id: RemoteControlPairingAttemptId,
     access: RemoteControlTargetAccess,
@@ -540,7 +571,7 @@ async fn persist_target_access(
     if let Some(persistence) = persistence {
         if persistence
             .store(SnapshotRegion::RemoteControlTargetAccesses, projected)
-            .await
+            .await?
             .is_err()
         {
             restore_target_accesses_snapshot(persistence, rollback).await?;
@@ -578,12 +609,12 @@ async fn persist_target_access(
 }
 
 async fn restore_target_accesses_snapshot(
-    persistence: &RemoteControlAuthorizationPersistence,
+    persistence: &AuthorizationTransaction,
     rollback: Vec<u8>,
 ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
     persistence
         .store(SnapshotRegion::RemoteControlTargetAccesses, rollback)
-        .await
+        .await?
         .map_err(|_| RemoteControlAuthorizationPersistenceFailure::DurableRollback)
 }
 
