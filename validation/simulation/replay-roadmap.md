@@ -169,6 +169,7 @@ expected values. No production clock change was needed.
    absent target attempt errors now preserve committed grants on both runtimes;
    completion-signing errors do the same without claiming pairing succeeded;
    inconsistent failure finalizations also retain committed state and report errors;
+   shared flash-journal commit errors are now reconciled by read-back when possible.
    see the design's rollout checkpoint for exact evidence and remaining scope.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.

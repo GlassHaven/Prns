@@ -368,6 +368,52 @@ Verification on macOS arm64 with `CARGO_INCREMENTAL=0`: the focused Tokio
 41 tests. Formatting, both registries, and website tests also passed. Root/workspace,
 firmware/resource, hardware, Miri and Kani checks were not run for this adapter slice.
 
+## Storage checkpoint: reconcile uncertain flash commit writes
+
+The shared flash journal previously returned immediately when its commit-word
+write reported an error, even when the requested bytes had actually landed.
+`write_record` now performs its header read-back on that path too. If the full
+header, checksum, epoch, kind, payload length and commit marker match the intended
+record, the operation succeeds and advances its cursor. Payload verification
+still happens before the commit write. A torn commit or failed read-back retains
+the original write error; uncertainty is never promoted to success without evidence.
+
+This fixes an actual write-owner boundary, not just runtime error classification.
+Embassy's existing critical-snapshot owner receives `Stored` for a reconciled commit
+and updates its snapshot cache; all consumers of this shared flash writer benefit.
+Tokio uses `FileStore`, not this journal, so its backend is unchanged. The journal
+module's existing tests were extracted without changing their behavior, and the
+new fault fixture has its own test module.
+
+The new test failed before the fix and passes afterward. It crosses complete/torn
+commit writes with available/failed read-back, including the case where an error
+is correctly retained but a fresh open finds the committed candidate. A reconciled
+success permits a subsequent append and restores all records in order, proving
+cursor advancement. Driver faults are simulated; this is not physical flash or
+whole-node power-loss evidence.
+
+Still open: failed verification after a possibly committed write, safe retry at
+an uncertain journal tail, activation/rollback recovery, and full transaction
+crash consistency. The host audit also found that `FileStore` syncs staged contents
+then renames without synchronizing the containing directory; portable filesystem
+durability and error classification require separate work. Reopening a file is not
+proof of survival across host power loss.
+
+Verification on macOS arm64 with `CARGO_INCREMENTAL=0`:
+
+- `cargo test --locked -p prns-core --features flash flash_journal`: 19 passed,
+  including the new four-case uncertain-commit test, which failed before the fix.
+- `cargo test --locked`: root default-member tests passed.
+- Full runtime library tests: 275 Tokio passed (one ignored), 157 Embassy passed.
+- `cargo clippy --locked -p prns-core --features flash --all-targets -- -D warnings`
+  and Embassy all-target clippy passed.
+- `cargo check --locked -p prns-core --no-default-features --features flash --target thumbv7em-none-eabihf` passed.
+- `python3 validation/run.py run --suite embedded-persistence-recovery`: 44 passed.
+- Formatting, both registries and website tests passed.
+
+No full workspace, firmware/resource matrix, Miri, Kani or physical-board run is
+claimed. The no-std target check is not a firmware RAM or stack-budget result.
+
 ## Rollout checkpoint: stale target-attempt settlement
 
 Both adapters now retain committed controller grants when target settlement
