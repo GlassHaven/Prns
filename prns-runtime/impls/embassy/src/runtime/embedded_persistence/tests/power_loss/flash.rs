@@ -17,6 +17,7 @@ pub(super) struct Cut {
 
 enum Power {
     On,
+    LoseCommitAcknowledgement,
     CutAt(Cut),
     RemoveAt(Cut),
     Removed,
@@ -29,6 +30,10 @@ pub(super) struct Control {
 }
 
 impl Control {
+    pub fn lose_commit_acknowledgement(&mut self) {
+        self.trace.clear();
+        self.power = Power::LoseCommitAcknowledgement;
+    }
     pub fn new() -> Self {
         Self {
             power: Power::On,
@@ -67,6 +72,12 @@ impl Control {
         );
         let ordinal = self.trace.len();
         self.trace.push(operation);
+        if matches!(self.power, Power::LoseCommitAcknowledgement)
+            && matches!(operation, Operation::Write { len: 4, .. })
+        {
+            self.power = Power::Off;
+            return Ok(len);
+        }
         if let Power::CutAt(cut) = self.power {
             if ordinal == cut.operation {
                 assert!(cut.completed_bytes <= len);

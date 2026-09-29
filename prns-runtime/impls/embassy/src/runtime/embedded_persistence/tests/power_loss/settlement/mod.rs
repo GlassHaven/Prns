@@ -19,6 +19,7 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 
 enum Finalize {
     Complete,
+    LostCommitAcknowledgement,
     DeliveryFailed,
     RetentionExpired,
     SettlementBusy,
@@ -38,6 +39,11 @@ struct Outcome {
 #[test]
 fn successful_pairing_storage_activates_then_releases_authority() {
     verify(Finalize::Complete);
+}
+
+#[test]
+fn lost_commit_acknowledgement_holds_ownership_until_read_only_confirmation() {
+    verify(Finalize::LostCommitAcknowledgement);
 }
 
 #[test]
@@ -157,6 +163,7 @@ fn verify(finalize: Finalize) -> Outcome {
                 },
             ),
             Finalize::Complete
+            | Finalize::LostCommitAcknowledgement
             | Finalize::Inconsistent
             | Finalize::SettlementBusy
             | Finalize::SettlementUnavailable
@@ -180,8 +187,51 @@ fn verify(finalize: Finalize) -> Outcome {
         assert_eq!(controller_grants_snapshot(&remote), confirmed);
         assert!(commands.receiver().try_receive().is_err());
         let mut manifold = RemoteControlPairingManifoldPersistence::new(&mut owner, &stores);
+        if matches!(finalize, Finalize::LostCommitAcknowledgement) {
+            control.borrow_mut().lose_commit_acknowledgement();
+        }
         ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(&mut manifold, WRITE_TIME);
         manifold.progress(&mut engine, WRITE_TIME).await;
+        if matches!(finalize, Finalize::LostCommitAcknowledgement) {
+            let mut completion = core::pin::pin!(stores.next_completion());
+            let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+            assert!(core::future::Future::poll(completion.as_mut(), &mut context).is_pending());
+            assert!(commands.receiver().try_receive().is_err());
+            assert_eq!(controller_grants_snapshot(&remote), confirmed);
+            let interface =
+                crate::interfaces::InterfaceId::new([0x42; crate::interfaces::INTERFACE_ID_LEN]);
+            let groups = discovery_group_snapshot("queued");
+            let mut group_change =
+                core::pin::pin!(exchange.store(DiscoveryGroupConfigurationChange::upsert(
+                    interface,
+                    *groups.groups_for(interface).unwrap()
+                )));
+            assert!(core::future::Future::poll(group_change.as_mut(), &mut context).is_pending());
+            assert!(!ManifoldPersistence::<crate::storage::GrowableHeap>::has_pending_discovery_group_change(&manifold));
+            {
+                let mut wake = core::pin::pin!(
+                    ManifoldPersistence::<crate::storage::GrowableHeap>::wait_for_work(&manifold)
+                );
+                assert!(core::future::Future::poll(wake.as_mut(), &mut context).is_pending());
+            }
+            let retry = InstantMillis(WRITE_TIME.0 + policy.retry_interval_millis);
+            let before = control.borrow().trace.clone();
+            manifold
+                .progress(&mut engine, InstantMillis(retry.0 - 1))
+                .await;
+            assert_eq!(control.borrow().trace, before);
+            manifold.progress(&mut engine, retry).await;
+            assert!(core::future::Future::poll(completion.as_mut(), &mut context).is_pending());
+            assert!(commands.receiver().try_receive().is_err());
+            control.borrow_mut().arm(None);
+            let next_retry = InstantMillis(retry.0 + policy.retry_interval_millis);
+            manifold.progress(&mut engine, next_retry).await;
+            assert!(control
+                .borrow()
+                .trace
+                .iter()
+                .all(|operation| matches!(operation, Operation::Read { .. })));
+        }
         let stored = stores.next_completion().await;
         assert_eq!(stored, Ok(()));
         assert_eq!(controller_grants_snapshot(&remote), confirmed);
@@ -229,6 +279,7 @@ fn verify(finalize: Finalize) -> Outcome {
                     }
                 }
                 Finalize::Complete
+                | Finalize::LostCommitAcknowledgement
                 | Finalize::DeliveryFailed
                 | Finalize::RetentionExpired
                 | Finalize::SettlementBusy
@@ -296,6 +347,7 @@ fn verify(finalize: Finalize) -> Outcome {
         control.borrow_mut().arm(None);
         let expected = match finalize {
             Finalize::Complete
+            | Finalize::LostCommitAcknowledgement
             | Finalize::DeliveryFailed
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy
@@ -398,6 +450,7 @@ fn verify(finalize: Finalize) -> Outcome {
         assert_eq!(controller_grants_snapshot(&remote), expected);
         let expected_grant = match finalize {
             Finalize::Complete
+            | Finalize::LostCommitAcknowledgement
             | Finalize::DeliveryFailed
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy
@@ -434,6 +487,7 @@ fn verify(finalize: Finalize) -> Outcome {
         .unwrap();
         let expected_records = match finalize {
             Finalize::Complete
+            | Finalize::LostCommitAcknowledgement
             | Finalize::DeliveryFailed
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy

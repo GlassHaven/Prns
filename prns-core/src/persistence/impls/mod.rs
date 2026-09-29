@@ -18,6 +18,7 @@ cfg_if::cfg_if! {
         };
         pub use flash_journal::{
             flash_journal_record_storage_len, FlashArenaRange, FlashJournal, FlashJournalError,
+            FlashJournalCommitResolution,
             FlashJournalLayout, FlashJournalRecord, FlashJournalRecordKind,
             FlashJournalRestoreReport, FlashJournalTimebaseState, FlashJournalWarning,
             FLASH_JOURNAL_RECORD_OVERHEAD,

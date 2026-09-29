@@ -161,6 +161,7 @@ fn uncertain_commit_is_successful_only_when_readback_proves_the_commit() {
             .append(FlashJournalRecordKind::RouteUpsert, b"prior")
             .await
             .unwrap();
+        let candidate_at = baseline.active.as_ref().unwrap().append_at;
         let bytes = baseline.release().bytes;
         for commit in [CommitWrite::Complete, CommitWrite::Torn] {
             for fail_readback in [false, true] {
@@ -184,6 +185,11 @@ fn uncertain_commit_is_successful_only_when_readback_proves_the_commit() {
                     .await;
                 let expected = if matches!(commit, CommitWrite::Complete) && !fail_readback {
                     Ok(())
+                } else if fail_readback {
+                    Err(FlashJournalError::CommitUnconfirmed {
+                        at: candidate_at,
+                        error: FakeError::Interrupted,
+                    })
                 } else {
                     Err(FlashJournalError::Flash(FakeError::Interrupted))
                 };
@@ -218,6 +224,69 @@ fn uncertain_commit_is_successful_only_when_readback_proves_the_commit() {
                 let (_, report, records) = open(journal.release().inner).await;
                 assert_eq!(report.warning, None);
                 assert_eq!(records, expected_records);
+            }
+        }
+    });
+}
+
+#[test]
+fn uncertain_append_confirmation_is_read_only_exact_and_retryable() {
+    embassy_futures::block_on(async {
+        let (mut baseline, _, _) = open(FakeFlash::new()).await;
+        baseline.initialize_empty().await.unwrap();
+        let bytes = baseline.release().bytes;
+        for commit in [CommitWrite::Complete, CommitWrite::Torn] {
+            let mut inner = FakeFlash::new();
+            inner.bytes = bytes;
+            let flash = UncertainCommitFlash {
+                inner,
+                commit,
+                commit_attempted: false,
+                fail_readback: true,
+            };
+            let (mut journal, _) =
+                FlashJournal::open(flash, LAYOUT, &mut [0; IO_CHUNK_LEN], |_| {})
+                    .await
+                    .unwrap();
+            let kind = FlashJournalRecordKind::RemoteControlControllerGrants;
+            let candidate = b"candidate";
+            let Err(FlashJournalError::CommitUnconfirmed { at, .. }) =
+                journal.append(kind, candidate).await
+            else {
+                panic!("commit confirmation must remain unresolved");
+            };
+            let image = journal.flash.inner.bytes;
+            assert_eq!(
+                journal.confirm_append(at, kind, candidate).await,
+                Err(FlashJournalError::Flash(FakeError::Interrupted))
+            );
+            journal.flash.fail_readback = false;
+            if matches!(commit, CommitWrite::Complete) {
+                assert_eq!(
+                    journal.confirm_append(at, kind, b"different").await,
+                    Err(FlashJournalError::VerificationFailed)
+                );
+                assert_eq!(
+                    journal
+                        .confirm_append(
+                            at,
+                            FlashJournalRecordKind::RemoteControlTargetAccesses,
+                            candidate
+                        )
+                        .await,
+                    Err(FlashJournalError::VerificationFailed)
+                );
+            }
+            for _ in 0..2 {
+                assert_eq!(
+                    journal.confirm_append(at, kind, candidate).await,
+                    Ok(match commit {
+                        CommitWrite::Complete => FlashJournalCommitResolution::Committed,
+                        CommitWrite::Torn => FlashJournalCommitResolution::NotCommitted,
+                        CommitWrite::Suspend => unreachable!(),
+                    })
+                );
+                assert_eq!(journal.flash.inner.bytes, image);
             }
         }
     });

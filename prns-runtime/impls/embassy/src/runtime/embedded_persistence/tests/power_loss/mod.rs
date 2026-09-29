@@ -69,6 +69,7 @@ struct Outcome {
 #[derive(Debug, PartialEq, Eq)]
 enum Completion {
     Settled(Result<(), EmbeddedPersistenceFailure>),
+    ConfirmationPending,
     PowerRemoved,
 }
 
@@ -127,6 +128,11 @@ async fn write(image: [u8; CAPACITY], fault: Fault) -> Outcome {
             assert!(control.borrow().power_removed());
             assert!(core::future::Future::poll(completion.as_mut(), &mut context).is_pending());
             result = Some(Completion::PowerRemoved);
+            break;
+        }
+        if owner.pending_confirmation.is_some() {
+            assert!(core::future::Future::poll(completion.as_mut(), &mut context).is_pending());
+            result = Some(Completion::ConfirmationPending);
             break;
         }
         if let core::task::Poll::Ready(value) =
@@ -222,7 +228,11 @@ fn campaign(campaign: Campaign) {
                 assert_eq!(outcome.trace, reference.trace[..=operation], "{cut:?}");
                 assert_eq!(
                     outcome.completion,
-                    Completion::Settled(Err(EmbeddedPersistenceFailure::Flash)),
+                    if operation >= commit {
+                        Completion::ConfirmationPending
+                    } else {
+                        Completion::Settled(Err(EmbeddedPersistenceFailure::Flash))
+                    },
                     "{cut:?}"
                 );
                 assert_eq!(outcome.published, confirmed, "{cut:?}");

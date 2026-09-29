@@ -317,6 +317,9 @@ pub(crate) enum RemoteControlAuthorizationSnapshotKind {
 pub(crate) enum StoreRemoteControlAuthorizationSnapshotOutcome {
     Stored,
     CompactionInProgress,
+    ConfirmationPending {
+        retry_at: InstantMillis,
+    },
     Failed {
         failure: EmbeddedPersistenceFailure,
         // The store owns retry policy; None means it cannot schedule a retry.
@@ -353,6 +356,7 @@ pub struct EmbeddedFlashPersistence<
     compaction_ratchet_keys: HeaplessVec<DestinationHash, PENDING>,
     remote_control_controller_grants_snapshot: Option<RemoteControlAuthorizationSnapshot>,
     remote_control_target_accesses_snapshot: Option<RemoteControlAuthorizationSnapshot>,
+    pending_confirmation: Option<(u32, FlashJournalRecordKind)>,
     route_dirty_since: Option<InstantMillis>,
     ratchet_dirty_since: Option<InstantMillis>,
     last_route_success: Option<InstantMillis>,
@@ -427,6 +431,7 @@ where
             compaction_ratchet_keys: HeaplessVec::new(),
             remote_control_controller_grants_snapshot: None,
             remote_control_target_accesses_snapshot: None,
+            pending_confirmation: None,
             route_dirty_since: None,
             ratchet_dirty_since: None,
             last_route_success: None,
@@ -678,6 +683,9 @@ where
     }
 
     fn next_deadline(&self, now: InstantMillis) -> Option<InstantMillis> {
+        if self.pending_confirmation.is_some() {
+            return self.retry_not_before.or(Some(now));
+        }
         let group_configuration_pending = self.groups.as_ref().has_pending_request();
         if self.journal.is_none() {
             return group_configuration_pending.then_some(now);
@@ -749,6 +757,12 @@ where
         engine: &mut EngineState<S>,
         now: InstantMillis,
     ) {
+        if self
+            .pending_confirmation
+            .is_some_and(|(_, kind)| kind != FlashJournalRecordKind::DiscoveryGroupConfigurations)
+        {
+            return;
+        }
         if let Some(change) = self.groups.as_ref().try_take_request() {
             match self
                 .store_discovery_group_configuration_change(engine, &change, now)
@@ -765,13 +779,18 @@ where
                 StoreRemoteControlAuthorizationSnapshotOutcome::CompactionInProgress => {
                     self.groups.as_ref().resignal_request(change);
                 }
+                StoreRemoteControlAuthorizationSnapshotOutcome::ConfirmationPending { .. } => {
+                    self.groups.as_ref().resignal_request(change);
+                }
                 StoreRemoteControlAuthorizationSnapshotOutcome::Failed { failure, .. } => {
                     self.groups.as_ref().settle(Err(failure));
                 }
             }
             return;
         }
-        if self.retry_not_before.is_some_and(|retry| now.0 < retry.0) {
+        if self.pending_confirmation.is_some()
+            || self.retry_not_before.is_some_and(|retry| now.0 < retry.0)
+        {
             return;
         }
         if self.compaction.is_some() {
@@ -991,6 +1010,39 @@ where
         payload: &[u8],
         now: InstantMillis,
     ) -> StoreRemoteControlAuthorizationSnapshotOutcome {
+        if let Some((at, pending_kind)) = self.pending_confirmation {
+            let retry_at = self.retry_not_before.unwrap_or(now);
+            if now < retry_at || pending_kind != record_kind {
+                return StoreRemoteControlAuthorizationSnapshotOutcome::ConfirmationPending {
+                    retry_at,
+                };
+            }
+            let resolution = match self.journal.as_mut() {
+                Some(journal) => journal.confirm_append(at, record_kind, payload).await,
+                None => Err(FlashJournalError::Uninitialized),
+            };
+            match resolution {
+                Ok(crate::persistence::FlashJournalCommitResolution::Committed) => {
+                    self.pending_confirmation = None;
+                    self.retry_not_before = None;
+                    return StoreRemoteControlAuthorizationSnapshotOutcome::Stored;
+                }
+                Ok(crate::persistence::FlashJournalCommitResolution::NotCommitted) => {
+                    self.pending_confirmation = None;
+                    return StoreRemoteControlAuthorizationSnapshotOutcome::Failed {
+                        failure: EmbeddedPersistenceFailure::Flash,
+                        retry_at: self.retry_not_before,
+                    };
+                }
+                Err(error) => {
+                    let failure = failure_from_journal(error);
+                    self.note_write_failure(now, failure);
+                    return StoreRemoteControlAuthorizationSnapshotOutcome::ConfirmationPending {
+                        retry_at: self.retry_not_before.unwrap_or(now),
+                    };
+                }
+            }
+        }
         if self.retry_not_before.is_some_and(|retry| now.0 < retry.0) {
             return StoreRemoteControlAuthorizationSnapshotOutcome::Failed {
                 failure: EmbeddedPersistenceFailure::Flash,
@@ -1009,6 +1061,13 @@ where
         };
         match journal.append(record_kind, payload).await {
             Ok(()) => StoreRemoteControlAuthorizationSnapshotOutcome::Stored,
+            Err(FlashJournalError::CommitUnconfirmed { at, .. }) => {
+                self.pending_confirmation = Some((at, record_kind));
+                self.note_write_failure(now, EmbeddedPersistenceFailure::Flash);
+                StoreRemoteControlAuthorizationSnapshotOutcome::ConfirmationPending {
+                    retry_at: self.retry_not_before.unwrap_or(now),
+                }
+            }
             Err(FlashJournalError::ArenaFull) => {
                 self.require_snapshot(EmbeddedPersistenceTarget::CriticalState, now);
                 let allowed = self.next_compaction_not_before.unwrap_or(now);
@@ -1435,7 +1494,9 @@ where
     Groups: AsRef<DiscoveryGroupConfigurationStoreExchange>,
 {
     fn has_pending_discovery_group_change(&self) -> bool {
-        self.groups.as_ref().has_pending_request()
+        self.pending_confirmation
+            .is_none_or(|(_, kind)| kind == FlashJournalRecordKind::DiscoveryGroupConfigurations)
+            && self.groups.as_ref().has_pending_request()
     }
 
     fn observe(&mut self, journaled: &Journaled<'_>, now: InstantMillis) {
@@ -1447,6 +1508,9 @@ where
     }
 
     async fn wait_for_work(&self) {
+        if self.pending_confirmation.is_some() {
+            core::future::pending::<()>().await;
+        }
         self.groups.as_ref().wait_until_request_ready().await;
     }
 
@@ -1757,9 +1821,9 @@ fn apply_record<S: StorageLayout>(
 
 fn failure_from_journal<E>(error: FlashJournalError<E>) -> EmbeddedPersistenceFailure {
     match error {
-        FlashJournalError::Flash(_) | FlashJournalError::VerificationFailed => {
-            EmbeddedPersistenceFailure::Flash
-        }
+        FlashJournalError::Flash(_)
+        | FlashJournalError::CommitUnconfirmed { .. }
+        | FlashJournalError::VerificationFailed => EmbeddedPersistenceFailure::Flash,
         FlashJournalError::ArenaFull
         | FlashJournalError::OutOfBounds
         | FlashJournalError::Misaligned

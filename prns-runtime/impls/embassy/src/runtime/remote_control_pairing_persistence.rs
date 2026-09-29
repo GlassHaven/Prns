@@ -524,6 +524,9 @@ where
             StoreRemoteControlAuthorizationSnapshotOutcome::CompactionInProgress => {
                 pending.ready_at = Some(now);
             }
+            StoreRemoteControlAuthorizationSnapshotOutcome::ConfirmationPending { retry_at } => {
+                pending.ready_at = Some(retry_at);
+            }
             StoreRemoteControlAuthorizationSnapshotOutcome::Failed { failure, retry_at } => {
                 match request.requirement {
                     RemoteControlAuthorizationStoreRequirement::Initial => {

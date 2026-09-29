@@ -204,11 +204,17 @@ async fn embedded_owner_restores_torn_group_updates_and_forgets_previous_boots()
             let mut flash = Flash::boot(image.clone());
             flash.arm(cut);
             let (mut journal, _, _) = open(flash).await;
-            assert_eq!(
-                journal
-                    .append(Kind::DiscoveryGroupConfigurations, &encode(&candidate))
-                    .await,
-                Err(FlashJournalError::Flash(Error::PowerLost)),
+            assert!(
+                matches!(
+                    journal
+                        .append(Kind::DiscoveryGroupConfigurations, &encode(&candidate))
+                        .await,
+                    Err(FlashJournalError::Flash(Error::PowerLost)
+                        | FlashJournalError::CommitUnconfirmed {
+                            error: Error::PowerLost,
+                            ..
+                        })
+                ),
                 "{cut:?}"
             );
             let flash = journal.release();

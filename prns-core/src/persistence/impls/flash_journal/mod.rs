@@ -129,6 +129,7 @@ pub struct FlashJournalRecord<'a> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum FlashJournalError<E> {
     Flash(E),
+    CommitUnconfirmed { at: u32, error: E },
     Misaligned,
     OutOfBounds,
     ArenaFull,
@@ -138,6 +139,12 @@ pub enum FlashJournalError<E> {
     PayloadTooLarge,
     ScratchTooShort,
     VerificationFailed,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum FlashJournalCommitResolution {
+    Committed,
+    NotCommitted,
 }
 
 struct ArenaState {
@@ -361,6 +368,49 @@ impl<F: NorFlash> FlashJournal<F> {
         )
         .await?;
         Ok(())
+    }
+
+    /// Resolve a completed append whose commit readback failed. The owner must
+    /// exclude other writes and compaction until this exact record is resolved.
+    pub async fn confirm_append(
+        &mut self,
+        at: u32,
+        kind: FlashJournalRecordKind,
+        payload: &[u8],
+    ) -> Result<FlashJournalCommitResolution, FlashJournalError<F::Error>> {
+        if self.compaction.is_some() {
+            return Err(FlashJournalError::CompactionInProgress);
+        }
+        let cursor = self
+            .active
+            .as_ref()
+            .ok_or(FlashJournalError::Uninitialized)?;
+        let arena = self.layout.arenas[cursor.index];
+        let end = record_end::<F>(at, payload.len()).ok_or(FlashJournalError::PayloadTooLarge)?;
+        if at < arena.start || end > arena.end || !at.is_multiple_of(F::READ_SIZE as u32) {
+            return Err(FlashJournalError::OutOfBounds);
+        }
+        let mut header = AlignedHeader([0; HEADER_LEN]);
+        self.flash
+            .read(at, &mut header.0)
+            .await
+            .map_err(FlashJournalError::Flash)?;
+        if header.0[COMMIT_OFFSET..] != COMMIT_WORD.to_le_bytes() {
+            return Ok(FlashJournalCommitResolution::NotCommitted);
+        }
+        let checksum = record_checksum(&header.0[..CHECKSUM_PREFIX_LEN], payload);
+        if !header_matches_record(
+            &header.0,
+            cursor.epoch,
+            kind,
+            payload.len() as u32,
+            checksum,
+            true,
+        ) {
+            return Err(FlashJournalError::VerificationFailed);
+        }
+        verify_record_payload(&mut self.flash, at, payload).await?;
+        Ok(FlashJournalCommitResolution::Committed)
     }
 
     #[must_use]
@@ -797,12 +847,7 @@ async fn write_record<F: NorFlash>(
         return Err(FlashJournalError::ArenaFull);
     }
     let checksum = {
-        let mut header = AlignedHeader([0xFF; HEADER_LEN]);
-        header.0[..4].copy_from_slice(&MAGIC);
-        header.0[4..6].copy_from_slice(&SCHEMA_VERSION.to_le_bytes());
-        header.0[6..8].copy_from_slice(&(kind as u16).to_le_bytes());
-        header.0[8..16].copy_from_slice(&epoch.to_le_bytes());
-        header.0[16..20].copy_from_slice(&payload_len.to_le_bytes());
+        let mut header = record_header(epoch, kind, payload_len, 0, false);
         let checksum = record_checksum(&header.0[..CHECKSUM_PREFIX_LEN], payload);
         header.0[20..24].copy_from_slice(&checksum.to_le_bytes());
         flash
@@ -844,24 +889,7 @@ async fn write_record<F: NorFlash>(
             return Err(FlashJournalError::VerificationFailed);
         }
     }
-    let mut payload_at = at + HEADER_LEN as u32;
-    let mut remaining = payload;
-    while !remaining.is_empty() {
-        let take = remaining.len().min(IO_CHUNK_LEN);
-        let read_len = align_up(take, F::READ_SIZE).ok_or(FlashJournalError::PayloadTooLarge)?;
-        let mut chunk = AlignedIo([0u8; IO_CHUNK_LEN]);
-        flash
-            .read(payload_at, &mut chunk.0[..read_len])
-            .await
-            .map_err(FlashJournalError::Flash)?;
-        if chunk.0[..take] != remaining[..take]
-            || chunk.0[take..read_len].iter().any(|byte| *byte != 0xFF)
-        {
-            return Err(FlashJournalError::VerificationFailed);
-        }
-        payload_at += read_len as u32;
-        remaining = &remaining[take..];
-    }
+    verify_record_payload(flash, at, payload).await?;
 
     let commit = AlignedCommit(COMMIT_WORD.to_le_bytes());
     let commit_result = flash.write(at + COMMIT_OFFSET as u32, &commit.0).await;
@@ -869,6 +897,9 @@ async fn write_record<F: NorFlash>(
         let mut header = AlignedHeader([0u8; HEADER_LEN]);
         let readback = flash.read(at, &mut header.0).await;
         if let Err(error) = commit_result {
+            if readback.is_err() {
+                return Err(FlashJournalError::CommitUnconfirmed { at, error });
+            }
             if readback.is_ok()
                 && header_matches_record(&header.0, epoch, kind, payload_len, checksum, true)
             {
@@ -876,12 +907,39 @@ async fn write_record<F: NorFlash>(
             }
             return Err(FlashJournalError::Flash(error));
         }
-        readback.map_err(FlashJournalError::Flash)?;
+        readback.map_err(|error| FlashJournalError::CommitUnconfirmed { at, error })?;
         if !header_matches_record(&header.0, epoch, kind, payload_len, checksum, true) {
             return Err(FlashJournalError::VerificationFailed);
         }
     }
     Ok(end)
+}
+
+#[inline(never)]
+async fn verify_record_payload<F: NorFlash>(
+    flash: &mut F,
+    at: u32,
+    payload: &[u8],
+) -> Result<(), FlashJournalError<F::Error>> {
+    let mut payload_at = at + HEADER_LEN as u32;
+    for remaining in payload.chunks(IO_CHUNK_LEN) {
+        let read_len =
+            align_up(remaining.len(), F::READ_SIZE).ok_or(FlashJournalError::PayloadTooLarge)?;
+        let mut chunk = AlignedIo([0; IO_CHUNK_LEN]);
+        flash
+            .read(payload_at, &mut chunk.0[..read_len])
+            .await
+            .map_err(FlashJournalError::Flash)?;
+        if chunk.0[..remaining.len()] != *remaining
+            || chunk.0[remaining.len()..read_len]
+                .iter()
+                .any(|byte| *byte != 0xff)
+        {
+            return Err(FlashJournalError::VerificationFailed);
+        }
+        payload_at += read_len as u32;
+    }
+    Ok(())
 }
 
 fn header_matches_record(
@@ -892,19 +950,30 @@ fn header_matches_record(
     checksum: u32,
     committed: bool,
 ) -> bool {
+    *bytes == record_header(epoch, kind, payload_len, checksum, committed).0
+}
+
+fn record_header(
+    epoch: u64,
+    kind: FlashJournalRecordKind,
+    payload_len: u32,
+    checksum: u32,
+    committed: bool,
+) -> AlignedHeader {
     let expected_commit = if committed {
         COMMIT_WORD.to_le_bytes()
     } else {
         [0xFF; 4]
     };
-    bytes[..4] == MAGIC
-        && bytes[4..6] == SCHEMA_VERSION.to_le_bytes()
-        && bytes[6..8] == (kind as u16).to_le_bytes()
-        && bytes[8..16] == epoch.to_le_bytes()
-        && bytes[16..20] == payload_len.to_le_bytes()
-        && bytes[20..24] == checksum.to_le_bytes()
-        && bytes[24..COMMIT_OFFSET].iter().all(|byte| *byte == 0xFF)
-        && bytes[COMMIT_OFFSET..HEADER_LEN] == expected_commit
+    let mut header = AlignedHeader([0xFF; HEADER_LEN]);
+    header.0[..4].copy_from_slice(&MAGIC);
+    header.0[4..6].copy_from_slice(&SCHEMA_VERSION.to_le_bytes());
+    header.0[6..8].copy_from_slice(&(kind as u16).to_le_bytes());
+    header.0[8..16].copy_from_slice(&epoch.to_le_bytes());
+    header.0[16..20].copy_from_slice(&payload_len.to_le_bytes());
+    header.0[20..24].copy_from_slice(&checksum.to_le_bytes());
+    header.0[COMMIT_OFFSET..].copy_from_slice(&expected_commit);
+    header
 }
 
 fn record_end<F: NorFlash>(at: u32, payload_len: usize) -> Option<u32> {

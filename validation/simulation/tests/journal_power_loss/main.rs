@@ -103,9 +103,15 @@ async fn every_compaction_cut_restores_one_complete_generation() {
             let mut flash = Flash::boot(image.clone());
             flash.arm(cut);
             let (mut journal, _, _) = open(flash).await;
-            assert_eq!(
-                compact(&mut journal, &candidate).await,
-                Err(FlashJournalError::Flash(Error::PowerLost)),
+            assert!(
+                matches!(
+                    compact(&mut journal, &candidate).await,
+                    Err(FlashJournalError::Flash(Error::PowerLost)
+                        | FlashJournalError::CommitUnconfirmed {
+                            error: Error::PowerLost,
+                            ..
+                        })
+                ),
                 "{cut:?}: {event:?}"
             );
             let interrupted = journal.release();

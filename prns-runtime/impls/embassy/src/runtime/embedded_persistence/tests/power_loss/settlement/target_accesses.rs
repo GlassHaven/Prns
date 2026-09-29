@@ -13,6 +13,7 @@ use crate::runtime::remote_control_pairing_persistence::EmbeddedRemoteControlCon
 
 enum Acknowledgement {
     Completed,
+    CommitReplyLost,
     Busy,
     Mismatch,
     NotOwed,
@@ -39,6 +40,7 @@ fn access(fill: u8, request: RemoteControlRequestKind) -> RemoteControlTargetAcc
 fn committed_target_access_survives_rejected_settlement_and_fresh_restore() {
     for acknowledgement in [
         Acknowledgement::Completed,
+        Acknowledgement::CommitReplyLost,
         Acknowledgement::Busy,
         Acknowledgement::Mismatch,
         Acknowledgement::NotOwed,
@@ -55,8 +57,9 @@ fn committed_target_access_survives_rejected_settlement_and_fresh_restore() {
                 let policy = EmbeddedPersistencePolicy::hopspot_default(
                     EmbeddedCompactionPolicy::hopspot(0),
                 );
+                let control = Rc::new(RefCell::new(Control::new()));
                 let mut owner = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _>::with_discovery_group_store(
-                    TestFlash::new(), LAYOUT, policy, FixedRouteSnapshotKeys::new(), (|_| {}) as fn(EmbeddedPersistenceDiagnostic), &groups,
+                    Flash::boot([0xff; CAPACITY], control.clone()), LAYOUT, policy, FixedRouteSnapshotKeys::new(), (|_| {}) as fn(EmbeddedPersistenceDiagnostic), &groups,
                 );
                 let mut engine = EngineState::<crate::storage::GrowableHeap>::default();
                 let mut remote = available_remote_control(&mut engine);
@@ -111,11 +114,35 @@ fn committed_target_access_survives_rejected_settlement_and_fresh_restore() {
                     .unwrap();
                 let mut manifold =
                     RemoteControlPairingManifoldPersistence::new(&mut owner, &stores);
+                if matches!(acknowledgement, Acknowledgement::CommitReplyLost) {
+                    control.borrow_mut().lose_commit_acknowledgement();
+                }
                 ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
                     &mut manifold,
                     WRITE_TIME,
                 );
                 manifold.progress(&mut engine, WRITE_TIME).await;
+                if matches!(acknowledgement, Acknowledgement::CommitReplyLost) {
+                    let mut completion = core::pin::pin!(stores.next_completion());
+                    let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+                    assert!(
+                        core::future::Future::poll(completion.as_mut(), &mut context).is_pending()
+                    );
+                    assert!(commands.receiver().try_receive().is_err());
+                    assert_eq!(target_accesses_snapshot(&remote), confirmed);
+                    control.borrow_mut().arm(None);
+                    manifold
+                        .progress(
+                            &mut engine,
+                            InstantMillis(WRITE_TIME.0 + policy.retry_interval_millis),
+                        )
+                        .await;
+                    assert!(control
+                        .borrow()
+                        .trace
+                        .iter()
+                        .all(|operation| matches!(operation, Operation::Read { .. })));
+                }
                 assert_eq!(stores.next_completion().await, Ok(()));
                 assert_eq!(target_accesses_snapshot(&remote), confirmed);
                 let mut competing = core::pin::pin!(handle.settle_pairing_command(
@@ -156,7 +183,7 @@ fn committed_target_access_survives_rejected_settlement_and_fresh_restore() {
                     );
                     let result = match acknowledgement {
                         Acknowledgement::Busy => unreachable!("occupied settlement slot has no acknowledgement"),
-                        Acknowledgement::Completed => Ok(RemoteControlControllerPairingFinalization::Completed {
+                        Acknowledgement::Completed | Acknowledgement::CommitReplyLost => Ok(RemoteControlControllerPairingFinalization::Completed {
                             attempt_id, retired_link: LinkId::new([0x55; 16]), access: candidate(),
                         }),
                         Acknowledgement::Mismatch => Err(Failure::AttemptMismatch { settled: attempt_id, active: other }),
@@ -210,7 +237,7 @@ fn committed_target_access_survives_rejected_settlement_and_fresh_restore() {
                 );
                 let next = target_accesses_snapshot(&remote);
                 drop(manifold);
-                let bytes = owner.journal.take().unwrap().release().bytes;
+                let bytes = owner.journal.take().unwrap().release().into_image();
                 drop(owner);
                 let mut records = Vec::new();
                 let mut flash = TestFlash::new();

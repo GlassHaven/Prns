@@ -615,3 +615,35 @@ with three ignored. Root default-member tests and core all-target clippy with
 whitespace checks and validation registry verification passed. Runtime-specific,
 firmware, Miri, ISA and physical-device suites were not run for this test-only
 slice; unrelated CI failures remain deferred.
+
+## Recovery checkpoint: retain uncertain embedded commits
+
+The flash journal now distinguishes failed commit readback from an ordinary
+pre-commit failure. Its read-only `confirm_append` operation compares the exact
+record kind, epoch, length, checksum and payload, distinguishing a committed
+candidate from an absent commit word without rewriting the record. Read errors
+and mismatched committed records remain unresolved; they cannot authorize success.
+
+The Embassy critical-snapshot owner retains the uncertain record address and kind.
+It keeps the existing bounded transaction and candidate snapshot, retries on the
+existing persistence schedule, and blocks other journal work until confirmation
+resolves. A queued discovery-group request cannot bypass the authorization owner
+or continuously wake its retry wait. Confirmed commits update the durable cache
+before activation; confirmed non-commits enter the existing failure path. No
+rollback or completion is emitted solely because commit readback failed.
+
+This covers both authorization regions and the shared discovery-group snapshot
+path. The new owner regressions lose the commit acknowledgement, check pending
+completion and unchanged live authority, recover reads, and require read-only
+confirmation followed by exact activation and two fresh restores. Journal tests
+also cover torn commits and refusal of a different candidate or record kind.
+The group fault campaign now expects unresolved completion, rather than definite
+failure, when power disappears during commit confirmation.
+
+This is the Embassy backend recovery slice. Tokio's rename/directory-sync
+reconciliation is still pending and must retain worker ownership without an
+unbounded blocking-thread retry or a stale background flush. Cancellation during
+outstanding flash I/O, post-commit activation inconsistency, explicit rollback
+durability and complete node-level recovery remain separate open boundaries.
+The new embedded owner state has a real resource cost; firmware resource evidence
+must measure it rather than assume it fits.
