@@ -970,11 +970,11 @@ where
                         ..
                     },
                 ) => ActivatedAuthorizationSettlement::RollBack { failure: None },
-                Ok(finalization) => ActivatedAuthorizationSettlement::RollBack {
-                    failure: Some(unexpected_target_finalization(
+                Ok(finalization) => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
+                    failure: unexpected_target_finalization(
                         EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
                         finalization,
-                    )),
+                    ),
                 },
                 Err(failure) => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
                     failure: target_settlement_failure(

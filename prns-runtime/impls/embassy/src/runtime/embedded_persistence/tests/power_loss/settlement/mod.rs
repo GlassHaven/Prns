@@ -24,6 +24,7 @@ enum Finalize {
     SettlementBusy,
     SettlementUnavailable,
     SettlementRejected(SettleRemoteControlTargetPairingAuthorizationFailure),
+    Inconsistent,
     RollBack,
     HealthyRollback,
     InterruptedRollback(Cut),
@@ -37,6 +38,11 @@ struct Outcome {
 #[test]
 fn successful_pairing_storage_activates_then_releases_authority() {
     verify(Finalize::Complete);
+}
+
+#[test]
+fn committed_authority_survives_inconsistent_finalization() {
+    verify(Finalize::Inconsistent);
 }
 
 #[test]
@@ -151,6 +157,7 @@ fn verify(finalize: Finalize) -> Outcome {
                 },
             ),
             Finalize::Complete
+            | Finalize::Inconsistent
             | Finalize::SettlementBusy
             | Finalize::SettlementUnavailable
             | Finalize::RollBack
@@ -211,6 +218,16 @@ fn verify(finalize: Finalize) -> Outcome {
                 )
             );
             let finalization = match finalize {
+                Finalize::Inconsistent => {
+                    RemoteControlTargetPairingFinalization::AuthorizationFailureRecorded {
+                        attempt_id,
+                        retired_link: LinkId::new([0x93; 16]),
+                        responder: crate::remote_control::RemoteControlTargetPairingResponder::new(
+                            LinkId::new([0x93; 16]),
+                            crate::routing::links::request::RequestId([0x94; 16]),
+                        ),
+                    }
+                }
                 Finalize::Complete
                 | Finalize::DeliveryFailed
                 | Finalize::RetentionExpired
@@ -247,6 +264,11 @@ fn verify(finalize: Finalize) -> Outcome {
         assert_eq!(
             accepted,
             match finalize {
+                Finalize::Inconsistent => Err(EmbeddedRemoteControlPairingPersistenceFailure::UnexpectedTargetFinalization {
+                    attempt_id,
+                    operation: EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
+                    finalization: crate::runtime::remote_control_pairing_persistence::EmbeddedRemoteControlTargetPairingFinalization::AuthorizationFailureRecorded,
+                }),
                 Finalize::SettlementBusy => Err(
                     EmbeddedRemoteControlPairingPersistenceFailure::SettlementBusy {
                         attempt_id,
@@ -278,7 +300,8 @@ fn verify(finalize: Finalize) -> Outcome {
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy
             | Finalize::SettlementUnavailable
-            | Finalize::SettlementRejected(_) => {
+            | Finalize::SettlementRejected(_)
+            | Finalize::Inconsistent => {
                 assert!(progress.is_ready());
                 let mut request = core::pin::pin!(stores.wait_for_next_test_store());
                 let mut context = core::task::Context::from_waker(core::task::Waker::noop());
@@ -373,7 +396,8 @@ fn verify(finalize: Finalize) -> Outcome {
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy
             | Finalize::SettlementUnavailable
-            | Finalize::SettlementRejected(_) => candidate,
+            | Finalize::SettlementRejected(_)
+            | Finalize::Inconsistent => candidate,
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
                 prior
             }
@@ -408,7 +432,8 @@ fn verify(finalize: Finalize) -> Outcome {
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy
             | Finalize::SettlementUnavailable
-            | Finalize::SettlementRejected(_) => {
+            | Finalize::SettlementRejected(_)
+            | Finalize::Inconsistent => {
                 std::vec![confirmed.to_vec(), next.to_vec()]
             }
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {

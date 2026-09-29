@@ -448,3 +448,38 @@ passed `cargo clippy --locked --manifest-path <runtime>/Cargo.toml --all-targets
 `python3 validation/run.py run --suite embedded-persistence-recovery` passed 43.
 Formatting, both registries and website tests passed. Root/workspace suites,
 firmware/resource builds, hardware, Miri and Kani were not run for this adapter slice.
+
+## Rollout checkpoint: inconsistent target finalization
+
+Both adapters now preserve a stored and activated grant when a `Persisted`
+settlement unexpectedly returns `AuthorizationFailureRecorded`. That response
+belongs to the failed-storage path; it is not the explicit
+`AuthorizationRollbackRequired` outcome. Tokio returns
+`CommittedTargetGrantFinalizationMismatch`; Embassy releases authorization
+ownership and returns `UnexpectedTargetFinalization`. Neither reports success.
+The legitimate failed-storage path and explicit rollback handling are unchanged.
+
+Both regression fixtures failed before the change. Tokio removed the committed
+grant; Embassy entered rollback instead of immediately returning the inconsistency.
+The Tokio file-worker fixture now covers fourteen add/replace cases, checking
+whole live tables and fresh file readers. Embassy verifies the exact error,
+ready/released state, absence of a rollback request, prior/candidate record order
+and the complete candidate table on two fresh restores. The inconsistent response
+is deliberately scripted: the current engine does not normally emit it for a
+`Persisted` command. This is defensive adapter coverage, not a newly reproduced
+whole-node race. No shared-core production code or persisted format changed.
+
+The post-commit settlement audit now leaves only explicit engine-directed rollback
+on that path. Indeterminate storage, activation failure recovery, explicit rollback
+durability, completion retries and whole-node crash coverage still require work;
+full crash-consistency closure is not claimed.
+
+Verification for inconsistent-finalization handling on macOS arm64, using
+`CARGO_INCREMENTAL=0`: focused Tokio pairing-persistence tests (five) and the
+Embassy inconsistent-finalization regression passed. Full
+`cargo test --locked --manifest-path <runtime>/Cargo.toml --lib` passed 275 Tokio
+tests (one ignored) and 157 Embassy tests. Both runtimes passed
+`cargo clippy --locked --manifest-path <runtime>/Cargo.toml --all-targets -- -D warnings`.
+`python3 validation/run.py run --suite embedded-persistence-recovery` passed 44
+tests. Formatting, both registries and website tests passed. Root/workspace,
+firmware/resource, hardware, Miri and Kani checks were not run for this adapter slice.
