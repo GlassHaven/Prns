@@ -71,7 +71,7 @@ async fn image(
     journal.release().bytes
 }
 
-async fn restore(image: [u8; CAPACITY], expected: &[Grant]) {
+pub(super) async fn restore(image: [u8; CAPACITY], expected: &[Grant]) {
     let exchange = DiscoveryGroupConfigurationStoreExchange::new();
     let mut flash = TestFlash::new();
     flash.bytes = image;

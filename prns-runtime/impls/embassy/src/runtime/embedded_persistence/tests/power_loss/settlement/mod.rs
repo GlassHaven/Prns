@@ -18,6 +18,13 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 enum Finalize {
     Complete,
     RollBack,
+    HealthyRollback,
+    InterruptedRollback(Cut),
+}
+
+struct Outcome {
+    image: [u8; CAPACITY],
+    trace: Vec<Operation>,
 }
 
 #[test]
@@ -30,14 +37,16 @@ fn rejected_pairing_settlement_restores_authority_and_waits_for_durable_rollback
     verify(Finalize::RollBack);
 }
 
-fn verify(finalize: Finalize) {
+fn verify(finalize: Finalize) -> Outcome {
     embassy_futures::block_on(async {
         let commands = Channel::<CriticalSectionRawMutex, IssuedCommand, 1>::new();
         let completions = CompletionPool::<CriticalSectionRawMutex, 0>::new();
         let handle = PrnsNodeHandle::new(commands.sender(), &completions);
         let stores = RemoteControlAuthorizationStoreExchange::<CriticalSectionRawMutex>::new();
         let exchange = DiscoveryGroupConfigurationStoreExchange::new();
-        let (flash, fail_write) = TestFlash::controlled();
+        let control = Rc::new(RefCell::new(Control::new()));
+        let flash = Flash::boot([0xff; CAPACITY], control.clone());
+        let fail_write = flash.write_fault_control();
         let policy =
             EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0));
         let mut owner = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _>::with_discovery_group_store(
@@ -117,7 +126,9 @@ fn verify(finalize: Finalize) {
                 Finalize::Complete => {
                     RemoteControlTargetPairingFinalization::CompletionDispatched { attempt_id }
                 }
-                Finalize::RollBack => {
+                Finalize::RollBack
+                | Finalize::HealthyRollback
+                | Finalize::InterruptedRollback(_) => {
                     RemoteControlTargetPairingFinalization::AuthorizationRollbackRequired {
                         attempt_id,
                         retired_link: LinkId::new([0x93; 16]),
@@ -137,36 +148,75 @@ fn verify(finalize: Finalize) {
         };
         let (accepted, ()) = join(accept, acknowledge).await;
         assert_eq!(accepted, Ok(()));
+        control.borrow_mut().arm(None);
         let expected = match finalize {
             Finalize::Complete => {
                 assert!(progress.is_ready());
                 next.clone()
             }
-            Finalize::RollBack => {
+            Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
                 assert!(progress.is_waiting_for_store());
                 assert_eq!(controller_grants_snapshot(&remote), confirmed);
                 let mut rollback = core::pin::pin!(stores.next_completion());
                 let mut context = core::task::Context::from_waker(core::task::Waker::noop());
-                fail_write.set(true);
-                ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
-                    &mut manifold,
-                    WRITE_TIME,
-                );
-                manifold.progress(&mut engine, WRITE_TIME).await;
-                assert!(!fail_write.get());
-                assert!(core::future::Future::poll(rollback.as_mut(), &mut context).is_pending());
-                let retry = InstantMillis(WRITE_TIME.0 + policy.retry_interval_millis);
-                ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
-                    &mut manifold,
-                    InstantMillis(retry.0 - 1),
-                );
-                manifold
-                    .progress(&mut engine, InstantMillis(retry.0 - 1))
-                    .await;
-                assert!(core::future::Future::poll(rollback.as_mut(), &mut context).is_pending());
-                assert_eq!(controller_grants_snapshot(&remote), confirmed);
-                ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(&mut manifold, retry);
-                manifold.progress(&mut engine, retry).await;
+                if let Finalize::InterruptedRollback(cut) = finalize {
+                    control.borrow_mut().remove_power_at(cut);
+                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
+                        &mut manifold,
+                        WRITE_TIME,
+                    );
+                    {
+                        let mut write = core::pin::pin!(manifold.progress(&mut engine, WRITE_TIME));
+                        assert!(
+                            core::future::Future::poll(write.as_mut(), &mut context).is_pending()
+                        );
+                    }
+                    assert!(control.borrow().power_removed());
+                    assert!(
+                        core::future::Future::poll(rollback.as_mut(), &mut context).is_pending()
+                    );
+                    assert!(progress.is_waiting_for_store());
+                    assert_eq!(controller_grants_snapshot(&remote), confirmed);
+                    drop(manifold);
+                    let image = owner.journal.take().unwrap().release().into_image();
+                    let trace = control.borrow().trace.clone();
+                    return Outcome { image, trace };
+                }
+                if matches!(finalize, Finalize::RollBack) {
+                    fail_write.set(true);
+                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
+                        &mut manifold,
+                        WRITE_TIME,
+                    );
+                    manifold.progress(&mut engine, WRITE_TIME).await;
+                    assert!(!fail_write.get());
+                    assert!(
+                        core::future::Future::poll(rollback.as_mut(), &mut context).is_pending()
+                    );
+                    let retry = InstantMillis(WRITE_TIME.0 + policy.retry_interval_millis);
+                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
+                        &mut manifold,
+                        InstantMillis(retry.0 - 1),
+                    );
+                    manifold
+                        .progress(&mut engine, InstantMillis(retry.0 - 1))
+                        .await;
+                    assert!(
+                        core::future::Future::poll(rollback.as_mut(), &mut context).is_pending()
+                    );
+                    assert_eq!(controller_grants_snapshot(&remote), confirmed);
+                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
+                        &mut manifold,
+                        retry,
+                    );
+                    manifold.progress(&mut engine, retry).await;
+                } else {
+                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
+                        &mut manifold,
+                        WRITE_TIME,
+                    );
+                    manifold.progress(&mut engine, WRITE_TIME).await;
+                }
                 assert_eq!(
                     core::future::Future::poll(rollback.as_mut(), &mut context),
                     core::task::Poll::Ready(Ok(()))
@@ -188,7 +238,9 @@ fn verify(finalize: Finalize) {
         assert_eq!(controller_grants_snapshot(&remote), expected);
         let expected_grant = match finalize {
             Finalize::Complete => candidate,
-            Finalize::RollBack => prior,
+            Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
+                prior
+            }
         };
         assert_eq!(
             remote
@@ -202,7 +254,7 @@ fn verify(finalize: Finalize) {
             RemoteControlPairingAuthorizationTransactionState::Available
         ));
         drop(manifold);
-        let bytes = owner.journal.take().unwrap().release().bytes;
+        let bytes = owner.journal.take().unwrap().release().into_image();
         drop(owner);
         let mut records = Vec::new();
         let mut flash = TestFlash::new();
@@ -216,7 +268,9 @@ fn verify(finalize: Finalize) {
         .unwrap();
         let expected_records = match finalize {
             Finalize::Complete => std::vec![confirmed.to_vec(), next.to_vec()],
-            Finalize::RollBack => std::vec![confirmed.to_vec(), next.to_vec(), confirmed.to_vec()],
+            Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
+                std::vec![confirmed.to_vec(), next.to_vec(), confirmed.to_vec()]
+            }
         };
         assert_eq!(records, expected_records);
         for _ in 0..2 {
@@ -238,5 +292,12 @@ fn verify(finalize: Finalize) {
                 &[expected_grant]
             );
         }
-    });
+        let trace = control.borrow().trace.clone();
+        Outcome {
+            image: bytes,
+            trace,
+        }
+    })
 }
+
+mod interrupted;

@@ -151,6 +151,10 @@ expected values. No production clock change was needed.
    lifecycle and remote management transactions remain separate.
    Successful storage now also covers completed settlement and settlement-directed
    rollback, checking live authority, exact durable record order and fresh boots.
+   **Open crash-consistency finding:** 130 of 133 abrupt rollback cut points
+   restore candidate authority after live rollback, because rollback intent is
+   volatile. A durable authorization-transaction protocol is needed before
+   claiming rollback survives reboot; current tests characterize the boundary.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,

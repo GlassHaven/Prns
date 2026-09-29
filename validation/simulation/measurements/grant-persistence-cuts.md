@@ -108,3 +108,35 @@ This extension passed the registered recovery suite (37 tests), all 149 Embassy
 library tests, all-target Embassy clippy, format/docs, registry and website checks
 on macOS arm64. The wider radio simulation, full workspace, Miri and firmware
 matrix were not rerun for this owner-local test extension.
+
+## Open finding: rollback intent is volatile
+
+The abrupt-rollback campaign drives the real pairing transaction through a
+successful candidate store and a scripted `AuthorizationRollbackRequired`
+settlement. Live authority has already returned to the prior grant when the
+rollback's flash operation is suspended and the owner is discarded.
+
+Across 133 byte-prefix/read-boundary cuts, two fresh restore owners recover the
+candidate in 130 cases before rollback commit, and the prior grant in three cases
+at or after the complete rollback commit word. The rollback request remains
+pending at every cut; the test does not manufacture a successful rollback result.
+Complete typed grant tables and exact flash trace prefixes are compared.
+
+This is a characterization of a crash-consistency limitation, not an assertion
+that rejected pairing is durably undone. Atomic snapshot storage works as designed:
+the candidate remains the newest committed snapshot until rollback commits.
+However, the intent to roll back exists only in volatile transaction state, so
+boot cannot distinguish that candidate from a successfully finalized grant.
+
+Closing this gap requires a defined durable authorization-transaction protocol,
+including its commit point relative to pairing settlement and recovery rules for
+pending or aborted transactions. It cannot be solved by changing the parser's
+choice of newest valid snapshot. No production change or stronger transaction
+guarantee is introduced in this diagnostic slice. Settlement acknowledgement is
+still scripted; no physical power-loss or full radio-handshake result is claimed.
+
+The characterization passed in the registered recovery suite (38 tests), with
+all 150 Embassy library tests, all-target Embassy clippy, registry and website
+checks passing on macOS arm64. Passing here records the current crash window;
+it is not evidence that durable transaction rollback is implemented. No wider
+radio-simulation, full-workspace, Miri or firmware result is claimed.
