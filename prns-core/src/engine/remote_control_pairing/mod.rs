@@ -1153,6 +1153,9 @@ impl<S: StorageLayout> crate::engine::EngineState<S> {
 mod tests {
     #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
+    #[cfg(feature = "flash")]
+    mod durable_authorization;
+
     use super::*;
     use crate::crypto::{x25519_diffie_hellman, x25519_public_key, X25519SecretKey};
     use crate::engine::test_support::{fixed_secret_key, routable_descriptor, TestStorageLayout};
@@ -1661,6 +1664,10 @@ mod tests {
             InstantMillis(2_200),
             &mut |_| panic!("accepted Commit needs no entropy before completion"),
             &mut |reaction: EngineReaction<'_, crate::engine::NoOwedWork>| {
+                assert!(
+                    !matches!(reaction, EngineReaction::Directive(_)),
+                    "pairing must not send completion before authorization storage"
+                );
                 if let EngineReaction::Journaled(
                     Journaled::RemoteControlTargetPairingAuthorizationRequired {
                         attempt_id: observed,

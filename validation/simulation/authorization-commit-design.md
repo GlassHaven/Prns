@@ -576,3 +576,42 @@ This completes the bounded settlement-error and unsafe-tail fixes, not the entir
 authorization crash-consistency contract. Durable transaction intent across power
 loss, uncertain-store reconciliation through runtime activation, explicit rollback
 durability, completion retries, and non-Unix host durability still need work.
+
+## Recovery checkpoint: prepared engine grant through flash commit
+
+The `authorization-commit-recovery` suite connects the real shared pairing engine's
+prepared grant to the production snapshot codec and flash journal. It exercises
+first grants and replacements while preserving an unrelated administrator. Each
+candidate append is interrupted at every programmed-byte boundary, including the
+last commit byte before acknowledgement. Every resulting image is opened twice
+through fresh journals and compared against the entire expected grant table.
+
+The final-byte cut deliberately returns a storage error while both restores select
+the candidate. Earlier cuts select the prior table. This establishes a concrete
+recovery oracle for the upcoming indeterminate-store adapter work: an error alone
+cannot choose rollback. The model only cuts append programming; erase, compaction,
+runtime ownership and physical flash behavior remain separate evidence.
+
+Successful storage is also followed by real engine settlement at the admission
+deadline, with the signing identity removed after preparation. One case discards
+the dispatched response; another removes egress and checks the exact dispatch
+failure. Fresh journal restores retain the committed table in both cases. The
+existing shared preparation fixture now rejects any outbound directive before
+storage is requested.
+
+These are shared-engine/storage boundary tests, not whole-node reboot tests or
+runtime-adapter activation tests. They do not resolve indeterminate I/O for Tokio
+or Embassy, nor prove host filesystem power-loss durability. No production policy,
+snapshot format, allocation or firmware resource usage changes in this slice.
+Next: make each runtime reconcile that durable decision before releasing ownership
+or activating authority, then use the same whole-table expectations through actual
+node reboot and controller-side target-access recovery.
+
+Verification on macOS arm64: `CARGO_INCREMENTAL=0 python3 validation/run.py run
+--suite authorization-commit-recovery` passed both campaigns; `CARGO_INCREMENTAL=0
+cargo test --locked -p prns-core --features flash --lib --quiet` passed 2,121 tests
+with three ignored. Root default-member tests and core all-target clippy with
+`flash` passed, also with incremental compilation disabled. Formatting, diff
+whitespace checks and validation registry verification passed. Runtime-specific,
+firmware, Miri, ISA and physical-device suites were not run for this test-only
+slice; unrelated CI failures remain deferred.

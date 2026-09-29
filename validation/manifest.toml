@@ -600,6 +600,17 @@ inputs = ["validation/simulation", "personal-rns", "prns-core", "prns-runtime", 
 artifacts = "validation-artifacts/results/virtual-device-simulation"
 
 [[suite]]
+id = "authorization-commit-recovery"
+domain = "integration"
+tiers = ["pr", "release", "scheduled"]
+platform = "any"
+toolchain = "stable"
+timeout_seconds = 600
+command = ["cargo", "test", "--locked", "-p", "prns-core", "--features", "flash", "--lib", "engine::remote_control_pairing::tests::durable_authorization"]
+inputs = ["prns-core/src/engine", "prns-core/src/remote_control", "prns-core/src/persistence", "prns-core/Cargo.toml"]
+artifacts = "validation-artifacts/results/authorization-commit-recovery"
+
+[[suite]]
 id = "embedded-persistence-recovery"
 domain = "integration"
 tiers = ["pr", "release", "scheduled"]
