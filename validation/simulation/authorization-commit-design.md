@@ -869,3 +869,18 @@ two authorization snapshot kinds share one compaction write phase. Route encodin
 relies on the core writer's bounds checks instead of cloning and measuring the
 same row first. Equivalence tests compare complete buffers with the former codec
 sequence and reject every shorter output length; ratchet scratch remains zeroizing.
+
+## Recovery checkpoint: cancellation while recording the compaction budget
+
+The existing shared journal rescans both timebase pages on every budget attempt.
+A 707-boundary Embassy campaign now exercises cancellation at read start/end,
+every write prefix, and every erase prefix across fresh-page and full-page-rollover
+cases. Resumption must record the budget before entering the arena-erase phase;
+a completed write is recognized by read-only rescan instead of being written again.
+The campaign checks the untouched journal arenas, retained configuration, and
+the exact cooldown after two fresh restores, including refusal just before the
+deadline and admission at it. This stage needed no production behavior change.
+
+These are cancelled-operation/resumption tests with reboot checks after recovery,
+not proof of physical driver cancellation or reboot at every interrupted instruction.
+Cancellation during arena erase and copied-record appends remains subsequent work.
