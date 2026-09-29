@@ -688,6 +688,9 @@ impl RemoteControlTargetPairingState {
         target_signer: &impl IdentitySigner,
         now: InstantMillis,
     ) -> PersistRemoteControlTargetPairingAuthorizationOutcome {
+        if let Some(completion) = self.settle_prepared_authorization(settled, now) {
+            return completion;
+        }
         if let Some(expired) = self.take_expired_completion(now) {
             return PersistRemoteControlTargetPairingAuthorizationOutcome::CompletionRetentionExpired {
                 expired,
@@ -780,6 +783,78 @@ impl RemoteControlTargetPairingState {
             | RemoteControlTargetPairingPhase::Active { .. }) => {
                 self.phase = phase;
                 PersistRemoteControlTargetPairingAuthorizationOutcome::NoAuthorizationOwed
+            }
+        }
+    }
+
+    /// Settles a prepared or retained completion without requiring its signer.
+    /// Returns `None` when no prepared or retained completion exists.
+    pub fn settle_prepared_authorization(
+        &mut self,
+        settled: RemoteControlPairingAttemptId,
+        now: InstantMillis,
+    ) -> Option<PersistRemoteControlTargetPairingAuthorizationOutcome> {
+        if let Some(expired) = self.take_expired_completion(now) {
+            return Some(
+                PersistRemoteControlTargetPairingAuthorizationOutcome::CompletionRetentionExpired {
+                    expired,
+                },
+            );
+        }
+        let active = match &self.phase {
+            RemoteControlTargetPairingPhase::Authorizing {
+                attempt,
+                completion: AuthorizationCompletion::Prepared(_),
+                ..
+            }
+            | RemoteControlTargetPairingPhase::Completing { attempt, .. } => attempt.attempt_id(),
+            RemoteControlTargetPairingPhase::Idle
+            | RemoteControlTargetPairingPhase::Active { .. }
+            | RemoteControlTargetPairingPhase::Authorizing {
+                completion: AuthorizationCompletion::Unprepared,
+                ..
+            } => return None,
+        };
+        if settled != active {
+            return Some(
+                PersistRemoteControlTargetPairingAuthorizationOutcome::AttemptMismatch {
+                    settled,
+                    active,
+                },
+            );
+        }
+        match core::mem::take(&mut self.phase) {
+            RemoteControlTargetPairingPhase::Authorizing {
+                attempt,
+                responder,
+                completion: AuthorizationCompletion::Prepared(completed),
+            }
+            | RemoteControlTargetPairingPhase::Completing {
+                attempt,
+                responder,
+                completed,
+            } => {
+                self.phase = RemoteControlTargetPairingPhase::Completing {
+                    attempt,
+                    responder,
+                    completed,
+                };
+                Some(
+                    PersistRemoteControlTargetPairingAuthorizationOutcome::CompletionOwed {
+                        attempt_id: active,
+                        responder,
+                        completed,
+                    },
+                )
+            }
+            phase @ (RemoteControlTargetPairingPhase::Idle
+            | RemoteControlTargetPairingPhase::Active { .. }
+            | RemoteControlTargetPairingPhase::Authorizing {
+                completion: AuthorizationCompletion::Unprepared,
+                ..
+            }) => {
+                self.phase = phase;
+                None
             }
         }
     }

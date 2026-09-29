@@ -51,6 +51,9 @@ pub enum RemoteControlAuthorizationPersistenceFailure {
     SnapshotSeal(SnapshotSealError),
     RuntimeState,
     DurableRollback,
+    CommittedCompletionDelivery {
+        failure: crate::engine::SettleRemoteControlTargetPairingAuthorizationFailure,
+    },
 }
 
 impl std::fmt::Display for RemoteControlAuthorizationPersistenceFailure {
@@ -68,6 +71,8 @@ impl std::fmt::Display for RemoteControlAuthorizationPersistenceFailure {
             Self::DurableRollback => {
                 formatter.write_str("the authorization rollback could not be persisted")
             }
+            Self::CommittedCompletionDelivery { .. } => formatter
+                .write_str("authorization was committed but pairing completion was not delivered"),
         }
     }
 }
@@ -429,6 +434,21 @@ async fn persist_controller_grant(
         },
     )
     .await;
+    finalize_controller_grant(remote_control, persistence, mutation, rollback, settled).await
+}
+
+async fn finalize_controller_grant(
+    remote_control: &mut AssembledRemoteControl,
+    persistence: Option<&RemoteControlAuthorizationPersistence>,
+    mutation: ControllerGrantMutation,
+    rollback: Vec<u8>,
+    settled: Option<
+        Result<
+            RemoteControlTargetPairingFinalization,
+            crate::engine::SettleRemoteControlTargetPairingAuthorizationFailure,
+        >,
+    >,
+) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
     let Some(settled) = settled else {
         rollback_controller_grant(remote_control, mutation)?;
         if let Some(persistence) = persistence {
@@ -438,6 +458,9 @@ async fn persist_controller_grant(
     };
     match settled {
         Ok(RemoteControlTargetPairingFinalization::CompletionDispatched { .. }) => Ok(()),
+        Err(failure) if failure.is_completion_delivery_failure() => Err(
+            RemoteControlAuthorizationPersistenceFailure::CommittedCompletionDelivery { failure },
+        ),
         Ok(RemoteControlTargetPairingFinalization::AuthorizationRollbackRequired { .. }) => {
             rollback_controller_grant(remote_control, mutation)?;
             if let Some(persistence) = persistence {
@@ -858,5 +881,63 @@ mod tests {
                 .grants_in_identity_hash_order(),
             &[grant]
         );
+    }
+
+    #[tokio::test]
+    async fn failed_completion_delivery_keeps_committed_live_authority() {
+        use crate::engine::{
+            RemoteControlPairingResponseDispatchFailure,
+            SettleRemoteControlTargetPairingAuthorizationFailure as Failure,
+        };
+        use crate::routing::links::LinkId;
+        let attempt_id =
+            RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x71; 32]);
+        for failure in [
+            Failure::CompletionDispatchFailed {
+                attempt_id,
+                failure: RemoteControlPairingResponseDispatchFailure::Write(
+                    crate::routing::links::request::LinkRequestWriteError::LinkVanished,
+                ),
+            },
+            Failure::CompletionRetentionExpired {
+                attempt_id,
+                retired_link: LinkId::new([0x72; 16]),
+            },
+        ] {
+            let mut remote = remote_control();
+            let prior = super::super::node_facade::test_remote_control_grant(
+                RemoteControlRequestKind::Describe,
+            );
+            let candidate = super::super::node_facade::test_remote_control_grant(
+                RemoteControlRequestKind::AnnounceSelf,
+            );
+            remote.set_controller_grant(prior).unwrap();
+            let (mutation, _, rollback) = prepare_controller_grant_set(&mut remote, candidate)
+                .unwrap()
+                .into_parts();
+            activate_controller_grant_change(&mut remote, mutation).unwrap();
+            assert_eq!(
+                finalize_controller_grant(
+                    &mut remote,
+                    None,
+                    mutation,
+                    rollback,
+                    Some(Err(failure))
+                )
+                .await,
+                Err(
+                    RemoteControlAuthorizationPersistenceFailure::CommittedCompletionDelivery {
+                        failure
+                    }
+                )
+            );
+            assert_eq!(
+                remote
+                    .controller_grants()
+                    .unwrap()
+                    .grants_in_identity_hash_order(),
+                &[candidate]
+            );
+        }
     }
 }

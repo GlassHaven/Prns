@@ -2,14 +2,16 @@ use super::*;
 use crate::engine::{
     IssuedCommand, PrnsCommand, RemoteControlTargetPairingAuthorizationPersistence,
     RemoteControlTargetPairingFinalization, SettleRemoteControlTargetPairingAuthorization,
-    Settlement,
+    SettleRemoteControlTargetPairingAuthorizationFailure, Settlement,
 };
 use crate::remote_control::{RemoteControlControllerGrantTable, RemoteControlRequestKind};
 use crate::routing::links::LinkId;
 use crate::runtime::remote_control_pairing_authorizations::RemoteControlPairingAuthorizationTransactionState;
 use crate::runtime::remote_control_pairing_persistence::{
-    RemoteControlAuthorizationStoreExchange, RemoteControlPairingManifoldPersistence,
-    RemoteControlPairingPersistenceProgress, RemoteControlPairingPersistenceRequired,
+    EmbeddedRemoteControlPairingPersistenceFailure,
+    EmbeddedRemoteControlPairingPersistenceOperation, RemoteControlAuthorizationStoreExchange,
+    RemoteControlPairingManifoldPersistence, RemoteControlPairingPersistenceProgress,
+    RemoteControlPairingPersistenceRequired,
 };
 use crate::runtime::{CompletionPool, PrnsNodeHandle};
 use embassy_futures::join::join;
@@ -17,6 +19,8 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 
 enum Finalize {
     Complete,
+    DeliveryFailed,
+    RetentionExpired,
     RollBack,
     HealthyRollback,
     InterruptedRollback(Cut),
@@ -30,6 +34,12 @@ struct Outcome {
 #[test]
 fn successful_pairing_storage_activates_then_releases_authority() {
     verify(Finalize::Complete);
+}
+
+#[test]
+fn committed_authority_survives_delivery_failure_and_retention_expiry() {
+    verify(Finalize::DeliveryFailed);
+    verify(Finalize::RetentionExpired);
 }
 
 #[test]
@@ -82,6 +92,26 @@ fn verify(finalize: Finalize) -> Outcome {
         let mut authorization = RemoteControlPairingAuthorizationTransactionState::new();
         let mut progress = RemoteControlPairingPersistenceProgress::new();
         let attempt_id = crate::runtime::node_facade::test_remote_control_pairing_attempt(0x92);
+        let delivery_failure = match finalize {
+            Finalize::DeliveryFailed => Some(
+                SettleRemoteControlTargetPairingAuthorizationFailure::CompletionDispatchFailed {
+                    attempt_id,
+                    failure: crate::engine::RemoteControlPairingResponseDispatchFailure::Write(
+                        crate::routing::links::request::LinkRequestWriteError::LinkVanished,
+                    ),
+                },
+            ),
+            Finalize::RetentionExpired => Some(
+                SettleRemoteControlTargetPairingAuthorizationFailure::CompletionRetentionExpired {
+                    attempt_id,
+                    retired_link: LinkId::new([0x93; 16]),
+                },
+            ),
+            Finalize::Complete
+            | Finalize::RollBack
+            | Finalize::HealthyRollback
+            | Finalize::InterruptedRollback(_) => None,
+        };
         progress
             .accept_required(
                 RemoteControlPairingPersistenceRequired::ControllerGrant {
@@ -123,7 +153,7 @@ fn verify(finalize: Finalize) -> Outcome {
                 )
             );
             let finalization = match finalize {
-                Finalize::Complete => {
+                Finalize::Complete | Finalize::DeliveryFailed | Finalize::RetentionExpired => {
                     RemoteControlTargetPairingFinalization::CompletionDispatched { attempt_id }
                 }
                 Finalize::RollBack
@@ -139,18 +169,27 @@ fn verify(finalize: Finalize) -> Outcome {
             handle.route_journaled(
                 Journaled::CommandSettled {
                     id: issued.id,
-                    settlement: Settlement::SettleRemoteControlTargetPairingAuthorization(Ok(
-                        finalization,
-                    )),
+                    settlement: Settlement::SettleRemoteControlTargetPairingAuthorization(
+                        delivery_failure.map_or(Ok(finalization), Err),
+                    ),
                 },
                 |_| panic!("settlement must reach its awaiter"),
             );
         };
         let (accepted, ()) = join(accept, acknowledge).await;
-        assert_eq!(accepted, Ok(()));
+        assert_eq!(
+            accepted,
+            delivery_failure.map_or(Ok(()), |failure| Err(
+                EmbeddedRemoteControlPairingPersistenceFailure::TargetSettlement {
+                    attempt_id,
+                    operation: EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
+                    failure,
+                }
+            ))
+        );
         control.borrow_mut().arm(None);
         let expected = match finalize {
-            Finalize::Complete => {
+            Finalize::Complete | Finalize::DeliveryFailed | Finalize::RetentionExpired => {
                 assert!(progress.is_ready());
                 next.clone()
             }
@@ -237,7 +276,7 @@ fn verify(finalize: Finalize) -> Outcome {
         };
         assert_eq!(controller_grants_snapshot(&remote), expected);
         let expected_grant = match finalize {
-            Finalize::Complete => candidate,
+            Finalize::Complete | Finalize::DeliveryFailed | Finalize::RetentionExpired => candidate,
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
                 prior
             }
@@ -267,7 +306,9 @@ fn verify(finalize: Finalize) -> Outcome {
         .await
         .unwrap();
         let expected_records = match finalize {
-            Finalize::Complete => std::vec![confirmed.to_vec(), next.to_vec()],
+            Finalize::Complete | Finalize::DeliveryFailed | Finalize::RetentionExpired => {
+                std::vec![confirmed.to_vec(), next.to_vec()]
+            }
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
                 std::vec![confirmed.to_vec(), next.to_vec(), confirmed.to_vec()]
             }

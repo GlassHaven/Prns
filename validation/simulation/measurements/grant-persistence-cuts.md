@@ -111,6 +111,12 @@ matrix were not rerun for this owner-local test extension.
 
 ## Open finding: rollback intent is volatile
 
+The [target-grant rollout](../authorization-commit-design.md#rollout-checkpoint-target-grant-admission-and-delivery)
+now prepares before storage in the shared engine and preserves committed grants
+on delivery failures in both runtimes. The campaign below deliberately injects
+rollback settlement; it characterizes that fallback, not a deadline rejection
+still emitted by the prepared engine. Other crash-consistency paths remain open.
+
 The abrupt-rollback campaign drives the real pairing transaction through a
 successful candidate store and a scripted `AuthorizationRollbackRequired`
 settlement. Live authority has already returned to the prior grant when the

@@ -159,6 +159,10 @@ expected values. No production clock change was needed.
    cross-runtime audit and the shared preparation boundary needed before changing
    persistence. Tokio pairing and caller-cancelled grant management have the same
    candidate-first ordering in source; host crash coverage remains outstanding.
+   Target grant admission now prepares completion before storage in shared core,
+   and both runtimes retain committed grants on delivery failure. Indeterminate
+   storage, target-access persistence and grant-management cancellation remain open;
+   see the design's rollout checkpoint for exact evidence and remaining scope.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,

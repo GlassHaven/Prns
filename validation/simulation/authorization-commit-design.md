@@ -170,8 +170,8 @@ time size assertion bounds the preparation payload to the completion payload
 already present in the phase enum; this adds no heap allocation or storage format.
 It is not a firmware stack-usage measurement.
 
-This is production shared-core code, but neither runtime calls the new preparation
-method yet. The crash-consistency finding remains open. Next, wire engine admission
+At this first checkpoint neither runtime called the new preparation
+method yet. The crash-consistency finding remained open. The next step was to wire engine admission
 and both runtime adapters to the boundary, resolve indeterminate storage outcomes,
 and remove rollback triggered solely by post-commit delivery failure. Controller-
 side target access and grant management remain required parts of that integration.
@@ -187,3 +187,49 @@ passed through the separate Embassy (13 tests) and Tokio (3 tests) manifests.
 These exercise existing callers, not adoption of preparation by either adapter.
 No runtime crash-gap closure, full workspace or firmware
 matrix, hardware, Kani or Miri result is claimed by this checkpoint.
+
+## Rollout checkpoint: target grant admission and delivery
+
+The shared engine now prepares completion before emitting
+`RemoteControlTargetPairingAuthorizationRequired`, in both approval orders.
+This is the production persistence event consumed by Tokio and Embassy: no
+adapter-specific preparation policy is needed. Preparation failure aborts the
+matching attempt and retires its exchange without requesting a candidate store.
+The local approval result and ingress diagnostic report that failure explicitly.
+
+After storage, the engine consumes its retained completion without fetching the
+signer again. A real-engine regression checks slow persistence beyond the original
+deadline with the signer removed after preparation: completion is dispatched,
+not rejected for durable rollback. Another checks that removing the signer before
+preparation requests no storage in either approval order.
+
+Both runtimes now preserve committed authority when settlement reports completion
+dispatch failure or completion-retention expiry. The classification is shared
+core policy; the adapters report an error without undoing the grant. Tokio retains
+a typed `CommittedCompletionDelivery` error. Embassy releases transaction ownership
+while returning its typed settlement error. Completion delivery has not become a
+success merely because authorization committed.
+
+The Embassy fixture drives the real queue, activation and flash owner through both
+delivery failures, checks the exact prior/candidate record history without a
+rollback record, and restores the complete candidate table on two fresh boots.
+Its settlement acknowledgement is still scripted. A Tokio finalization-unit test
+checks the same live-authority rule; it is not host filesystem durability evidence.
+
+The existing 133-cut rollback characterization deliberately injects the old
+`AuthorizationRollbackRequired` acknowledgement. It remains useful evidence for
+the rollback fallback, but is no longer evidence that the prepared production
+engine requests rollback merely because storage crossed the admission deadline.
+
+Still open: indeterminate writes and missing settlement acknowledgements, activation
+inconsistency after commit, controller-side target-access persistence, grant-
+management cancellation, post-deadline completion retry semantics, and whole-node
+power-loss coverage. No new persisted format is introduced. Full transaction
+crash-consistency closure is not claimed.
+
+On macOS arm64, root default-member tests, all 272 active Tokio library tests
+(one ignored), all 151 Embassy library tests, 218 focused core Remote Control
+tests, and the registered 39-test embedded persistence recovery suite passed.
+Core and both runtimes passed all-target clippy; the no-default-features ARM core
+check passed. Cargo runs used `CARGO_INCREMENTAL=0`. Firmware/resource builds,
+physical devices, full workspace, Miri and Kani were not run for this slice.

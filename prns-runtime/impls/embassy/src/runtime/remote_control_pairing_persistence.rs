@@ -787,6 +787,10 @@ impl RemoteControlPairingPersistenceProgress {
                 ActivatedAuthorizationSettlement::Release => {
                     release_authorization_locally(authorization, attempt_id)
                 }
+                ActivatedAuthorizationSettlement::CommittedDeliveryFailed { failure } => {
+                    release_authorization_locally(authorization, attempt_id)?;
+                    Err(failure)
+                }
                 ActivatedAuthorizationSettlement::RollBack { failure } => self.begin_rollback(
                     required,
                     rollback,
@@ -893,6 +897,9 @@ fn release_authorization_locally(
 
 enum ActivatedAuthorizationSettlement {
     Release,
+    CommittedDeliveryFailed {
+        failure: EmbeddedRemoteControlPairingPersistenceFailure,
+    },
     RollBack {
         failure: Option<EmbeddedRemoteControlPairingPersistenceFailure>,
     },
@@ -917,6 +924,10 @@ where
     match settle_persisted_authorization(required, node).await {
         ActivatedAuthorizationSettlement::Release => {
             release_authorization_locally(authorization, attempt_id)
+        }
+        ActivatedAuthorizationSettlement::CommittedDeliveryFailed { failure } => {
+            release_authorization_locally(authorization, attempt_id)?;
+            Err(failure)
         }
         ActivatedAuthorizationSettlement::RollBack { failure } => {
             release_authorization_locally(authorization, attempt_id)?;
@@ -964,6 +975,9 @@ where
                         EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
                         finalization,
                     )),
+                },
+                Err(RemoteControlPairingSettlementFailure::Failed(failure)) if failure.is_completion_delivery_failure() => ActivatedAuthorizationSettlement::CommittedDeliveryFailed {
+                    failure: target_settlement_failure(attempt_id, EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted, RemoteControlPairingSettlementFailure::Failed(failure)),
                 },
                 Err(failure) => ActivatedAuthorizationSettlement::RollBack {
                     failure: Some(target_settlement_failure(
