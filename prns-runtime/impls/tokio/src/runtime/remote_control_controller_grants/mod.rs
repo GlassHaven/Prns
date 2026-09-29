@@ -198,13 +198,7 @@ impl RemoteControlControllerGrantCommand {
                     ));
                     return Ok(());
                 }
-                if activate_controller_grant_change(remote_control, mutation).is_err() {
-                    restore_controller_grants_snapshot(persistence, rollback).await?;
-                    let _completion = completion.send(Err(
-                        SetRemoteControlControllerGrantServiceError::Unavailable,
-                    ));
-                    return Ok(());
-                }
+                activate_controller_grant_change(remote_control, mutation)?;
                 let _completion = completion.send(Ok(outcome));
             }
             Self::RevokeController {
@@ -243,12 +237,7 @@ impl RemoteControlControllerGrantCommand {
                         .send(Err(RevokeRemoteControlControllerServiceError::Unavailable));
                     return Ok(());
                 }
-                if activate_controller_grant_change(remote_control, mutation).is_err() {
-                    restore_controller_grants_snapshot(persistence, rollback).await?;
-                    let _completion = completion
-                        .send(Err(RevokeRemoteControlControllerServiceError::Unavailable));
-                    return Ok(());
-                }
+                activate_controller_grant_change(remote_control, mutation)?;
                 let _completion = completion.send(Ok(outcome));
             }
             Self::AuthorizeControllerAndRespond {
@@ -411,11 +400,7 @@ async fn apply_remote_controller_grant_transaction(
         respond_to_remote_controller_grant(node, responder, failure).await;
         return Ok(());
     }
-    if activate_controller_grant_change(remote_control, mutation).is_err() {
-        restore_controller_grants_snapshot(persistence, rollback).await?;
-        respond_to_remote_controller_grant(node, responder, failure).await;
-        return Ok(());
-    }
+    activate_controller_grant_change(remote_control, mutation)?;
     let _responded = respond_to_remote_controller_grant(node, responder, success).await;
     Ok(())
 }

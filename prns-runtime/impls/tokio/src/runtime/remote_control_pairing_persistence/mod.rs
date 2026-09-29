@@ -53,6 +53,8 @@ pub enum RemoteControlAuthorizationPersistenceFailure {
     SnapshotSeal(SnapshotSealError),
     RuntimeState,
     DurableRollback,
+    CommittedControllerGrantActivation,
+    CommittedTargetAccessActivation,
     CommittedCompletionDelivery {
         failure: crate::engine::SettleRemoteControlTargetPairingAuthorizationFailure,
     },
@@ -86,6 +88,12 @@ impl std::fmt::Display for RemoteControlAuthorizationPersistenceFailure {
             Self::DurableRollback => {
                 formatter.write_str("the authorization rollback could not be persisted")
             }
+            Self::CommittedControllerGrantActivation => formatter.write_str(
+                "controller grant was committed but activation requires authorization recovery",
+            ),
+            Self::CommittedTargetAccessActivation => formatter.write_str(
+                "target access was committed but activation requires authorization recovery",
+            ),
             Self::CommittedCompletionDelivery { .. } => formatter
                 .write_str("authorization was committed but pairing completion was not delivered"),
             Self::CommittedTargetGrantSettlementUnavailable => formatter.write_str(
@@ -237,6 +245,16 @@ fn prepare_controller_grant_change(
 }
 
 pub(super) fn activate_controller_grant_change(
+    remote_control: &mut AssembledRemoteControl,
+    mutation: ControllerGrantMutation,
+) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
+    apply_controller_grant_change(remote_control, mutation).map_err(|_| {
+        remote_control.require_authorization_recovery();
+        RemoteControlAuthorizationPersistenceFailure::CommittedControllerGrantActivation
+    })
+}
+
+fn apply_controller_grant_change(
     remote_control: &mut AssembledRemoteControl,
     mutation: ControllerGrantMutation,
 ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
@@ -470,12 +488,7 @@ async fn persist_controller_grant(
             return settle_controller_grant_persistence_failure(node, attempt_id).await;
         }
     }
-    if activate_controller_grant_change(remote_control, mutation).is_err() {
-        if let Some(persistence) = persistence {
-            restore_controller_grants_snapshot(persistence, rollback).await?;
-        }
-        return settle_controller_grant_persistence_failure(node, attempt_id).await;
-    }
+    activate_controller_grant_change(remote_control, mutation)?;
     let settled = settle_pairing_command(
         node,
         SettleRemoteControlTargetPairingAuthorization {
@@ -570,12 +583,7 @@ async fn persist_target_access(
             return settle_target_access_persistence_failure(node, attempt_id).await;
         }
     }
-    if activate_target_access(remote_control, &mutation).is_err() {
-        if let Some(persistence) = persistence {
-            restore_target_accesses_snapshot(persistence, rollback).await?;
-        }
-        return settle_target_access_persistence_failure(node, attempt_id).await;
-    }
+    activate_target_access(remote_control, &mutation)?;
     let settled = settle_pairing_command(
         node,
         SettleRemoteControlControllerPairingPersistence {
@@ -743,6 +751,16 @@ fn rollback_controller_grant(
 }
 
 fn activate_target_access(
+    remote_control: &mut AssembledRemoteControl,
+    mutation: &TargetAccessMutation,
+) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
+    apply_target_access(remote_control, mutation).map_err(|_| {
+        remote_control.require_authorization_recovery();
+        RemoteControlAuthorizationPersistenceFailure::CommittedTargetAccessActivation
+    })
+}
+
+fn apply_target_access(
     remote_control: &mut AssembledRemoteControl,
     mutation: &TargetAccessMutation,
 ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {

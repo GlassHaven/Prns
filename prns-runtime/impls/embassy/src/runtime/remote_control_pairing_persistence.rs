@@ -62,6 +62,10 @@ pub enum EmbeddedRemoteControlTargetPairingFinalization {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmbeddedRemoteControlPairingPersistenceFailure {
+    CommittedActivation {
+        attempt_id: RemoteControlPairingAttemptId,
+        failure: RemoteControlPairingAuthorizationTransactionFailure,
+    },
     AuthorizationTransaction {
         attempt_id: RemoteControlPairingAttemptId,
         operation: EmbeddedRemoteControlPairingPersistenceOperation,
@@ -565,6 +569,7 @@ pub(super) struct RemoteControlPairingPersistenceProgress {
 #[allow(clippy::large_enum_variant)]
 enum RemoteControlPairingPersistenceState {
     Ready,
+    Unrecoverable,
     WaitingInitialStore {
         required: RemoteControlPairingPersistenceRequired,
         rollback: RemoteControlAuthorizationSnapshot,
@@ -733,7 +738,8 @@ impl RemoteControlPairingPersistenceProgress {
         M: RawMutex,
     {
         let initial_required = match &self.state {
-            RemoteControlPairingPersistenceState::Ready => return Ok(()),
+            RemoteControlPairingPersistenceState::Ready
+            | RemoteControlPairingPersistenceState::Unrecoverable => return Ok(()),
             RemoteControlPairingPersistenceState::WaitingInitialStore { required, .. } => {
                 Some(*required)
             }
@@ -763,25 +769,13 @@ impl RemoteControlPairingPersistenceProgress {
             }
             if let Err(failure) = activate_authorization(remote_control, authorization, attempt_id)
             {
-                let activation_failure =
-                    EmbeddedRemoteControlPairingPersistenceFailure::AuthorizationTransaction {
+                remote_control.require_authorization_recovery();
+                self.state = RemoteControlPairingPersistenceState::Unrecoverable;
+                return Err(
+                    EmbeddedRemoteControlPairingPersistenceFailure::CommittedActivation {
                         attempt_id,
-                        operation:
-                            EmbeddedRemoteControlPairingPersistenceOperation::ActivateAuthorization,
                         failure,
-                    };
-                let settlement_failure = settle_persistence_failure(required, node).await.err();
-                if let Some(failure) = settlement_failure {
-                    stores.report_failure(failure).await;
-                }
-                let rollback = self.take_initial_rollback(required);
-                return self.begin_rollback(
-                    required,
-                    rollback,
-                    Some(activation_failure),
-                    remote_control,
-                    authorization,
-                    stores,
+                    },
                 );
             }
             let settlement = settle_persisted_authorization(required, node).await;
@@ -1289,6 +1283,88 @@ mod tests {
             } else {
                 StoreRemoteControlAuthorizationSnapshotOutcome::Stored
             }
+        }
+    }
+
+    #[test]
+    fn committed_target_access_activation_mismatch_keeps_pairing_blocked() {
+        use crate::remote_control::{RemoteControlTargetAccess, RemoteControlTargetIdentity};
+        for prior in [None, Some(RemoteControlRequestKind::Describe)] {
+            embassy_futures::block_on(async {
+                let commands = Channel::<CriticalSectionRawMutex, IssuedCommand, 1>::new();
+                let completions = CompletionPool::<CriticalSectionRawMutex, 0>::new();
+                let handle = PrnsNodeHandle::new(commands.sender(), &completions);
+                let stores = RemoteControlAuthorizationStoreExchange::new();
+                let mut remote = remote_control();
+                let keys = *remote.identities().unwrap().target().public_keys();
+                let authority = RemoteControlControllerAuthority::Operator;
+                let access = |request| {
+                    RemoteControlTargetAccess::new(
+                        RemoteControlTargetIdentity::new(keys),
+                        authority,
+                        RemoteControlRequestSet::only(request),
+                    )
+                    .unwrap()
+                };
+                if let Some(request) = prior {
+                    remote.set_target_access(access(request)).unwrap();
+                }
+                let attempt_id =
+                    super::super::node_facade::test_remote_control_pairing_attempt(0x91);
+                let mut authorization = RemoteControlPairingAuthorizationTransactionState::new();
+                let mut progress = RemoteControlPairingPersistenceProgress::new();
+                progress
+                    .accept_required(
+                        RemoteControlPairingPersistenceRequired::TargetAccess {
+                            attempt_id,
+                            target_public_keys: keys,
+                            authority,
+                            permitted_requests: RemoteControlRequestSet::only(
+                                RemoteControlRequestKind::AnnounceSelf,
+                            ),
+                        },
+                        &mut remote,
+                        &mut authorization,
+                        Some(&stores),
+                        handle,
+                    )
+                    .await
+                    .unwrap();
+                let request = stores.requests.wait().await;
+                assert_eq!(
+                    request.kind,
+                    RemoteControlAuthorizationSnapshotKind::TargetAccesses
+                );
+                remote
+                    .set_target_access(access(RemoteControlRequestKind::AnnounceSelf))
+                    .unwrap();
+                assert_eq!(
+                    progress
+                        .accept_store_completion(
+                            Ok(()),
+                            &mut remote,
+                            &mut authorization,
+                            &stores,
+                            handle
+                        )
+                        .await,
+                    Err(
+                        EmbeddedRemoteControlPairingPersistenceFailure::CommittedActivation {
+                            attempt_id,
+                            failure:
+                                RemoteControlPairingAuthorizationTransactionFailure::RuntimeState,
+                        }
+                    )
+                );
+                assert!(!remote.is_available());
+                assert!(authorization.is_active());
+                assert!(!progress.is_ready());
+                assert!(!progress.is_waiting_for_store());
+                assert!(commands.try_receive().is_err());
+                let mut request = core::pin::pin!(stores.wait_for_next_test_store());
+                let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+                assert!(core::future::Future::poll(request.as_mut(), &mut context).is_pending());
+            });
         }
     }
 

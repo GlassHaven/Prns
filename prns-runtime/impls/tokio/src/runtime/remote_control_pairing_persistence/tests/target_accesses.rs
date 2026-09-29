@@ -32,6 +32,70 @@ fn access(fill: u8, request: RemoteControlRequestKind) -> RemoteControlTargetAcc
 }
 
 #[tokio::test]
+async fn committed_target_access_activation_mismatch_preserves_the_durable_candidate() {
+    for prior in [None, Some(RemoteControlRequestKind::Describe)] {
+        let directory = TestDirectory::new();
+        let (commands, _receiver) = mpsc::unbounded_channel();
+        let worker = NodePersistence::custom_dir(directory.path())
+            .unwrap()
+            .worker(PrnsNodeHandle::over(commands));
+        let persistence = worker.remote_control_authorization_persistence();
+        let mut remote = remote_control();
+        if let Some(request) = prior {
+            remote.set_target_access(access(0x52, request)).unwrap();
+        }
+        let candidate = || access(0x52, RemoteControlRequestKind::AnnounceSelf);
+        let desired = TargetAccessSpec::from_access(&candidate());
+        let mutation = match remote.set_target_access(candidate()).unwrap() {
+            SetRemoteControlTargetAccessOutcome::Added => TargetAccessMutation::Added { desired },
+            SetRemoteControlTargetAccessOutcome::Updated { previous } => {
+                TargetAccessMutation::Updated {
+                    desired,
+                    previous: TargetAccessSpec::from_access(&previous),
+                }
+            }
+            SetRemoteControlTargetAccessOutcome::Unchanged => panic!("candidate must differ"),
+        };
+        let projected = target_accesses_snapshot(&remote).unwrap();
+        rollback_target_access(&mut remote, mutation).unwrap();
+        let transaction = persistence.begin().await.unwrap();
+        transaction
+            .store(
+                SnapshotRegion::RemoteControlTargetAccesses,
+                projected.clone(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        remote.set_target_access(candidate()).unwrap();
+        assert_eq!(
+            activate_target_access(&mut remote, &mutation),
+            Err(RemoteControlAuthorizationPersistenceFailure::CommittedTargetAccessActivation)
+        );
+        assert!(!remote.is_available());
+        assert_eq!(remote.write_target_accesses_snapshot(&mut []), Ok(None));
+        for _ in 0..2 {
+            let store = FileStore::new(directory.path());
+            let mut bytes = vec![0; remote_control_target_accesses_snapshot_capacity(1)];
+            let loaded = store
+                .load(SnapshotRegion::RemoteControlTargetAccesses, &mut bytes)
+                .unwrap()
+                .unwrap();
+            assert_eq!(loaded, projected.as_slice());
+            assert_eq!(
+                read_remote_control_target_accesses_snapshot(loaded)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec![candidate()]
+            );
+        }
+        assert!(persistence.begin().await.is_err());
+        drop(transaction);
+        assert!(persistence.begin().await.is_err());
+    }
+}
+
+#[tokio::test]
 async fn committed_target_access_survives_missing_and_rejected_settlement() {
     for acknowledgement in [
         Acknowledgement::Completed,

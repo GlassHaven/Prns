@@ -18,6 +18,7 @@ use embassy_futures::join::join;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 
 enum Finalize {
+    ActivationMismatch,
     Complete,
     LostCommitAcknowledgement,
     DeliveryFailed,
@@ -32,6 +33,18 @@ enum Finalize {
 struct Outcome {
     image: [u8; CAPACITY],
     trace: Vec<Operation>,
+}
+
+#[test]
+fn committed_activation_mismatch_quarantines_without_a_flash_rollback() {
+    let outcome = verify(Finalize::ActivationMismatch);
+    assert_eq!(outcome.trace, Vec::<Operation>::new());
+    let candidate = crate::runtime::node_facade::test_remote_control_grant(
+        RemoteControlRequestKind::AnnounceSelf,
+    );
+    for _ in 0..2 {
+        embassy_futures::block_on(super::grants::restore(outcome.image, &[candidate]));
+    }
 }
 
 #[test]
@@ -144,6 +157,7 @@ fn verify(finalize: Finalize) -> Outcome {
         let mut progress = RemoteControlPairingPersistenceProgress::new();
         let attempt_id = crate::runtime::node_facade::test_remote_control_pairing_attempt(0x92);
         let delivery_failure = match finalize {
+            Finalize::ActivationMismatch => None,
             Finalize::SettlementRejected(failure) => Some(failure),
             Finalize::DeliveryFailed => Some(
                 SettleRemoteControlTargetPairingAuthorizationFailure::CompletionDispatchFailed {
@@ -232,6 +246,39 @@ fn verify(finalize: Finalize) -> Outcome {
         assert_eq!(stored, Ok(()));
         assert_eq!(controller_grants_snapshot(&remote), confirmed);
         assert!(commands.receiver().try_receive().is_err());
+        if matches!(finalize, Finalize::ActivationMismatch) {
+            remote.set_controller_grant(candidate).unwrap();
+            assert_eq!(
+                progress.accept_store_completion(stored, &mut remote, &mut authorization, &stores, handle).await,
+                Err(EmbeddedRemoteControlPairingPersistenceFailure::CommittedActivation {
+                    attempt_id,
+                    failure: crate::runtime::remote_control_pairing_authorizations::RemoteControlPairingAuthorizationTransactionFailure::RuntimeState,
+                })
+            );
+            assert!(!remote.is_available());
+            assert!(!progress.is_ready());
+            assert!(!progress.is_waiting_for_store());
+            assert!(!matches!(
+                authorization,
+                RemoteControlPairingAuthorizationTransactionState::Available
+            ));
+            progress
+                .accept_store_completion(Ok(()), &mut remote, &mut authorization, &stores, handle)
+                .await
+                .unwrap();
+            assert!(!progress.is_ready());
+            assert!(commands.receiver().try_receive().is_err());
+            {
+                let mut request = core::pin::pin!(stores.wait_for_next_test_store());
+                let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+                assert!(core::future::Future::poll(request.as_mut(), &mut context).is_pending());
+            }
+            drop(manifold);
+            return Outcome {
+                image: owner.journal.take().unwrap().release().into_image(),
+                trace: control.borrow().trace.clone(),
+            };
+        }
         let mut competing = core::pin::pin!(handle.settle_pairing_command(
             SettleRemoteControlTargetPairingAuthorization {
                 attempt_id: crate::runtime::node_facade::test_remote_control_pairing_attempt(0x94),
@@ -264,6 +311,9 @@ fn verify(finalize: Finalize) -> Outcome {
                 )
             );
             let finalization = match finalize {
+                Finalize::ActivationMismatch => {
+                    unreachable!("activation failure never settles persisted")
+                }
                 Finalize::Inconsistent => {
                     RemoteControlTargetPairingFinalization::AuthorizationFailureRecorded {
                         attempt_id,

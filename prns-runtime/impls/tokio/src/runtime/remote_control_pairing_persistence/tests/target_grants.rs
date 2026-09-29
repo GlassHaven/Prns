@@ -17,6 +17,69 @@ enum Acknowledgement {
 }
 
 #[tokio::test]
+async fn committed_grant_activation_mismatch_requires_recovery_without_rewriting_storage() {
+    enum Change {
+        Add,
+        Update,
+        Revoke,
+    }
+    for change in [Change::Add, Change::Update, Change::Revoke] {
+        let directory = TestDirectory::new();
+        let (commands, _receiver) = mpsc::unbounded_channel();
+        let worker = NodePersistence::custom_dir(directory.path())
+            .unwrap()
+            .worker(PrnsNodeHandle::over(commands));
+        let persistence = worker.remote_control_authorization_persistence();
+        let mut remote = remote_control();
+        let grant = crate::runtime::node_facade::test_remote_control_grant;
+        let prior = grant(RemoteControlRequestKind::Describe);
+        let candidate = grant(RemoteControlRequestKind::AnnounceSelf);
+        if !matches!(change, Change::Add) {
+            remote.set_controller_grant(prior).unwrap();
+        }
+        let prepared = if matches!(change, Change::Revoke) {
+            prepare_controller_revocation(&mut remote, *prior.controller()).unwrap()
+        } else {
+            prepare_controller_grant_set(&mut remote, candidate).unwrap()
+        };
+        let (mutation, projected, _) = prepared.into_parts();
+        let transaction = persistence.begin().await.unwrap();
+        transaction
+            .store(
+                SnapshotRegion::RemoteControlControllerGrants,
+                projected.clone(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        if matches!(change, Change::Revoke) {
+            remote.revoke_controller(prior.controller()).unwrap();
+        } else {
+            remote.set_controller_grant(candidate).unwrap();
+        }
+        assert_eq!(
+            activate_controller_grant_change(&mut remote, mutation),
+            Err(RemoteControlAuthorizationPersistenceFailure::CommittedControllerGrantActivation)
+        );
+        assert!(!remote.is_available());
+        assert_eq!(remote.write_controller_grants_snapshot(&mut []), Ok(None));
+        for _ in 0..2 {
+            let store = FileStore::new(directory.path());
+            let mut bytes = vec![0; remote_control_controller_grants_snapshot_capacity(1)];
+            assert_eq!(
+                store
+                    .load(SnapshotRegion::RemoteControlControllerGrants, &mut bytes)
+                    .unwrap(),
+                Some(projected.as_slice())
+            );
+        }
+        assert!(persistence.begin().await.is_err());
+        drop(transaction);
+        assert!(persistence.begin().await.is_err());
+    }
+}
+
+#[tokio::test]
 async fn committed_target_grants_survive_unavailable_and_rejected_settlement() {
     let attempt_id = RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x81; 32]);
     for acknowledgement in [

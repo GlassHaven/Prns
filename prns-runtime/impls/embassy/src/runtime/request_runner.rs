@@ -665,6 +665,7 @@ where
     let state = core::mem::replace(&mut progress.state, ControllerGrantPersistenceState::Ready);
     let ControllerGrantPersistenceState::WaitingInitialStore(pending) = state else {
         let ControllerGrantPersistenceState::WaitingRollbackStore { settlement } = state else {
+            progress.state = state;
             return None;
         };
         if stored.is_err() {
@@ -709,37 +710,20 @@ where
     let applied = match activation.activate(remote_control) {
         Ok(applied) => applied,
         Err(_) => {
-            if !submit_controller_grant_rollback(remote_control, stores) {
-                progress.state = ControllerGrantPersistenceState::Unrecoverable;
-                return fail_controller_grant_settlement(commands, settlement);
-            }
-            progress.state = ControllerGrantPersistenceState::WaitingRollbackStore {
-                settlement: Some(settlement),
-            };
-            return None;
+            remote_control.require_authorization_recovery();
+            progress.state = ControllerGrantPersistenceState::Unrecoverable;
+            return fail_controller_grant_settlement(commands, settlement);
         }
     };
     match settlement {
         ControllerGrantSettlement::Local { id, operation } => {
             let Some(success) = operation.success(&applied) else {
-                if applied.roll_back(remote_control).is_err() {
-                    progress.state = ControllerGrantPersistenceState::Unrecoverable;
-                    return fail_controller_grant_settlement(
-                        commands,
-                        ControllerGrantSettlement::Local { id, operation },
-                    );
-                }
-                if !submit_controller_grant_rollback(remote_control, stores) {
-                    progress.state = ControllerGrantPersistenceState::Unrecoverable;
-                    return fail_controller_grant_settlement(
-                        commands,
-                        ControllerGrantSettlement::Local { id, operation },
-                    );
-                }
-                progress.state = ControllerGrantPersistenceState::WaitingRollbackStore {
-                    settlement: Some(ControllerGrantSettlement::Local { id, operation }),
-                };
-                return None;
+                remote_control.require_authorization_recovery();
+                progress.state = ControllerGrantPersistenceState::Unrecoverable;
+                return fail_controller_grant_settlement(
+                    commands,
+                    ControllerGrantSettlement::Local { id, operation },
+                );
             };
             let _settled = commands.settle_remote_control_controller_grant(id, success);
             None
@@ -2196,6 +2180,93 @@ mod tests {
             PrnsCommand::CloseLink(close) if close.link_id == LinkId::new([0x91; 16])
         ));
         assert!(commands.try_receive().is_err());
+    }
+
+    #[test]
+    fn committed_grant_activation_mismatch_stays_unrecoverable_without_rollback() {
+        use crate::remote_control::RemoteControlRequestKind;
+        use crate::runtime::RemoteControlControllerGrantControl;
+        use core::future::Future;
+        enum Change {
+            Add,
+            Update,
+            Revoke,
+        }
+        for change in [Change::Add, Change::Update, Change::Revoke] {
+            type M = CriticalSectionRawMutex;
+            let commands = Channel::<M, crate::engine::IssuedCommand, 1>::new();
+            let completions = crate::runtime::CompletionPool::<M, 0>::new();
+            let handle = PrnsNodeHandle::new(commands.sender(), &completions);
+            let stores = RemoteControlAuthorizationStoreExchange::new();
+            let mut remote = remote_control();
+            let grant = super::super::node_facade::test_remote_control_grant;
+            let prior = grant(RemoteControlRequestKind::Describe);
+            let candidate = grant(RemoteControlRequestKind::AnnounceSelf);
+            if !matches!(change, Change::Add) {
+                remote.set_controller_grant(prior).unwrap();
+            }
+            let mut changing = std::boxed::Box::pin(async {
+                match change {
+                    Change::Add | Change::Update => assert_eq!(
+                        handle.set_remote_control_controller_grant(candidate).await,
+                        Err(
+                            super::super::SetRemoteControlControllerGrantServiceError::Unavailable
+                                .into()
+                        )
+                    ),
+                    Change::Revoke => assert_eq!(
+                        handle
+                            .revoke_remote_control_controller(*prior.controller())
+                            .await,
+                        Err(
+                            super::super::RevokeRemoteControlControllerServiceError::Unavailable
+                                .into()
+                        )
+                    ),
+                }
+            });
+            let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+            assert!(changing.as_mut().poll(&mut context).is_pending());
+            let command = block_on(handle.next_remote_control_controller_grant_command());
+            let mut progress = ControllerGrantPersistenceProgress::new();
+            begin_controller_grant_persistence(
+                &mut progress,
+                &mut remote,
+                &RemoteControlPairingAuthorizationTransactionState::new(),
+                Some(&stores),
+                handle,
+                command,
+            );
+            assert!(progress.is_waiting_for_store());
+            block_on(stores.wait_for_next_test_store());
+            match change {
+                Change::Revoke => {
+                    remote.revoke_controller(prior.controller()).unwrap();
+                }
+                Change::Add | Change::Update => {
+                    remote.set_controller_grant(candidate).unwrap();
+                }
+            }
+            for _ in 0..2 {
+                assert!(progress_controller_grant_persistence(
+                    &mut progress,
+                    &mut remote,
+                    &stores,
+                    handle,
+                    Ok(())
+                )
+                .is_none());
+                assert!(matches!(
+                    progress.state,
+                    ControllerGrantPersistenceState::Unrecoverable
+                ));
+                assert!(!remote.is_available());
+                let mut unexpected_rollback = core::pin::pin!(stores.wait_for_next_test_store());
+                assert!(unexpected_rollback.as_mut().poll(&mut context).is_pending());
+            }
+            block_on(changing);
+            assert!(commands.try_receive().is_err());
+        }
     }
 
     #[test]

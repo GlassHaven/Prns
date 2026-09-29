@@ -770,3 +770,35 @@ both first grants and replacements through its real file owner and adapter, with
 two fresh reads. Acknowledgements in these adapter regressions are injected;
 the separate shared-engine recovery suite exercises actual preparation and late
 completion. Neither is presented as a whole-node crash campaign.
+
+## Recovery checkpoint: fail closed on committed activation inconsistency
+
+After successful durable storage, neither adapter may compensate for an
+activation inconsistency by writing the prior snapshot. The shared runtime
+service now exposes `require_authorization_recovery`: it makes authorization,
+request configuration and inventories unavailable, and snapshot writers return
+no snapshot rather than serializing an empty table. Recovery requires fresh
+service construction and restoration of the committed durable tables. This uses
+the existing service availability representation without a new resident buffer.
+
+Tokio propagates a typed committed-activation failure through the router and
+retains the persistence owner's reservation. Embassy disables the same shared
+service and retains an unrecoverable continuation instead of sending a pairing
+persistence-failure settlement or submitting a compensating write. Local and
+remote controller-grant management use the same rule. A stray store completion
+cannot release Embassy's unrecoverable state. Pre-commit storage failure and its
+rollback handling remain unchanged.
+
+Focused tests inject activation mismatches for grant addition, replacement and
+revocation and for target-access addition and replacement. Tokio's tests exercise
+the production activation helpers with the real file owner, repeated fresh reads
+and retained ownership. Embassy's tests exercise its continuations and bounded
+store exchange; the target-grant pairing case additionally uses real journal
+storage, verifies zero compensating flash operations and restores the candidate
+on two fresh boots. Target-access Embassy completion is scripted. Shared runtime
+tests verify service quarantine and refusal to emit empty snapshots. This is
+adapter/backend recovery evidence, not a complete node-level crash campaign.
+
+Remaining recovery work includes Embassy cancellation with flash I/O outstanding,
+pre-commit rollback crash durability and end-to-end controlled-node reboot
+campaigns. These are distinct from the now-removed post-commit rollback paths.
