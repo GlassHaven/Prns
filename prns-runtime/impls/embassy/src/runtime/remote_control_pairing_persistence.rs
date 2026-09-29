@@ -785,7 +785,7 @@ impl RemoteControlPairingPersistenceProgress {
                 );
             }
             let settlement = settle_persisted_authorization(required, node).await;
-            let rollback = self.take_initial_rollback(required);
+            drop(self.take_initial_rollback(required));
             return match settlement {
                 ActivatedAuthorizationSettlement::Release => {
                     release_authorization_locally(authorization, attempt_id)
@@ -794,14 +794,6 @@ impl RemoteControlPairingPersistenceProgress {
                     release_authorization_locally(authorization, attempt_id)?;
                     Err(failure)
                 }
-                ActivatedAuthorizationSettlement::RollBack { failure } => self.begin_rollback(
-                    required,
-                    rollback,
-                    failure,
-                    remote_control,
-                    authorization,
-                    stores,
-                ),
             };
         }
 
@@ -903,9 +895,6 @@ enum ActivatedAuthorizationSettlement {
     CommittedSettlementFailed {
         failure: EmbeddedRemoteControlPairingPersistenceFailure,
     },
-    RollBack {
-        failure: Option<EmbeddedRemoteControlPairingPersistenceFailure>,
-    },
 }
 
 #[inline(never)]
@@ -931,10 +920,6 @@ where
         ActivatedAuthorizationSettlement::CommittedSettlementFailed { failure } => {
             release_authorization_locally(authorization, attempt_id)?;
             Err(failure)
-        }
-        ActivatedAuthorizationSettlement::RollBack { failure } => {
-            release_authorization_locally(authorization, attempt_id)?;
-            failure.map_or(Ok(()), Err)
         }
     }
 }
@@ -968,11 +953,6 @@ where
                 Ok(RemoteControlTargetPairingFinalization::CompletionDispatched { .. }) => {
                     ActivatedAuthorizationSettlement::Release
                 }
-                Ok(
-                    RemoteControlTargetPairingFinalization::AuthorizationRollbackRequired {
-                        ..
-                    },
-                ) => ActivatedAuthorizationSettlement::RollBack { failure: None },
                 Ok(finalization) => ActivatedAuthorizationSettlement::CommittedSettlementFailed {
                     failure: unexpected_target_finalization(
                         EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,

@@ -111,6 +111,14 @@ matrix were not rerun for this owner-local test extension.
 
 ## Open finding: rollback intent is volatile
 
+Historical characterization: the settlement-directed rollback branch described
+below has now been removed from both runtime adapters. A late rollback finalization
+is a typed committed-outcome inconsistency; it cannot revoke the durable candidate.
+The replacement regression requires no post-settlement flash operations, no queued
+rollback and two fresh restores of the candidate. The original cut counts below
+remain evidence of the former behavior, not coverage claimed by the new test.
+Post-commit activation inconsistency and whole-node recovery remain separate gaps.
+
 The [target-grant rollout](../authorization-commit-design.md#rollout-checkpoint-target-grant-admission-and-delivery)
 now prepares before storage in the shared engine and preserves committed grants
 on delivery failures in both runtimes. The campaign below deliberately injects

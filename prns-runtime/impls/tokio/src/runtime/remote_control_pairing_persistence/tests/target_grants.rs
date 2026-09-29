@@ -13,6 +13,7 @@ enum Acknowledgement {
     NodeStopped,
     Rejected(Failure),
     Inconsistent,
+    LateRollback,
 }
 
 #[tokio::test]
@@ -22,6 +23,7 @@ async fn committed_target_grants_survive_unavailable_and_rejected_settlement() {
         Acknowledgement::Lost,
         Acknowledgement::NodeStopped,
         Acknowledgement::Inconsistent,
+        Acknowledgement::LateRollback,
         Acknowledgement::Rejected(Failure::NoAuthorizationOwed {
             settled: attempt_id,
         }),
@@ -103,6 +105,13 @@ async fn committed_target_grants_survive_unavailable_and_rejected_settlement() {
                     vec![candidate]
                 );
                 match acknowledgement {
+                    Acknowledgement::LateRollback => completion.send(Settlement::SettleRemoteControlTargetPairingAuthorization(Ok(
+                        RemoteControlTargetPairingFinalization::AuthorizationRollbackRequired {
+                            attempt_id,
+                            retired_link: crate::routing::links::LinkId::new([0x85; 16]),
+                            grant: candidate,
+                        }
+                    ))).unwrap(),
                     Acknowledgement::Inconsistent => completion.send(Settlement::SettleRemoteControlTargetPairingAuthorization(Ok(
                         RemoteControlTargetPairingFinalization::AuthorizationFailureRecorded {
                             attempt_id,
@@ -123,7 +132,7 @@ async fn committed_target_grants_survive_unavailable_and_rejected_settlement() {
             };
             let (result, ()) = tokio::join!(apply, acknowledge);
             assert_eq!(result, Err(match acknowledgement {
-                Acknowledgement::Inconsistent => RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantFinalizationMismatch,
+                Acknowledgement::Inconsistent | Acknowledgement::LateRollback => RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantFinalizationMismatch,
                 Acknowledgement::Rejected(failure) => RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantSettlement { failure },
                 Acknowledgement::Lost | Acknowledgement::NodeStopped => RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantSettlementUnavailable,
             }));

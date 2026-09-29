@@ -27,8 +27,6 @@ enum Finalize {
     SettlementRejected(SettleRemoteControlTargetPairingAuthorizationFailure),
     Inconsistent,
     RollBack,
-    HealthyRollback,
-    InterruptedRollback(Cut),
 }
 
 struct Outcome {
@@ -78,7 +76,7 @@ fn committed_authority_survives_stale_attempt_settlement() {
 }
 
 #[test]
-fn rejected_pairing_settlement_restores_authority_and_waits_for_durable_rollback() {
+fn late_rollback_finalization_preserves_committed_authority() {
     verify(Finalize::RollBack);
 }
 
@@ -110,7 +108,6 @@ fn verify(finalize: Finalize) -> Outcome {
         let exchange = DiscoveryGroupConfigurationStoreExchange::new();
         let control = Rc::new(RefCell::new(Control::new()));
         let flash = Flash::boot([0xff; CAPACITY], control.clone());
-        let fail_write = flash.write_fault_control();
         let policy =
             EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0));
         let mut owner = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _>::with_discovery_group_store(
@@ -167,9 +164,7 @@ fn verify(finalize: Finalize) -> Outcome {
             | Finalize::Inconsistent
             | Finalize::SettlementBusy
             | Finalize::SettlementUnavailable
-            | Finalize::RollBack
-            | Finalize::HealthyRollback
-            | Finalize::InterruptedRollback(_) => None,
+            | Finalize::RollBack => None,
         };
         progress
             .accept_required(
@@ -233,6 +228,7 @@ fn verify(finalize: Finalize) -> Outcome {
                 .all(|operation| matches!(operation, Operation::Read { .. })));
         }
         let stored = stores.next_completion().await;
+        control.borrow_mut().arm(None);
         assert_eq!(stored, Ok(()));
         assert_eq!(controller_grants_snapshot(&remote), confirmed);
         assert!(commands.receiver().try_receive().is_err());
@@ -287,9 +283,7 @@ fn verify(finalize: Finalize) -> Outcome {
                 | Finalize::SettlementRejected(_) => {
                     RemoteControlTargetPairingFinalization::CompletionDispatched { attempt_id }
                 }
-                Finalize::RollBack
-                | Finalize::HealthyRollback
-                | Finalize::InterruptedRollback(_) => {
+                Finalize::RollBack => {
                     RemoteControlTargetPairingFinalization::AuthorizationRollbackRequired {
                         attempt_id,
                         retired_link: LinkId::new([0x93; 16]),
@@ -315,6 +309,11 @@ fn verify(finalize: Finalize) -> Outcome {
         assert_eq!(
             accepted,
             match finalize {
+                Finalize::RollBack => Err(EmbeddedRemoteControlPairingPersistenceFailure::UnexpectedTargetFinalization {
+                    attempt_id,
+                    operation: EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
+                    finalization: crate::runtime::remote_control_pairing_persistence::EmbeddedRemoteControlTargetPairingFinalization::AuthorizationRollbackRequired,
+                }),
                 Finalize::Inconsistent => Err(EmbeddedRemoteControlPairingPersistenceFailure::UnexpectedTargetFinalization {
                     attempt_id,
                     operation: EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
@@ -344,123 +343,15 @@ fn verify(finalize: Finalize) -> Outcome {
                 )),
             }
         );
-        control.borrow_mut().arm(None);
-        let expected = match finalize {
-            Finalize::Complete
-            | Finalize::LostCommitAcknowledgement
-            | Finalize::DeliveryFailed
-            | Finalize::RetentionExpired
-            | Finalize::SettlementBusy
-            | Finalize::SettlementUnavailable
-            | Finalize::SettlementRejected(_)
-            | Finalize::Inconsistent => {
-                assert!(progress.is_ready());
-                let mut request = core::pin::pin!(stores.wait_for_next_test_store());
-                let mut context = core::task::Context::from_waker(core::task::Waker::noop());
-                assert!(core::future::Future::poll(request.as_mut(), &mut context).is_pending());
-                next.clone()
-            }
-            Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
-                assert!(progress.is_waiting_for_store());
-                assert_eq!(controller_grants_snapshot(&remote), confirmed);
-                let mut rollback = core::pin::pin!(stores.next_completion());
-                let mut context = core::task::Context::from_waker(core::task::Waker::noop());
-                if let Finalize::InterruptedRollback(cut) = finalize {
-                    control.borrow_mut().remove_power_at(cut);
-                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
-                        &mut manifold,
-                        WRITE_TIME,
-                    );
-                    {
-                        let mut write = core::pin::pin!(manifold.progress(&mut engine, WRITE_TIME));
-                        assert!(
-                            core::future::Future::poll(write.as_mut(), &mut context).is_pending()
-                        );
-                    }
-                    assert!(control.borrow().power_removed());
-                    assert!(
-                        core::future::Future::poll(rollback.as_mut(), &mut context).is_pending()
-                    );
-                    assert!(progress.is_waiting_for_store());
-                    assert_eq!(controller_grants_snapshot(&remote), confirmed);
-                    drop(manifold);
-                    let image = owner.journal.take().unwrap().release().into_image();
-                    let trace = control.borrow().trace.clone();
-                    return Outcome { image, trace };
-                }
-                if matches!(finalize, Finalize::RollBack) {
-                    fail_write.set(true);
-                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
-                        &mut manifold,
-                        WRITE_TIME,
-                    );
-                    manifold.progress(&mut engine, WRITE_TIME).await;
-                    assert!(!fail_write.get());
-                    assert!(
-                        core::future::Future::poll(rollback.as_mut(), &mut context).is_pending()
-                    );
-                    let retry = InstantMillis(WRITE_TIME.0 + policy.retry_interval_millis);
-                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
-                        &mut manifold,
-                        InstantMillis(retry.0 - 1),
-                    );
-                    manifold
-                        .progress(&mut engine, InstantMillis(retry.0 - 1))
-                        .await;
-                    assert!(
-                        core::future::Future::poll(rollback.as_mut(), &mut context).is_pending()
-                    );
-                    assert_eq!(controller_grants_snapshot(&remote), confirmed);
-                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
-                        &mut manifold,
-                        retry,
-                    );
-                    for _ in 0..32 {
-                        ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
-                            &mut manifold,
-                            retry,
-                        );
-                        manifold.progress(&mut engine, retry).await;
-                    }
-                } else {
-                    ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
-                        &mut manifold,
-                        WRITE_TIME,
-                    );
-                    manifold.progress(&mut engine, WRITE_TIME).await;
-                }
-                assert_eq!(
-                    core::future::Future::poll(rollback.as_mut(), &mut context),
-                    core::task::Poll::Ready(Ok(()))
-                );
-                progress
-                    .accept_store_completion(
-                        Ok(()),
-                        &mut remote,
-                        &mut authorization,
-                        &stores,
-                        handle,
-                    )
-                    .await
-                    .unwrap();
-                assert!(progress.is_ready());
-                confirmed.clone()
-            }
-        };
+        assert!(progress.is_ready());
+        {
+            let mut request = core::pin::pin!(stores.wait_for_next_test_store());
+            let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+            assert!(core::future::Future::poll(request.as_mut(), &mut context).is_pending());
+        }
+        let expected = next.clone();
+        let expected_grant = candidate;
         assert_eq!(controller_grants_snapshot(&remote), expected);
-        let expected_grant = match finalize {
-            Finalize::Complete
-            | Finalize::LostCommitAcknowledgement
-            | Finalize::DeliveryFailed
-            | Finalize::RetentionExpired
-            | Finalize::SettlementBusy
-            | Finalize::SettlementUnavailable
-            | Finalize::SettlementRejected(_)
-            | Finalize::Inconsistent => candidate,
-            Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
-                prior
-            }
-        };
         assert_eq!(
             remote
                 .controller_grants()
@@ -485,22 +376,7 @@ fn verify(finalize: Finalize) -> Outcome {
         })
         .await
         .unwrap();
-        let expected_records = match finalize {
-            Finalize::Complete
-            | Finalize::LostCommitAcknowledgement
-            | Finalize::DeliveryFailed
-            | Finalize::RetentionExpired
-            | Finalize::SettlementBusy
-            | Finalize::SettlementUnavailable
-            | Finalize::SettlementRejected(_)
-            | Finalize::Inconsistent => {
-                std::vec![confirmed.to_vec(), next.to_vec()]
-            }
-            Finalize::RollBack => std::vec![next.to_vec(), confirmed.to_vec()],
-            Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
-                std::vec![confirmed.to_vec(), next.to_vec(), confirmed.to_vec()]
-            }
-        };
+        let expected_records = std::vec![confirmed.to_vec(), next.to_vec()];
         assert_eq!(records, expected_records);
         for _ in 0..2 {
             let groups = DiscoveryGroupConfigurationStoreExchange::new();
@@ -529,5 +405,5 @@ fn verify(finalize: Finalize) -> Outcome {
     })
 }
 
-mod interrupted;
+mod late_rollback;
 mod target_accesses;

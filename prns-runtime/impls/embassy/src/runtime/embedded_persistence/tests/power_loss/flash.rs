@@ -204,10 +204,6 @@ fn power_removal_leaves_io_pending_until_dropped_without_repeating_the_operation
 }
 
 impl Flash {
-    pub fn write_fault_control(&self) -> Rc<Cell<bool>> {
-        self.inner.fail_next_write.clone()
-    }
-
     pub fn boot(image: [u8; CAPACITY], control: Rc<RefCell<Control>>) -> Self {
         let mut inner = TestFlash::new();
         inner.bytes = image;

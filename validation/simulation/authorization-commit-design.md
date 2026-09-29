@@ -745,3 +745,28 @@ tests initially could not bind loopback sockets in the sandbox and passed after
 rerunning with that permission. No firmware, hardware, Miri, ISA, Linux or Windows
 run is implied. This slice changes only the Tokio adapter, outside the configured
 mutation surface; the shared file confirmation primitive remains the prior slice.
+
+## Recovery checkpoint: refuse settlement-directed revocation after commit
+
+Both runtime adapters now reject `AuthorizationRollbackRequired` after successful
+storage as a typed committed-finalization inconsistency. Shared core prepares the
+real target pairing attempt before emitting its persistence requirement, so the
+old deadline-driven rollback result is not a valid outcome of that prepared path.
+The adapters retain the complete committed candidate in live and durable state;
+they neither report success nor schedule a compensating write. A deliberate later
+revocation must be admitted and committed as its own authorization transaction.
+
+Tokio's post-commit finalizer is now a synchronous outcome classifier with no
+access to the mutable authorization table or persistence owner. Embassy's settled
+authorization outcome no longer has a rollback variant. Existing pre-commit
+failure/rollback handling is retained. Post-commit activation inconsistency is
+still a separate unresolved path and is not covered by this change.
+
+The former 133-cut Embassy rollback campaign characterized a now-removed write
+path. Its historical result remains in the measurements document. Its replacement
+checks zero post-settlement flash operations, no queued rollback, exact candidate
+authority and repeated fresh restoration. Tokio covers the same late result for
+both first grants and replacements through its real file owner and adapter, with
+two fresh reads. Acknowledgements in these adapter regressions are injected;
+the separate shared-engine recovery suite exercises actual preparation and late
+completion. Neither is presented as a whole-node crash campaign.

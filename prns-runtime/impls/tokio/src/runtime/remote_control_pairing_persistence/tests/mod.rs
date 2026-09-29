@@ -112,13 +112,12 @@ async fn failed_completion_delivery_keeps_committed_live_authority() {
             RemoteControlRequestKind::AnnounceSelf,
         );
         remote.set_controller_grant(prior).unwrap();
-        let (mutation, _, rollback) = prepare_controller_grant_set(&mut remote, candidate)
+        let (mutation, _, _) = prepare_controller_grant_set(&mut remote, candidate)
             .unwrap()
             .into_parts();
         activate_controller_grant_change(&mut remote, mutation).unwrap();
         assert_eq!(
-            finalize_controller_grant(&mut remote, None, mutation, rollback, Some(Err(failure)))
-                .await,
+            finalize_controller_grant(Some(Err(failure))),
             Err(
                 RemoteControlAuthorizationPersistenceFailure::CommittedCompletionDelivery {
                     failure

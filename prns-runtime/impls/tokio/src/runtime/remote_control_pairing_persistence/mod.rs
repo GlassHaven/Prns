@@ -484,14 +484,10 @@ async fn persist_controller_grant(
         },
     )
     .await;
-    finalize_controller_grant(remote_control, persistence, mutation, rollback, settled).await
+    finalize_controller_grant(settled)
 }
 
-async fn finalize_controller_grant(
-    remote_control: &mut AssembledRemoteControl,
-    persistence: Option<&AuthorizationTransaction>,
-    mutation: ControllerGrantMutation,
-    rollback: Vec<u8>,
+fn finalize_controller_grant(
     settled: Option<
         Result<
             RemoteControlTargetPairingFinalization,
@@ -514,14 +510,10 @@ async fn finalize_controller_grant(
                 failure,
             },
         ),
-        Ok(RemoteControlTargetPairingFinalization::AuthorizationRollbackRequired { .. }) => {
-            rollback_controller_grant(remote_control, mutation)?;
-            if let Some(persistence) = persistence {
-                restore_controller_grants_snapshot(persistence, rollback).await?;
-            }
-            Ok(())
-        }
-        Ok(RemoteControlTargetPairingFinalization::AuthorizationFailureRecorded { .. }) => Err(
+        Ok(
+            RemoteControlTargetPairingFinalization::AuthorizationRollbackRequired { .. }
+            | RemoteControlTargetPairingFinalization::AuthorizationFailureRecorded { .. },
+        ) => Err(
             RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantFinalizationMismatch,
         ),
     }
