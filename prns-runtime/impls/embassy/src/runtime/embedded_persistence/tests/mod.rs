@@ -1422,7 +1422,27 @@ fn authorization_store_returns_the_flash_retry_policy_deadline() {
                     InstantMillis(1_242),
                 )
                 .await,
-            StoreRemoteControlAuthorizationSnapshotOutcome::Stored,
+            StoreRemoteControlAuthorizationSnapshotOutcome::CompactionInProgress,
+        );
+        for _ in 0..32 {
+            persistence
+                .progress_compaction(&engine, InstantMillis(1_242))
+                .await;
+            if persistence.compaction.is_none() {
+                break;
+            }
+        }
+        assert!(persistence.compaction.is_none());
+        assert_eq!(
+            persistence
+                .store_remote_control_authorization_snapshot(
+                    &engine,
+                    RemoteControlAuthorizationSnapshotKind::TargetAccesses,
+                    &snapshot,
+                    InstantMillis(1_242),
+                )
+                .await,
+            StoreRemoteControlAuthorizationSnapshotOutcome::Stored
         );
     });
 }

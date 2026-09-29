@@ -124,7 +124,12 @@ fn failed_pairing_store_keeps_authority_until_real_flash_rollback_recovers() {
         assert_eq!(controller_grants_snapshot(&remote), confirmed);
 
         let first_retry = InstantMillis(WRITE_TIME.0 + policy.retry_interval_millis);
-        let second_retry = InstantMillis(first_retry.0 + policy.retry_interval_millis);
+        let second_retry = InstantMillis(
+            first_retry.0
+                + policy
+                    .retry_interval_millis
+                    .max(policy.compaction.minimum_interval_millis),
+        );
         let mut rollback = core::pin::pin!(stores.next_completion());
         let mut context = core::task::Context::from_waker(core::task::Waker::noop());
         fail_write.set(true);
@@ -136,7 +141,16 @@ fn failed_pairing_store_keeps_authority_until_real_flash_rollback_recovers() {
             assert_eq!(controller_grants_snapshot(&remote), confirmed);
         }
         ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(&mut manifold, first_retry);
-        manifold.progress(&mut engine, first_retry).await;
+        for _ in 0..32 {
+            ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
+                &mut manifold,
+                first_retry,
+            );
+            manifold.progress(&mut engine, first_retry).await;
+            if !fail_write.get() {
+                break;
+            }
+        }
         assert!(
             !fail_write.get(),
             "rollback must attempt storage at the deadline"
@@ -151,7 +165,13 @@ fn failed_pairing_store_keeps_authority_until_real_flash_rollback_recovers() {
             .await;
         assert!(core::future::Future::poll(rollback.as_mut(), &mut context).is_pending());
         ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(&mut manifold, second_retry);
-        manifold.progress(&mut engine, second_retry).await;
+        for _ in 0..32 {
+            ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
+                &mut manifold,
+                second_retry,
+            );
+            manifold.progress(&mut engine, second_retry).await;
+        }
         assert_eq!(
             core::future::Future::poll(rollback.as_mut(), &mut context),
             core::task::Poll::Ready(Ok(()))

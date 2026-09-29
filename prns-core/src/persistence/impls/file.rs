@@ -8,6 +8,8 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use crate::identity::vault::Removal;
 use crate::persistence::{PersistedStore, SnapshotRegion};
 
+/// File contents are synced before replacement. Unix additionally syncs namespace
+/// mutations; other platforms retain file-sync-and-rename semantics only.
 pub struct FileStore {
     dir: PathBuf,
     dir_ready: bool,
@@ -16,6 +18,7 @@ pub struct FileStore {
 #[derive(Debug)]
 pub enum FileStoreError {
     Io(std::io::Error),
+    DurabilityUnconfirmed(std::io::Error),
     SnapshotOutgrewBuffer {
         snapshot_len: usize,
         buffer_len: usize,
@@ -45,8 +48,39 @@ impl FileStore {
         fs::create_dir_all(&self.dir)?;
         #[cfg(unix)]
         let _ = fs::set_permissions(&self.dir, fs::Permissions::from_mode(0o700));
+        #[cfg(unix)]
+        {
+            // A previous failed attempt may already have created any of these directories.
+            // Confirm the full chain before caching readiness, including on retries.
+            let absolute = fs::canonicalize(&self.dir)?;
+            for directory in absolute.ancestors() {
+                sync_directory(directory)?;
+            }
+        }
         self.dir_ready = true;
         Ok(())
+    }
+
+    fn store_with_confirmation(
+        &mut self,
+        region: SnapshotRegion,
+        snapshot: &[u8],
+        confirm: impl FnOnce(&Path) -> Result<(), FileStoreError>,
+    ) -> Result<(), FileStoreError> {
+        self.ensure_dir()?;
+        let final_path = self.path_for(region);
+        let staging_path = self.dir.join(format!(
+            ".{}.{}.staging",
+            region_file_name(region),
+            std::process::id()
+        ));
+        let staged = stage_snapshot(&staging_path, snapshot)
+            .and_then(|()| fs::rename(&staging_path, &final_path).map_err(FileStoreError::from));
+        if staged.is_err() {
+            let _ = fs::remove_file(&staging_path);
+        }
+        staged?;
+        confirm(&self.dir)
     }
 }
 
@@ -98,26 +132,29 @@ impl PersistedStore for FileStore {
     }
 
     fn store(&mut self, region: SnapshotRegion, snapshot: &[u8]) -> Result<(), Self::Error> {
-        self.ensure_dir()?;
-        let final_path = self.path_for(region);
-        let staging_path = self.dir.join(format!(
-            ".{}.{}.staging",
-            region_file_name(region),
-            std::process::id()
-        ));
-
-        let staged = stage_snapshot(&staging_path, snapshot)
-            .and_then(|()| fs::rename(&staging_path, &final_path).map_err(FileStoreError::from));
-        if staged.is_err() {
-            let _ = fs::remove_file(&staging_path);
-        }
-        staged
+        self.store_with_confirmation(region, snapshot, |directory| {
+            #[cfg(unix)]
+            sync_directory(directory)?;
+            #[cfg(not(unix))]
+            let _ = directory;
+            Ok(())
+        })
     }
 
     fn remove(&mut self, region: SnapshotRegion) -> Result<Removal, Self::Error> {
         match fs::remove_file(self.path_for(region)) {
-            Ok(()) => Ok(Removal::Removed),
-            Err(error) if error.kind() == ErrorKind::NotFound => Ok(Removal::NothingStored),
+            Ok(()) => {
+                #[cfg(unix)]
+                sync_directory(&self.dir)?;
+                Ok(Removal::Removed)
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                #[cfg(unix)]
+                if self.dir.try_exists()? {
+                    sync_directory(&self.dir)?;
+                }
+                Ok(Removal::NothingStored)
+            }
             Err(error) => Err(error.into()),
         }
     }
@@ -134,6 +171,13 @@ fn stage_snapshot(staging_path: &Path, snapshot: &[u8]) -> Result<(), FileStoreE
     Ok(())
 }
 
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<(), FileStoreError> {
+    fs::File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(FileStoreError::DurabilityUnconfirmed)
+}
+
 impl From<std::io::Error> for FileStoreError {
     fn from(error: std::io::Error) -> Self {
         FileStoreError::Io(error)
@@ -144,6 +188,10 @@ impl core::fmt::Display for FileStoreError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             FileStoreError::Io(error) => write!(formatter, "{error}"),
+            FileStoreError::DurabilityUnconfirmed(error) => write!(
+                formatter,
+                "snapshot namespace durability is unconfirmed: {error}"
+            ),
             FileStoreError::SnapshotOutgrewBuffer {
                 snapshot_len,
                 buffer_len,
@@ -158,7 +206,7 @@ impl core::fmt::Display for FileStoreError {
 impl std::error::Error for FileStoreError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            FileStoreError::Io(error) => Some(error),
+            FileStoreError::Io(error) | FileStoreError::DurabilityUnconfirmed(error) => Some(error),
             FileStoreError::SnapshotOutgrewBuffer { .. } => None,
         }
     }
@@ -231,6 +279,51 @@ mod tests {
             .load(SnapshotRegion::Timebase, &mut buf)
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn failed_namespace_confirmation_retains_the_published_snapshot_and_typed_error() {
+        let temp = TempDir::new();
+        let mut store = FileStore::new(temp.path.join("nested/store"));
+        store
+            .store(SnapshotRegion::Timebase, &sealed_timebase())
+            .unwrap();
+        let mut candidate = [0u8; TIMEBASE_SNAPSHOT_LEN];
+        let len = write_timebase_snapshot(InstantMillis(HIGH_WATER.0 + 1), &mut candidate).unwrap();
+        let candidate = &candidate[..len];
+        let error = store
+            .store_with_confirmation(SnapshotRegion::Timebase, candidate, |directory| {
+                assert_eq!(fs::read(directory.join("timebase")).unwrap(), candidate);
+                Err(FileStoreError::DurabilityUnconfirmed(std::io::Error::from(
+                    ErrorKind::Other,
+                )))
+            })
+            .unwrap_err();
+        assert!(
+            matches!(error, FileStoreError::DurabilityUnconfirmed(error) if error.kind() == ErrorKind::Other)
+        );
+        let mut loaded = [0u8; TIMEBASE_SNAPSHOT_LEN];
+        assert_eq!(
+            FileStore::new(store.dir())
+                .load(SnapshotRegion::Timebase, &mut loaded)
+                .unwrap(),
+            Some(candidate)
+        );
+        store.store(SnapshotRegion::Timebase, candidate).unwrap();
+        assert_eq!(
+            store.load(SnapshotRegion::Timebase, &mut loaded).unwrap(),
+            Some(candidate)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_confirmation_errors_are_not_plain_write_failures() {
+        let temp = TempDir::new();
+        assert!(matches!(
+            sync_directory(&temp.path),
+            Err(FileStoreError::DurabilityUnconfirmed(_))
+        ));
     }
 
     #[test]

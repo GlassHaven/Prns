@@ -349,19 +349,17 @@ impl<F: NorFlash> FlashJournal<F> {
         if self.compaction.is_some() {
             return Err(FlashJournalError::CompactionInProgress);
         }
-        let Some(mut cursor) = self.active else {
+        let Some(cursor) = self.active.as_mut() else {
             return Err(FlashJournalError::Uninitialized);
         };
-        cursor.append_at = write_record::<F>(
+        write_cursor_record::<F>(
             &mut self.flash,
             self.layout.arenas[cursor.index],
-            cursor.append_at,
-            cursor.epoch,
+            cursor,
             kind,
             payload,
         )
         .await?;
-        self.active = Some(cursor);
         Ok(())
     }
 
@@ -418,36 +416,38 @@ impl<F: NorFlash> FlashJournal<F> {
         if kind == FlashJournalRecordKind::ArenaCommit {
             return Err(FlashJournalError::CompactionInProgress);
         }
-        let Some(mut cursor) = self.compaction else {
+        let Some(cursor) = self.compaction.as_mut() else {
             return Err(FlashJournalError::NoCompaction);
         };
-        cursor.append_at = write_record::<F>(
+        write_cursor_record::<F>(
             &mut self.flash,
             self.layout.arenas[cursor.index],
-            cursor.append_at,
-            cursor.epoch,
+            cursor,
             kind,
             payload,
         )
         .await?;
-        self.compaction = Some(cursor);
         Ok(())
     }
 
     pub async fn commit_compaction(&mut self) -> Result<(), FlashJournalError<F::Error>> {
-        let Some(mut cursor) = self.compaction else {
+        let Some(cursor) = self.compaction.as_mut() else {
             return Err(FlashJournalError::NoCompaction);
         };
-        cursor.append_at = write_record::<F>(
+        // A cancelled commit may already have selected the new epoch on flash. Do not
+        // allow later appends to the old epoch, where replay would silently ignore them.
+        if let Some(active) = self.active.as_mut() {
+            active.append_at = self.layout.arenas[active.index].end;
+        }
+        write_cursor_record::<F>(
             &mut self.flash,
             self.layout.arenas[cursor.index],
-            cursor.append_at,
-            cursor.epoch,
+            cursor,
             FlashJournalRecordKind::ArenaCommit,
             &[],
         )
         .await?;
-        self.active = Some(cursor);
+        self.active = Some(*cursor);
         self.compaction = None;
         Ok(())
     }
@@ -759,6 +759,25 @@ fn parse_header(bytes: &[u8; HEADER_LEN]) -> Option<RecordHeader> {
         checksum,
         committed: commit == COMMIT_WORD,
     })
+}
+
+async fn write_cursor_record<F: NorFlash>(
+    flash: &mut F,
+    arena: FlashArenaRange,
+    cursor: &mut ArenaCursor,
+    kind: FlashJournalRecordKind,
+    payload: &[u8],
+) -> Result<(), FlashJournalError<F::Error>> {
+    let at = cursor.append_at;
+    let end = record_end::<F>(at, payload.len()).ok_or(FlashJournalError::PayloadTooLarge)?;
+    if at < arena.start || end > arena.end {
+        return Err(FlashJournalError::ArenaFull);
+    }
+    // An error or cancellation can leave programmed cells behind. Only a verified write
+    // makes this tail appendable again; otherwise it must be recovered through compaction.
+    cursor.append_at = arena.end;
+    cursor.append_at = write_record(flash, arena, at, cursor.epoch, kind, payload).await?;
+    Ok(())
 }
 
 async fn write_record<F: NorFlash>(

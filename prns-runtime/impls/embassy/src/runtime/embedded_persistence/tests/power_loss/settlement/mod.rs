@@ -363,7 +363,13 @@ fn verify(finalize: Finalize) -> Outcome {
                         &mut manifold,
                         retry,
                     );
-                    manifold.progress(&mut engine, retry).await;
+                    for _ in 0..32 {
+                        ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
+                            &mut manifold,
+                            retry,
+                        );
+                        manifold.progress(&mut engine, retry).await;
+                    }
                 } else {
                     ManifoldPersistence::<crate::storage::GrowableHeap>::deadline(
                         &mut manifold,
@@ -436,7 +442,8 @@ fn verify(finalize: Finalize) -> Outcome {
             | Finalize::Inconsistent => {
                 std::vec![confirmed.to_vec(), next.to_vec()]
             }
-            Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
+            Finalize::RollBack => std::vec![next.to_vec(), confirmed.to_vec()],
+            Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
                 std::vec![confirmed.to_vec(), next.to_vec(), confirmed.to_vec()]
             }
         };

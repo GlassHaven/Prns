@@ -170,6 +170,9 @@ expected values. No production clock change was needed.
    completion-signing errors do the same without claiming pairing succeeded;
    inconsistent failure finalizations also retain committed state and report errors;
    shared flash-journal commit errors are now reconciled by read-back when possible.
+   Uncertain flash tails reject reprogramming and recover through compaction;
+   Unix file stores now synchronize directory mutations with typed confirmation
+   failure. Full durable transaction intent and non-Unix host durability remain open.
    see the design's rollout checkpoint for exact evidence and remaining scope.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.

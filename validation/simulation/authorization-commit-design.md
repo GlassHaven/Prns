@@ -529,3 +529,50 @@ tests (one ignored) and 157 Embassy tests. Both runtimes passed
 `python3 validation/run.py run --suite embedded-persistence-recovery` passed 44
 tests. Formatting, both registries and website tests passed. Root/workspace,
 firmware/resource, hardware, Miri and Kani checks were not run for this adapter slice.
+
+## Storage checkpoint: uncertain tails and host namespace confirmation
+
+Shared flash cursors now become non-appendable before programming starts, and
+regain an append position only after verified success. An error or cancellation
+therefore cannot cause another append to reprogram potentially occupied NOR
+cells. This applies to ordinary appends, compaction records and the compaction
+commit. Starting a compaction commit also closes the old active tail: if a cancelled
+commit already selected the new epoch, subsequent writes to the old epoch would
+otherwise be silently ignored on reboot. No cursor fields or happy-path flash
+operations were added.
+
+The uncertain-commit retry regression failed before the change. Tests now cover
+read-back failures, torn commits, and cancellation during active append, compacted
+append and compaction commit. Rejected retries leave the complete flash image
+unchanged. Fresh opens check whole record sequences. Embassy's recovery fixtures
+now exercise compaction instead of assuming an uncertain tail can be overwritten;
+they continue to enforce backoff, compaction budget, exact durable records and
+fresh restores. Conservative recovery can take longer, including the configured
+compaction cooldown; an I/O error is not proof that no cells changed.
+
+The shared host `FileStore` now confirms Unix directory updates after rename and
+removal. Initial directory readiness also syncs the canonical ancestor chain,
+including retries after partial directory creation. `DurabilityUnconfirmed`
+distinguishes confirmation failure from an ordinary I/O error. The injected
+post-rename test checks that the new snapshot is visible even though confirmation
+fails, retains the exact error category, and successfully retries the same value.
+This is host-file boundary evidence, not power-loss testing. Non-Unix platforms
+retain their previous file-sync-and-rename behavior; no Windows directory-durability
+guarantee is claimed. Tokio inherits the shared host implementation; Embassy
+inherits the shared flash changes.
+
+Verification on macOS arm64 used `CARGO_INCREMENTAL=0`: 20 focused flash-journal
+tests, 10 focused file-store tests, root default-member tests, 275 Tokio library
+tests (one ignored), 157 Embassy library tests, and 44 registered embedded
+persistence recovery tests passed. Core (with `flash`) and both runtime all-target
+clippy checks passed, as did the no-default-features `flash` core check for
+`thumbv7em-none-eabihf`, formatting, registries and website tests.
+
+`./tools/prns doctor embedded-assurance` failed readiness: 5.6 GiB was free versus
+24 GiB required, and Renode was unavailable for the nRF platform lane. No full
+firmware/resource, Miri, Kani, ISA or physical-board result is claimed here.
+
+This completes the bounded settlement-error and unsafe-tail fixes, not the entire
+authorization crash-consistency contract. Durable transaction intent across power
+loss, uncertain-store reconciliation through runtime activation, explicit rollback
+durability, completion retries, and non-Unix host durability still need work.
