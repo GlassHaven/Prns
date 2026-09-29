@@ -326,3 +326,44 @@ Verification on macOS arm64, with `CARGO_INCREMENTAL=0` for Cargo runs:
 
 No shared-core code changed. Root/workspace tests, firmware/resource builds,
 physical hardware, Miri and Kani were not run for this adapter-only slice.
+
+## Rollout checkpoint: unavailable target-grant settlement
+
+Tokio now retains a successfully stored and activated controller grant when the
+settlement channel closes without an acknowledgement, returning
+`CommittedTargetGrantSettlementUnavailable`. Embassy likewise retains the grant
+when its pairing-settlement slot is busy or its settlement helper reports
+`NodeStopped`, releasing transaction ownership and returning the typed failure.
+An unavailable acknowledgement does not establish that committed authority was
+rejected. Explicit engine-directed rollback and explicit core rejection retain
+their existing recovery behavior; those are distinct from this transport failure.
+
+The regression tests failed before the production changes. Tokio removed the
+committed live grant; Embassy entered rollback rather than returning the busy
+settlement failure. The Tokio fixture exercises the actual file writer for both
+add and replacement, with either a closed command receiver or a dropped settlement
+sender. It checks the candidate on disk before dropping an issued acknowledgement,
+the complete live grant table afterward, and two fresh file reads.
+
+Embassy extends the existing flash-owner fixture with an actually occupied
+settlement slot and a mismatched typed acknowledgement, which the node handle
+maps to `NodeStopped`. The latter is a scripted adapter failure, not a simulated
+physical node shutdown. Both cases check the precise error, released ownership,
+no queued rollback, exactly the prior and candidate journal records, and the
+complete candidate grant on two fresh restores. Existing successful settlement,
+delivery failure, expiry, explicit rollback and interrupted-rollback cases remain
+in the same fixture.
+
+No shared-core state or persisted format changes. Indeterminate writes, activation
+inconsistency, explicit target settlement rejection, completion retries and
+whole-node crash coverage remain open; this is not full crash-consistency closure.
+
+Verification on macOS arm64 with `CARGO_INCREMENTAL=0`: the focused Tokio
+`remote_control_pairing_persistence` filter passed five tests; the focused Embassy
+`committed_authority_survives_unavailable_settlement` regression passed. Full
+`cargo test --locked --manifest-path <runtime>/Cargo.toml --lib` runs passed
+275 Tokio tests (one ignored) and 154 Embassy tests. Both runtime paths passed
+`cargo clippy --locked --manifest-path <runtime>/Cargo.toml --all-targets -- -D warnings`.
+`python3 validation/run.py run --suite embedded-persistence-recovery` passed all
+41 tests. Formatting, both registries, and website tests also passed. Root/workspace,
+firmware/resource, hardware, Miri and Kani checks were not run for this adapter slice.

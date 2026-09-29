@@ -163,8 +163,9 @@ expected values. No production clock change was needed.
    and both runtimes retain committed grants on delivery failure. Grant management
    now also retains committed changes after caller cancellation or response loss.
    Both runtimes also retain committed controller-side target access when its
-   settlement fails. Indeterminate storage, activation failures and target-side
-   missing settlement acknowledgements remain open;
+   settlement fails, and retain committed target grants when their settlement
+   acknowledgement is unavailable. Indeterminate storage, activation failures,
+   explicit target settlement rejection and completion retries remain open;
    see the design's rollout checkpoint for exact evidence and remaining scope.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.

@@ -54,6 +54,7 @@ pub enum RemoteControlAuthorizationPersistenceFailure {
     CommittedCompletionDelivery {
         failure: crate::engine::SettleRemoteControlTargetPairingAuthorizationFailure,
     },
+    CommittedTargetGrantSettlementUnavailable,
     CommittedTargetAccessSettlementUnavailable,
     CommittedTargetAccessSettlement {
         failure: crate::engine::SettleRemoteControlControllerPairingPersistenceFailure,
@@ -78,6 +79,9 @@ impl std::fmt::Display for RemoteControlAuthorizationPersistenceFailure {
             }
             Self::CommittedCompletionDelivery { .. } => formatter
                 .write_str("authorization was committed but pairing completion was not delivered"),
+            Self::CommittedTargetGrantSettlementUnavailable => formatter.write_str(
+                "controller grant was committed but its settlement acknowledgement was unavailable",
+            ),
             Self::CommittedTargetAccessSettlementUnavailable => formatter.write_str(
                 "target access was committed but its settlement acknowledgement was unavailable",
             ),
@@ -456,11 +460,9 @@ async fn finalize_controller_grant(
     >,
 ) -> Result<(), RemoteControlAuthorizationPersistenceFailure> {
     let Some(settled) = settled else {
-        rollback_controller_grant(remote_control, mutation)?;
-        if let Some(persistence) = persistence {
-            restore_controller_grants_snapshot(persistence, rollback).await?;
-        }
-        return Err(RemoteControlAuthorizationPersistenceFailure::RuntimeState);
+        return Err(
+            RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantSettlementUnavailable,
+        );
     };
     match settled {
         Ok(RemoteControlTargetPairingFinalization::CompletionDispatched { .. }) => Ok(()),

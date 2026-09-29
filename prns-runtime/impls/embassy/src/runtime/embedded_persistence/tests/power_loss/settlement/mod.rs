@@ -21,6 +21,8 @@ enum Finalize {
     Complete,
     DeliveryFailed,
     RetentionExpired,
+    SettlementBusy,
+    SettlementUnavailable,
     RollBack,
     HealthyRollback,
     InterruptedRollback(Cut),
@@ -40,6 +42,12 @@ fn successful_pairing_storage_activates_then_releases_authority() {
 fn committed_authority_survives_delivery_failure_and_retention_expiry() {
     verify(Finalize::DeliveryFailed);
     verify(Finalize::RetentionExpired);
+}
+
+#[test]
+fn committed_authority_survives_unavailable_settlement() {
+    verify(Finalize::SettlementBusy);
+    verify(Finalize::SettlementUnavailable);
 }
 
 #[test]
@@ -108,6 +116,8 @@ fn verify(finalize: Finalize) -> Outcome {
                 },
             ),
             Finalize::Complete
+            | Finalize::SettlementBusy
+            | Finalize::SettlementUnavailable
             | Finalize::RollBack
             | Finalize::HealthyRollback
             | Finalize::InterruptedRollback(_) => None,
@@ -134,6 +144,16 @@ fn verify(finalize: Finalize) -> Outcome {
         assert_eq!(stored, Ok(()));
         assert_eq!(controller_grants_snapshot(&remote), confirmed);
         assert!(commands.receiver().try_receive().is_err());
+        let mut competing = core::pin::pin!(handle.settle_pairing_command(
+            SettleRemoteControlTargetPairingAuthorization {
+                attempt_id: crate::runtime::node_facade::test_remote_control_pairing_attempt(0x94),
+                persistence: RemoteControlTargetPairingAuthorizationPersistence::Persisted,
+            }
+        ));
+        if matches!(finalize, Finalize::SettlementBusy) {
+            let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+            assert!(core::future::Future::poll(competing.as_mut(), &mut context).is_pending());
+        }
         let accept = progress.accept_store_completion(
             stored,
             &mut remote,
@@ -142,6 +162,9 @@ fn verify(finalize: Finalize) -> Outcome {
             handle,
         );
         let acknowledge = async {
+            if matches!(finalize, Finalize::SettlementBusy) {
+                return;
+            }
             let issued = commands.receiver().receive().await;
             assert_eq!(
                 issued.command,
@@ -153,7 +176,11 @@ fn verify(finalize: Finalize) -> Outcome {
                 )
             );
             let finalization = match finalize {
-                Finalize::Complete | Finalize::DeliveryFailed | Finalize::RetentionExpired => {
+                Finalize::Complete
+                | Finalize::DeliveryFailed
+                | Finalize::RetentionExpired
+                | Finalize::SettlementBusy
+                | Finalize::SettlementUnavailable => {
                     RemoteControlTargetPairingFinalization::CompletionDispatched { attempt_id }
                 }
                 Finalize::RollBack
@@ -169,9 +196,13 @@ fn verify(finalize: Finalize) -> Outcome {
             handle.route_journaled(
                 Journaled::CommandSettled {
                     id: issued.id,
-                    settlement: Settlement::SettleRemoteControlTargetPairingAuthorization(
+                    settlement: if matches!(finalize, Finalize::SettlementUnavailable) {
+                        Settlement::SettleRemoteControlControllerPairingPersistence(Err(
+                            crate::engine::SettleRemoteControlControllerPairingPersistenceFailure::NoPersistenceOwed { settled: attempt_id },
+                        ))
+                    } else { Settlement::SettleRemoteControlTargetPairingAuthorization(
                         delivery_failure.map_or(Ok(finalization), Err),
-                    ),
+                    ) },
                 },
                 |_| panic!("settlement must reach its awaiter"),
             );
@@ -179,18 +210,42 @@ fn verify(finalize: Finalize) -> Outcome {
         let (accepted, ()) = join(accept, acknowledge).await;
         assert_eq!(
             accepted,
-            delivery_failure.map_or(Ok(()), |failure| Err(
-                EmbeddedRemoteControlPairingPersistenceFailure::TargetSettlement {
-                    attempt_id,
-                    operation: EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
-                    failure,
-                }
-            ))
+            match finalize {
+                Finalize::SettlementBusy => Err(
+                    EmbeddedRemoteControlPairingPersistenceFailure::SettlementBusy {
+                        attempt_id,
+                        operation:
+                            EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
+                    }
+                ),
+                Finalize::SettlementUnavailable => Err(
+                    EmbeddedRemoteControlPairingPersistenceFailure::NodeStopped {
+                        attempt_id,
+                        operation:
+                            EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
+                    }
+                ),
+                _ => delivery_failure.map_or(Ok(()), |failure| Err(
+                    EmbeddedRemoteControlPairingPersistenceFailure::TargetSettlement {
+                        attempt_id,
+                        operation:
+                            EmbeddedRemoteControlPairingPersistenceOperation::SettlePersisted,
+                        failure,
+                    }
+                )),
+            }
         );
         control.borrow_mut().arm(None);
         let expected = match finalize {
-            Finalize::Complete | Finalize::DeliveryFailed | Finalize::RetentionExpired => {
+            Finalize::Complete
+            | Finalize::DeliveryFailed
+            | Finalize::RetentionExpired
+            | Finalize::SettlementBusy
+            | Finalize::SettlementUnavailable => {
                 assert!(progress.is_ready());
+                let mut request = core::pin::pin!(stores.wait_for_next_test_store());
+                let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+                assert!(core::future::Future::poll(request.as_mut(), &mut context).is_pending());
                 next.clone()
             }
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
@@ -276,7 +331,11 @@ fn verify(finalize: Finalize) -> Outcome {
         };
         assert_eq!(controller_grants_snapshot(&remote), expected);
         let expected_grant = match finalize {
-            Finalize::Complete | Finalize::DeliveryFailed | Finalize::RetentionExpired => candidate,
+            Finalize::Complete
+            | Finalize::DeliveryFailed
+            | Finalize::RetentionExpired
+            | Finalize::SettlementBusy
+            | Finalize::SettlementUnavailable => candidate,
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
                 prior
             }
@@ -306,7 +365,11 @@ fn verify(finalize: Finalize) -> Outcome {
         .await
         .unwrap();
         let expected_records = match finalize {
-            Finalize::Complete | Finalize::DeliveryFailed | Finalize::RetentionExpired => {
+            Finalize::Complete
+            | Finalize::DeliveryFailed
+            | Finalize::RetentionExpired
+            | Finalize::SettlementBusy
+            | Finalize::SettlementUnavailable => {
                 std::vec![confirmed.to_vec(), next.to_vec()]
             }
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
