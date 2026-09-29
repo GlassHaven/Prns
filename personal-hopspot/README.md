@@ -15,6 +15,11 @@ screen is optional: display-bearing standalone workspaces explicitly enable
 core's `display` feature, while headless boards run the node and expose their
 supported remote controls without compiling the face or presentation surface.
 
+The [headless host](headless/README.md) runs the shared node and pages on Linux
+and other Rust hosts without a display. Its initial interface is explicit TCP;
+the ThinkNode G4 procedure records physical MIPS bring-up and remaining radio
+and installer qualification work.
+
 ## Public packages
 
 The `sdk/hopspot` directory is the shared home of the Rust crate and npm package
