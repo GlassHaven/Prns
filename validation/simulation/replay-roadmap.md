@@ -155,6 +155,10 @@ expected values. No production clock change was needed.
    restore candidate authority after live rollback, because rollback intent is
    volatile. A durable authorization-transaction protocol is needed before
    claiming rollback survives reboot; current tests characterize the boundary.
+   The [commit/recovery design](authorization-commit-design.md) records the
+   cross-runtime audit and the shared preparation boundary needed before changing
+   persistence. Tokio pairing and caller-cancelled grant management have the same
+   candidate-first ordering in source; host crash coverage remains outstanding.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,
