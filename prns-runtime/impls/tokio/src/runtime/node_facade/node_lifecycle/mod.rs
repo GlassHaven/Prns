@@ -1,10 +1,11 @@
+use portable_atomic::AtomicU64;
 use std::collections::HashMap;
 use std::fmt;
 use std::future::{poll_fn, Future};
 use std::marker::PhantomData;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake, Waker};
 

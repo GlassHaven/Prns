@@ -11,13 +11,14 @@ mod request_response;
 mod resource_admission;
 mod resource_transfer;
 
+use portable_atomic::AtomicU64;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 

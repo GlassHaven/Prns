@@ -2247,6 +2247,7 @@ dependencies = [
  "getrandom 0.2.17",
  "heapless",
  "nix 0.31.3",
+ "portable-atomic",
  "prns-core",
  "prns-runtime",
  "rtrb",

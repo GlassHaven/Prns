@@ -65,3 +65,12 @@ The runtime supports ordinary process creation that starts a new program, includ
 `std::process::Command`. Continuing to use an inherited runtime after a raw Unix `fork` is not
 supported. A forked child must execute a fresh program image before using Prns; continuing within
 the inherited process could reuse cryptographic random-generator state from its parent.
+
+## Hosts without native 64-bit atomics
+
+The Tokio runtime uses `portable-atomic` for 64-bit counters, packed status values,
+command IDs, and interface attachment epochs. Native atomic operations remain
+available on supported targets; other hosts, including 32-bit MIPS Linux, use the
+crate's synchronized fallback. Values remain 64-bit and existing memory orderings
+are preserved. The fallback is not guaranteed to be lock-free. Linux hosts do not
+enable interrupt-disabling or single-core assumptions.

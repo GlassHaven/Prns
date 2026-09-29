@@ -2,10 +2,11 @@ use std::collections::HashMap;
 
 mod arbitration;
 pub use arbitration::{InterfaceArbitration, InterfaceEventSource};
+use portable_atomic::AtomicU64;
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use futures_util::stream::{FuturesUnordered, StreamExt};
