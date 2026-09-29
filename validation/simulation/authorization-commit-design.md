@@ -147,3 +147,43 @@ before/after evidence; this proposal claims no free resource cost.
 Production impact of this design slice: none. It records the cross-runtime audit,
 proposed observable semantics and implementation gates; it neither repairs the
 open crash window nor adds a new runtime dependency or persisted format.
+
+## Implementation checkpoint: shared target preparation
+
+The first implementation slice adds `prepare_authorization` to the shared target
+pairing state machine. Its typed outcome reports readiness, deadline refusal,
+signing failure, attempt mismatch or absence of authorization work. Readiness
+retains the signed completion internally without returning a deliverable response.
+The state remains authorizing until persistence settles.
+
+Preparation checks the existing deadline strictly. Once prepared, retries use the
+retained signature, and timeout, rejection and link loss cannot consume the
+reserved authorization. A correlated storage failure can still abort it. A
+successful persistence settlement can release the exact completion after the
+original deadline without re-signing. Unprepared callers retain the legacy
+post-store deadline/signing behavior; they have not silently adopted this policy.
+
+Six focused tests cover preparation, exact deadline boundaries, signing failure,
+attempt correlation, failure settlement and non-authorizing states. The existing
+competing-begin whole-state test now includes prepared authorization. A compile-
+time size assertion bounds the preparation payload to the completion payload
+already present in the phase enum; this adds no heap allocation or storage format.
+It is not a firmware stack-usage measurement.
+
+This is production shared-core code, but neither runtime calls the new preparation
+method yet. The crash-consistency finding remains open. Next, wire engine admission
+and both runtime adapters to the boundary, resolve indeterminate storage outcomes,
+and remove rollback triggered solely by post-commit delivery failure. Controller-
+side target access and grant management remain required parts of that integration.
+Completion retention still uses the existing deadline; post-deadline delivery
+retry behavior must be addressed explicitly rather than assumed from preparation.
+
+Verification on macOS arm64: all 28 target-pairing tests, the root default-member
+tests (`cargo test --locked`), core all-target clippy, registry checks and 49
+website tests passed. The no-default-features `thumbv7em-none-eabihf` core check
+also passed, including the payload-size assertion. All Cargo commands used
+`CARGO_INCREMENTAL=0`. Filtered library tests named `remote_control_pairing`
+passed through the separate Embassy (13 tests) and Tokio (3 tests) manifests.
+These exercise existing callers, not adoption of preparation by either adapter.
+No runtime crash-gap closure, full workspace or firmware
+matrix, hardware, Kani or Miri result is claimed by this checkpoint.

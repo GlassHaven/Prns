@@ -1,5 +1,7 @@
 #![allow(clippy::panic, clippy::unwrap_used)]
 
+mod authorization_preparation;
+
 use super::*;
 use crate::identity::in_memory::InMemoryNodeIdentity;
 use crate::identity::vault::IdentitySecretKey;
@@ -308,12 +310,13 @@ fn competing_begins_preserve_every_occupied_target_phase_exactly() {
     let setups: [fn(
         &mut RemoteControlTargetPairingState,
         &TargetPairingFixture,
-    ) -> RemoteControlPairingAttemptId; 6] = [
+    ) -> RemoteControlPairingAttemptId; 7] = [
         offer_prepared,
         awaiting_both,
         awaiting_target_approval,
         awaiting_controller_commit,
         authorizing,
+        authorization_preparation::prepared,
         completing,
     ];
 
