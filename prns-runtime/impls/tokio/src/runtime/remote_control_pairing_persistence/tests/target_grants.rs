@@ -1,5 +1,7 @@
 use super::*;
-use crate::engine::PrnsCommand;
+use crate::engine::{
+    PrnsCommand, SettleRemoteControlTargetPairingAuthorizationFailure as Failure, Settlement,
+};
 use crate::manifold::driver::HostCommand;
 use crate::persistence::{
     read_remote_control_controller_grants_snapshot, FileStore, PersistedStore,
@@ -9,11 +11,23 @@ use crate::runtime::node_facade::{NodePersistence, TestDirectory};
 enum Acknowledgement {
     Lost,
     NodeStopped,
+    Rejected(Failure),
 }
 
 #[tokio::test]
-async fn committed_target_grants_survive_unavailable_settlement() {
-    for acknowledgement in [Acknowledgement::Lost, Acknowledgement::NodeStopped] {
+async fn committed_target_grants_survive_unavailable_and_stale_settlement() {
+    let attempt_id = RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x81; 32]);
+    for acknowledgement in [
+        Acknowledgement::Lost,
+        Acknowledgement::NodeStopped,
+        Acknowledgement::Rejected(Failure::NoAuthorizationOwed {
+            settled: attempt_id,
+        }),
+        Acknowledgement::Rejected(Failure::AttemptMismatch {
+            settled: attempt_id,
+            active: RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x82; 32]),
+        }),
+    ] {
         for prior in [None, Some(RemoteControlRequestKind::Describe)] {
             let directory = TestDirectory::new();
             let (commands, mut receiver) = mpsc::unbounded_channel();
@@ -35,8 +49,6 @@ async fn committed_target_grants_survive_unavailable_settlement() {
                 )
                 .await
                 .unwrap();
-            let attempt_id =
-                RemoteControlPairingAttemptId::from_test_transcript_digest_bytes([0x81; 32]);
             let apply = persist_controller_grant(
                 &mut remote,
                 Some(&persistence),
@@ -75,10 +87,20 @@ async fn committed_target_grants_survive_unavailable_settlement() {
                         .collect::<Vec<_>>(),
                     vec![candidate]
                 );
-                drop(completion);
+                match acknowledgement {
+                    Acknowledgement::Rejected(failure) => completion
+                        .send(Settlement::SettleRemoteControlTargetPairingAuthorization(
+                            Err(failure),
+                        ))
+                        .unwrap(),
+                    Acknowledgement::Lost | Acknowledgement::NodeStopped => drop(completion),
+                }
             };
             let (result, ()) = tokio::join!(apply, acknowledge);
-            assert_eq!(result, Err(RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantSettlementUnavailable));
+            assert_eq!(result, Err(match acknowledgement {
+                Acknowledgement::Rejected(failure) => RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantSettlement { failure },
+                Acknowledgement::Lost | Acknowledgement::NodeStopped => RemoteControlAuthorizationPersistenceFailure::CommittedTargetGrantSettlementUnavailable,
+            }));
             assert_eq!(
                 remote
                     .controller_grants()

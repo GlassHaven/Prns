@@ -23,6 +23,7 @@ enum Finalize {
     RetentionExpired,
     SettlementBusy,
     SettlementUnavailable,
+    SettlementRejected(SettleRemoteControlTargetPairingAuthorizationFailure),
     RollBack,
     HealthyRollback,
     InterruptedRollback(Cut),
@@ -48,6 +49,20 @@ fn committed_authority_survives_delivery_failure_and_retention_expiry() {
 fn committed_authority_survives_unavailable_settlement() {
     verify(Finalize::SettlementBusy);
     verify(Finalize::SettlementUnavailable);
+}
+
+#[test]
+fn committed_authority_survives_stale_attempt_settlement() {
+    let settled = crate::runtime::node_facade::test_remote_control_pairing_attempt(0x92);
+    verify(Finalize::SettlementRejected(
+        SettleRemoteControlTargetPairingAuthorizationFailure::NoAuthorizationOwed { settled },
+    ));
+    verify(Finalize::SettlementRejected(
+        SettleRemoteControlTargetPairingAuthorizationFailure::AttemptMismatch {
+            settled,
+            active: crate::runtime::node_facade::test_remote_control_pairing_attempt(0x95),
+        },
+    ));
 }
 
 #[test]
@@ -101,6 +116,7 @@ fn verify(finalize: Finalize) -> Outcome {
         let mut progress = RemoteControlPairingPersistenceProgress::new();
         let attempt_id = crate::runtime::node_facade::test_remote_control_pairing_attempt(0x92);
         let delivery_failure = match finalize {
+            Finalize::SettlementRejected(failure) => Some(failure),
             Finalize::DeliveryFailed => Some(
                 SettleRemoteControlTargetPairingAuthorizationFailure::CompletionDispatchFailed {
                     attempt_id,
@@ -180,7 +196,8 @@ fn verify(finalize: Finalize) -> Outcome {
                 | Finalize::DeliveryFailed
                 | Finalize::RetentionExpired
                 | Finalize::SettlementBusy
-                | Finalize::SettlementUnavailable => {
+                | Finalize::SettlementUnavailable
+                | Finalize::SettlementRejected(_) => {
                     RemoteControlTargetPairingFinalization::CompletionDispatched { attempt_id }
                 }
                 Finalize::RollBack
@@ -241,7 +258,8 @@ fn verify(finalize: Finalize) -> Outcome {
             | Finalize::DeliveryFailed
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy
-            | Finalize::SettlementUnavailable => {
+            | Finalize::SettlementUnavailable
+            | Finalize::SettlementRejected(_) => {
                 assert!(progress.is_ready());
                 let mut request = core::pin::pin!(stores.wait_for_next_test_store());
                 let mut context = core::task::Context::from_waker(core::task::Waker::noop());
@@ -335,7 +353,8 @@ fn verify(finalize: Finalize) -> Outcome {
             | Finalize::DeliveryFailed
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy
-            | Finalize::SettlementUnavailable => candidate,
+            | Finalize::SettlementUnavailable
+            | Finalize::SettlementRejected(_) => candidate,
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {
                 prior
             }
@@ -369,7 +388,8 @@ fn verify(finalize: Finalize) -> Outcome {
             | Finalize::DeliveryFailed
             | Finalize::RetentionExpired
             | Finalize::SettlementBusy
-            | Finalize::SettlementUnavailable => {
+            | Finalize::SettlementUnavailable
+            | Finalize::SettlementRejected(_) => {
                 std::vec![confirmed.to_vec(), next.to_vec()]
             }
             Finalize::RollBack | Finalize::HealthyRollback | Finalize::InterruptedRollback(_) => {

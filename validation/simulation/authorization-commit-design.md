@@ -367,3 +367,45 @@ Verification on macOS arm64 with `CARGO_INCREMENTAL=0`: the focused Tokio
 `python3 validation/run.py run --suite embedded-persistence-recovery` passed all
 41 tests. Formatting, both registries, and website tests also passed. Root/workspace,
 firmware/resource, hardware, Miri and Kani checks were not run for this adapter slice.
+
+## Rollout checkpoint: stale target-attempt settlement
+
+Both adapters now retain committed controller grants when target settlement
+returns `NoAuthorizationOwed` or `AttemptMismatch`. Those outcomes describe the
+engine's current attempt ownership, not a revocation request. Tokio preserves
+the exact error in `CommittedTargetGrantSettlement`; Embassy releases transaction
+ownership and returns its existing typed target-settlement error. Neither reports
+successful pairing. Shared core already preserves an unrelated active attempt
+on mismatch, so no core production change is needed.
+
+Both regressions failed before the adapter changes: Tokio removed the live grant,
+and Embassy entered rollback. The Tokio file-worker fixture now covers eight
+add/replace cases across unavailable and stale settlement, checking the complete
+table in memory and through fresh file readers. The Embassy flash-owner fixture
+injects both stale-attempt errors and checks the returned error, ready/released
+state, no rollback request, prior/candidate record order and complete candidate
+table on two fresh restores. Settlement errors are scripted; this is not evidence
+of a whole-node race or physical power loss.
+
+Explicit `AuthorizationRollbackRequired`, signing failures, and inconsistent
+finalizations retain their existing behavior and need separate audit. Indeterminate
+writes, activation failure recovery, completion retries and whole-node crash
+coverage also remain open. No persisted format changes or complete crash-consistency
+claim accompanies this slice.
+
+Verification on macOS arm64 with `CARGO_INCREMENTAL=0`:
+
+- `cargo test --locked --manifest-path prns-runtime/impls/tokio/Cargo.toml --lib`:
+  275 passed, one ignored; the focused pairing-persistence filter passed five tests.
+- `cargo test --locked --manifest-path prns-runtime/impls/embassy/Cargo.toml --lib`:
+  155 passed, including the focused stale-attempt regression.
+- Both runtimes passed `cargo clippy --locked --manifest-path <runtime>/Cargo.toml --all-targets -- -D warnings`.
+- `cargo test --locked -p prns-core authorization_settlement_preserves_mismatch_and_absence`:
+  one existing shared-engine test passed.
+- `python3 validation/run.py run --suite embedded-persistence-recovery`:
+  42 tests passed.
+- Formatting, `./tools/prns verify`, `python3 validation/run.py verify`, and
+  `cargo test --locked --manifest-path docs/website/Cargo.toml` passed.
+
+Root/workspace suites, firmware/resource builds, hardware, Miri and Kani were not
+run for this adapter-only change.
