@@ -884,3 +884,25 @@ deadline and admission at it. This stage needed no production behavior change.
 These are cancelled-operation/resumption tests with reboot checks after recovery,
 not proof of physical driver cancellation or reboot at every interrupted instruction.
 Cancellation during arena erase and copied-record appends remains subsequent work.
+
+## Recovery checkpoint: arena erase and copied snapshots
+
+The next three campaigns cover 1,026 arena-erase cancellation boundaries, 133
+controller-grant-copy boundaries, and 65 discovery-group-copy boundaries. Each
+case resumes the same owner, refuses additional programming before the recorded
+wear deadline, then persists a new grant and verifies both it and the retained
+group configuration through two fresh restores. Both inactive sectors begin with
+programmed bytes, so partial erases exercise real prefix changes in the fixture.
+
+The erase campaign exposed a production issue: cancellation left the current
+sector eligible for another erase within the same recorded wear budget. Embassy
+now records an in-flight erase phase before awaiting the driver. Resumption of
+that phase abandons compaction and uses the existing cooldown-controlled retry
+path. Successful erase completion still advances normally. The wear-budget policy
+belongs to this Embassy owner; Tokio's file-store path does not erase journal arenas.
+
+Copied snapshots already recover safely: the shared journal poisons the append
+cursor before programming, and the next owner turn aborts rather than reprogramming
+that tail. Those two campaigns required no production change. Route, ratchet, and
+target-access copy cancellation, full-node interrupted-reboot campaigns, and physical
+flash-driver semantics are not claimed by these tests.

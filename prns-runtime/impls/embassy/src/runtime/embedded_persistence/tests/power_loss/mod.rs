@@ -3,6 +3,7 @@ use super::*;
 mod cancellation;
 mod compaction_budget;
 mod compaction_commit;
+mod compaction_steps;
 mod continuation;
 mod flash;
 mod grants;

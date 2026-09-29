@@ -299,6 +299,7 @@ enum BatchKind {
 enum CompactionPhase {
     RecordBudget { at: InstantMillis },
     Erase { sector: usize },
+    EraseInFlight,
     Routes { index: usize },
     Ratchets { index: usize },
     AuthorizationSnapshot(RemoteControlAuthorizationSnapshotKind),
@@ -1187,6 +1188,7 @@ where
             }
             CompactionPhase::Erase { sector } => {
                 if sector < journal.inactive_sector_count() {
+                    self.compaction = Some(CompactionPhase::EraseInFlight);
                     match journal.erase_inactive_sector(sector).await {
                         Ok(()) => {
                             let next = sector + 1;
@@ -1208,6 +1210,9 @@ where
                         }
                     }
                 }
+            }
+            CompactionPhase::EraseInFlight => {
+                self.note_write_failure(now, EmbeddedPersistenceFailure::Flash);
             }
             CompactionPhase::Routes { index } => {
                 let mut scratch = [0u8; RECORD_SCRATCH_LEN];
