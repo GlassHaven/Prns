@@ -9,7 +9,8 @@ use super::discovery_group_store::{
 use embedded_storage_async::nor_flash::NorFlash;
 use heapless::Vec as HeaplessVec;
 
-use crate::crypto::ratchets::SeedSelfRatchetsOutcome;
+use crate::crypto::ratchets::{LastRotated, SeedSelfRatchetsOutcome};
+use crate::crypto::X25519SecretKey;
 use crate::engine::{EngineState, InstantMillis, Journaled, RouteSeedOutcome};
 use crate::identity::Zeroizing;
 use crate::interfaces::AttachedInterfaces;
@@ -21,17 +22,16 @@ use crate::persistence::{
     maximum_route_upsert_payload_len, read_remote_control_controller_grants_snapshot,
     read_remote_control_target_accesses_snapshot, read_routing_table_snapshot,
     read_self_ratchets_snapshot, remote_control_controller_grants_snapshot_capacity,
-    remote_control_target_accesses_snapshot_capacity, routing_table_snapshot_len,
-    self_ratchets_snapshot_len, write_routing_table_snapshot, write_self_ratchets_snapshot,
-    FlashJournal, FlashJournalError, FlashJournalLayout, FlashJournalRecord,
-    FlashJournalRecordKind, FlashJournalWarning, SnapshotReadError,
-    TIMEBASE_RECORD_INTERVAL_MILLIS,
+    remote_control_target_accesses_snapshot_capacity, self_ratchets_snapshot_len,
+    write_routing_table_snapshot, write_self_ratchets_snapshot, FlashJournal, FlashJournalError,
+    FlashJournalLayout, FlashJournalRecord, FlashJournalRecordKind, FlashJournalWarning,
+    SnapshotReadError, TIMEBASE_RECORD_INTERVAL_MILLIS,
 };
 use crate::remote_control::{
     DEFAULT_MAX_REMOTE_CONTROL_CONTROLLER_GRANTS, DEFAULT_MAX_REMOTE_CONTROL_TARGET_ACCESSES,
 };
 use crate::routing::announce::emit::MAX_ANNOUNCE_APP_DATA_LEN;
-use crate::routing::AnnounceIdRing;
+use crate::routing::{AnnounceIdRing, PersistedRouteRow};
 use crate::storage::StorageLayout;
 use crate::wire::{DestinationHash, TRUNCATED_HASH_BYTE_LEN};
 
@@ -301,10 +301,10 @@ enum CompactionPhase {
     Erase { sector: usize },
     Routes { index: usize },
     Ratchets { index: usize },
-    RemoteControlControllerGrants,
-    RemoteControlTargetAccesses,
+    AuthorizationSnapshot(RemoteControlAuthorizationSnapshotKind),
     DiscoveryGroupConfigurations,
     Commit,
+    ConfirmCommit { at: u32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1219,17 +1219,7 @@ where
                     self.compaction = Some(CompactionPhase::Routes { index: index + 1 });
                     return;
                 };
-                let mut durable = row.clone();
-                durable.announce_id_ring = AnnounceIdRing::Table(&[]);
-                let required = routing_table_snapshot_len(core::iter::once(durable.clone()));
-                if required > scratch.len() {
-                    self.note_codec_failure(now);
-                    return;
-                }
-                let Ok(written) = write_routing_table_snapshot(
-                    core::iter::once(durable),
-                    &mut scratch[..required],
-                ) else {
+                let Ok(written) = encode_route_upsert(row, &mut scratch) else {
                     self.note_codec_failure(now);
                     return;
                 };
@@ -1248,7 +1238,9 @@ where
             }
             CompactionPhase::Ratchets { index } => {
                 let Some(destination) = self.compaction_ratchet_keys.get(index).copied() else {
-                    self.compaction = Some(CompactionPhase::RemoteControlControllerGrants);
+                    self.compaction = Some(CompactionPhase::AuthorizationSnapshot(
+                        RemoteControlAuthorizationSnapshotKind::ControllerGrants,
+                    ));
                     return;
                 };
                 let Some((last_rotated, secrets)) = engine.persisted_self_ratchet_row(&destination)
@@ -1257,26 +1249,14 @@ where
                     return;
                 };
                 let mut scratch = Zeroizing::new([0u8; RECORD_SCRATCH_LEN]);
-                scratch[..TRUNCATED_HASH_BYTE_LEN].copy_from_slice(destination.as_bytes());
-                let required = self_ratchets_snapshot_len(secrets.len());
-                let end = TRUNCATED_HASH_BYTE_LEN.saturating_add(required);
-                if end > scratch.len() {
-                    self.note_codec_failure(now);
-                    return;
-                }
-                let Ok(written) = write_self_ratchets_snapshot(
-                    last_rotated,
-                    secrets,
-                    &mut scratch[TRUNCATED_HASH_BYTE_LEN..end],
-                ) else {
+                let Ok(written) =
+                    encode_ratchet_row(destination, last_rotated, secrets, &mut *scratch)
+                else {
                     self.note_codec_failure(now);
                     return;
                 };
                 match journal
-                    .append_compacted(
-                        FlashJournalRecordKind::SelfRatchet,
-                        &scratch[..TRUNCATED_HASH_BYTE_LEN + written],
-                    )
+                    .append_compacted(FlashJournalRecordKind::SelfRatchet, &scratch[..written])
                     .await
                 {
                     Ok(()) => {
@@ -1288,42 +1268,29 @@ where
                     }
                 }
             }
-            CompactionPhase::RemoteControlControllerGrants => {
-                let Some(snapshot) = self.remote_control_controller_grants_snapshot.as_ref() else {
-                    self.compaction = Some(CompactionPhase::RemoteControlTargetAccesses);
-                    return;
-                };
-                match journal
-                    .append_compacted(
+            CompactionPhase::AuthorizationSnapshot(kind) => {
+                let (snapshot, kind, next) = match kind {
+                    RemoteControlAuthorizationSnapshotKind::ControllerGrants => (
+                        self.remote_control_controller_grants_snapshot.as_deref(),
                         FlashJournalRecordKind::RemoteControlControllerGrants,
-                        snapshot,
-                    )
-                    .await
-                {
-                    Ok(()) => {
-                        self.landing_records = self.landing_records.saturating_add(1);
-                        self.compaction = Some(CompactionPhase::RemoteControlTargetAccesses);
-                    }
-                    Err(error) => {
-                        self.note_write_failure(now, failure_from_journal(error));
-                    }
-                }
-            }
-            CompactionPhase::RemoteControlTargetAccesses => {
-                let Some(snapshot) = self.remote_control_target_accesses_snapshot.as_ref() else {
-                    self.compaction = Some(CompactionPhase::DiscoveryGroupConfigurations);
+                        CompactionPhase::AuthorizationSnapshot(
+                            RemoteControlAuthorizationSnapshotKind::TargetAccesses,
+                        ),
+                    ),
+                    RemoteControlAuthorizationSnapshotKind::TargetAccesses => (
+                        self.remote_control_target_accesses_snapshot.as_deref(),
+                        FlashJournalRecordKind::RemoteControlTargetAccesses,
+                        CompactionPhase::DiscoveryGroupConfigurations,
+                    ),
+                };
+                let Some(snapshot) = snapshot else {
+                    self.compaction = Some(next);
                     return;
                 };
-                match journal
-                    .append_compacted(
-                        FlashJournalRecordKind::RemoteControlTargetAccesses,
-                        snapshot,
-                    )
-                    .await
-                {
+                match journal.append_compacted(kind, snapshot).await {
                     Ok(()) => {
                         self.landing_records = self.landing_records.saturating_add(1);
-                        self.compaction = Some(CompactionPhase::DiscoveryGroupConfigurations);
+                        self.compaction = Some(next);
                     }
                     Err(error) => {
                         self.note_write_failure(now, failure_from_journal(error));
@@ -1352,36 +1319,61 @@ where
                     }
                 }
             }
-            CompactionPhase::Commit => match journal.commit_compaction().await {
-                Ok(()) => {
-                    self.compaction = None;
-                    self.compaction_target = None;
-                    let records = core::mem::take(&mut self.landing_records);
-                    self.retry_not_before = None;
-                    self.write_failed = false;
-                    if self.snapshot_required {
-                        self.require_snapshot(self.snapshot_target, now);
-                    } else {
-                        self.deferred_target = None;
-                        self.deferred_until = None;
+            CompactionPhase::Commit => {
+                let Some(at) = journal.compaction_append_offset() else {
+                    self.note_write_failure(now, EmbeddedPersistenceFailure::Flash);
+                    return;
+                };
+                self.compaction = Some(CompactionPhase::ConfirmCommit { at });
+                match journal.commit_compaction().await {
+                    Ok(()) => self.complete_compaction(now),
+                    Err(error @ FlashJournalError::CommitUnconfirmed { .. }) => {
+                        self.note_write_failure(now, failure_from_journal(error));
                     }
-                    let state_not_saved = self.state_not_saved();
-                    (self.observe_diagnostic)(EmbeddedPersistenceDiagnostic::CompactionCompleted {
-                        records,
-                        at: now,
-                        state_not_saved,
-                    });
-                    if !self.snapshot_required
-                        && self.pending_routes.is_empty()
-                        && self.pending_ratchets.is_empty()
-                    {
-                        self.landing_batch = Some(BatchKind::Compaction);
+                    Err(error) => {
+                        self.compaction = Some(CompactionPhase::Commit);
+                        self.note_write_failure(now, failure_from_journal(error));
                     }
                 }
-                Err(error) => {
-                    self.note_write_failure(now, failure_from_journal(error));
+            }
+            CompactionPhase::ConfirmCommit { at } => {
+                match journal.confirm_compaction_commit(at).await {
+                    Ok(crate::persistence::FlashJournalCommitResolution::Committed) => {
+                        self.complete_compaction(now)
+                    }
+                    Ok(crate::persistence::FlashJournalCommitResolution::NotCommitted) => {
+                        self.compaction = Some(CompactionPhase::Commit);
+                        self.note_write_failure(now, EmbeddedPersistenceFailure::Flash);
+                    }
+                    Err(error) => self.note_write_failure(now, failure_from_journal(error)),
                 }
-            },
+            }
+        }
+    }
+
+    fn complete_compaction(&mut self, now: InstantMillis) {
+        self.compaction = None;
+        self.compaction_target = None;
+        let records = core::mem::take(&mut self.landing_records);
+        self.retry_not_before = None;
+        self.write_failed = false;
+        if self.snapshot_required {
+            self.require_snapshot(self.snapshot_target, now);
+        } else {
+            self.deferred_target = None;
+            self.deferred_until = None;
+        }
+        let state_not_saved = self.state_not_saved();
+        (self.observe_diagnostic)(EmbeddedPersistenceDiagnostic::CompactionCompleted {
+            records,
+            at: now,
+            state_not_saved,
+        });
+        if !self.snapshot_required
+            && self.pending_routes.is_empty()
+            && self.pending_ratchets.is_empty()
+        {
+            self.landing_batch = Some(BatchKind::Compaction);
         }
     }
 
@@ -1445,7 +1437,9 @@ where
         let retry_at = InstantMillis(now.0.saturating_add(self.policy.retry_interval_millis));
         self.retry_not_before = Some(retry_at);
         self.write_failed = true;
-        if self.compaction.is_some() {
+        if self.compaction.is_some()
+            && !matches!(self.compaction, Some(CompactionPhase::ConfirmCommit { .. }))
+        {
             let target = self
                 .compaction_target
                 .unwrap_or(EmbeddedPersistenceTarget::Routes);
@@ -1588,16 +1582,8 @@ fn encode_route_delta<S: StorageLayout>(
             let Some(row) = engine.persisted_route_row(&destination) else {
                 return encode_tombstone(destination);
             };
-            let mut durable = row.clone();
-            durable.announce_id_ring = AnnounceIdRing::Table(&[]);
-            let required = routing_table_snapshot_len(core::iter::once(durable.clone()));
-            if required > RECORD_SCRATCH_LEN {
-                return Err(());
-            }
             let mut scratch = Zeroizing::new([0u8; RECORD_SCRATCH_LEN]);
-            let written =
-                write_routing_table_snapshot(core::iter::once(durable), &mut scratch[..required])
-                    .map_err(|_| ())?;
+            let written = encode_route_upsert(row, &mut *scratch)?;
             Ok(EncodedDelta {
                 kind: FlashJournalRecordKind::RouteUpsert,
                 payload: scratch,
@@ -1608,6 +1594,11 @@ fn encode_route_delta<S: StorageLayout>(
     }
 }
 
+fn encode_route_upsert(mut row: PersistedRouteRow<'_>, scratch: &mut [u8]) -> Result<usize, ()> {
+    row.announce_id_ring = AnnounceIdRing::Table(&[]);
+    write_routing_table_snapshot(core::iter::once(row), scratch).map_err(|_| ())
+}
+
 fn encode_ratchet<S: StorageLayout>(
     engine: &EngineState<S>,
     destination: DestinationHash,
@@ -1615,23 +1606,32 @@ fn encode_ratchet<S: StorageLayout>(
     let Some((last_rotated, secrets)) = engine.persisted_self_ratchet_row(&destination) else {
         return Err(());
     };
-    let required = self_ratchets_snapshot_len(secrets.len());
-    if TRUNCATED_HASH_BYTE_LEN + required > RECORD_SCRATCH_LEN {
-        return Err(());
-    }
     let mut scratch = Zeroizing::new([0u8; RECORD_SCRATCH_LEN]);
-    scratch[..TRUNCATED_HASH_BYTE_LEN].copy_from_slice(destination.as_bytes());
-    let written = write_self_ratchets_snapshot(
-        last_rotated,
-        secrets,
-        &mut scratch[TRUNCATED_HASH_BYTE_LEN..TRUNCATED_HASH_BYTE_LEN + required],
-    )
-    .map_err(|_| ())?;
+    let written = encode_ratchet_row(destination, last_rotated, secrets, &mut *scratch)?;
     Ok(EncodedDelta {
         kind: FlashJournalRecordKind::SelfRatchet,
         payload: scratch,
-        len: TRUNCATED_HASH_BYTE_LEN + written,
+        len: written,
     })
+}
+
+fn encode_ratchet_row(
+    destination: DestinationHash,
+    last_rotated: LastRotated,
+    secrets: &[X25519SecretKey],
+    scratch: &mut [u8],
+) -> Result<usize, ()> {
+    let required = self_ratchets_snapshot_len(secrets.len());
+    let end = TRUNCATED_HASH_BYTE_LEN.checked_add(required).ok_or(())?;
+    let output = scratch.get_mut(..end).ok_or(())?;
+    output[..TRUNCATED_HASH_BYTE_LEN].copy_from_slice(destination.as_bytes());
+    let written = write_self_ratchets_snapshot(
+        last_rotated,
+        secrets,
+        &mut output[TRUNCATED_HASH_BYTE_LEN..],
+    )
+    .map_err(|_| ())?;
+    Ok(TRUNCATED_HASH_BYTE_LEN + written)
 }
 
 fn encode_tombstone(destination: DestinationHash) -> Result<EncodedDelta, ()> {

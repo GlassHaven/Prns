@@ -393,31 +393,17 @@ impl<F: NorFlash> FlashJournal<F> {
             .as_ref()
             .ok_or(FlashJournalError::Uninitialized)?;
         let arena = self.layout.arenas[cursor.index];
-        let end = record_end::<F>(at, payload.len()).ok_or(FlashJournalError::PayloadTooLarge)?;
-        if at < arena.start || end > arena.end || !at.is_multiple_of(F::READ_SIZE as u32) {
-            return Err(FlashJournalError::OutOfBounds);
-        }
+        check_record_bounds::<F>(arena, at, payload.len())?;
         let mut header = AlignedHeader([0; HEADER_LEN]);
         self.flash
             .read(at, &mut header.0)
             .await
             .map_err(FlashJournalError::Flash)?;
-        if header.0[COMMIT_OFFSET..] != COMMIT_WORD.to_le_bytes() {
-            return Ok(FlashJournalCommitResolution::NotCommitted);
+        let resolution = confirm_record_header(&header.0, cursor.epoch, kind, payload)?;
+        if resolution == FlashJournalCommitResolution::Committed {
+            verify_record_payload(&mut self.flash, at, payload).await?;
         }
-        let checksum = record_checksum(&header.0[..CHECKSUM_PREFIX_LEN], payload);
-        if !header_matches_record(
-            &header.0,
-            cursor.epoch,
-            kind,
-            payload.len() as u32,
-            checksum,
-            true,
-        ) {
-            return Err(FlashJournalError::VerificationFailed);
-        }
-        verify_record_payload(&mut self.flash, at, payload).await?;
-        Ok(FlashJournalCommitResolution::Committed)
+        Ok(resolution)
     }
 
     #[must_use]
@@ -485,6 +471,38 @@ impl<F: NorFlash> FlashJournal<F> {
         )
         .await?;
         Ok(())
+    }
+
+    #[must_use]
+    pub fn compaction_append_offset(&self) -> Option<u32> {
+        self.compaction.map(|cursor| cursor.append_at)
+    }
+
+    /// Confirm a possibly completed arena commit before allowing other writes or erases.
+    /// A verified commit selects the new arena and restores its append cursor.
+    pub async fn confirm_compaction_commit(
+        &mut self,
+        at: u32,
+    ) -> Result<FlashJournalCommitResolution, FlashJournalError<F::Error>> {
+        let mut cursor = self.compaction.ok_or(FlashJournalError::NoCompaction)?;
+        check_record_bounds::<F>(self.layout.arenas[cursor.index], at, 0)?;
+        let mut header = AlignedHeader([0; HEADER_LEN]);
+        self.flash
+            .read(at, &mut header.0)
+            .await
+            .map_err(FlashJournalError::Flash)?;
+        let resolution = confirm_record_header(
+            &header.0,
+            cursor.epoch,
+            FlashJournalRecordKind::ArenaCommit,
+            &[],
+        )?;
+        if resolution == FlashJournalCommitResolution::Committed {
+            cursor.append_at = record_end::<F>(at, 0).ok_or(FlashJournalError::PayloadTooLarge)?;
+            self.active = Some(cursor);
+            self.compaction = None;
+        }
+        Ok(resolution)
     }
 
     pub async fn commit_compaction(&mut self) -> Result<(), FlashJournalError<F::Error>> {
@@ -816,6 +834,34 @@ fn parse_header(bytes: &[u8; HEADER_LEN]) -> Option<RecordHeader> {
         checksum,
         committed: commit == COMMIT_WORD,
     })
+}
+
+fn check_record_bounds<F: NorFlash>(
+    arena: FlashArenaRange,
+    at: u32,
+    payload_len: usize,
+) -> Result<(), FlashJournalError<F::Error>> {
+    let end = record_end::<F>(at, payload_len).ok_or(FlashJournalError::PayloadTooLarge)?;
+    if at < arena.start || end > arena.end || !at.is_multiple_of(F::READ_SIZE as u32) {
+        return Err(FlashJournalError::OutOfBounds);
+    }
+    Ok(())
+}
+
+fn confirm_record_header<E>(
+    header: &[u8; HEADER_LEN],
+    epoch: u64,
+    kind: FlashJournalRecordKind,
+    payload: &[u8],
+) -> Result<FlashJournalCommitResolution, FlashJournalError<E>> {
+    if header[COMMIT_OFFSET..] != COMMIT_WORD.to_le_bytes() {
+        return Ok(FlashJournalCommitResolution::NotCommitted);
+    }
+    let checksum = record_checksum(&header[..CHECKSUM_PREFIX_LEN], payload);
+    if !header_matches_record(header, epoch, kind, payload.len() as u32, checksum, true) {
+        return Err(FlashJournalError::VerificationFailed);
+    }
+    Ok(FlashJournalCommitResolution::Committed)
 }
 
 async fn write_cursor_record<F: NorFlash>(

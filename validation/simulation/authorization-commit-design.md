@@ -835,3 +835,37 @@ no journal field or snapshot buffer. Tokio uses its separately owned file-store
 transaction and does not use this flash append path. Cancellation while starting
 or advancing compaction, and full controlled-node reboot campaigns, remain
 separate work rather than being implied by this append/resume campaign.
+
+## Recovery checkpoint: confirm the compaction arena commit after cancellation
+
+Shared core now confirms an arena commit against its exact offset, epoch, kind,
+length and checksum before selecting that arena and restoring the append cursor.
+Ordinary append confirmation uses the same record-verification helper. Embassy
+records a `ConfirmCommit` phase before awaiting the final compaction write and
+retains it through cancelled or failed readback; uncertain completion cannot
+abort compaction and silently fall back to the previous arena.
+
+A confirmed commit completes compaction without another erase, allowing the next
+authorization snapshot to append in the selected arena. A confirmed incomplete
+commit uses the existing failure/retry path, preserving the recorded compaction
+wear budget. The initial regression failed on the former implementation because
+resumption abandoned compaction without reading back the completed marker.
+
+The new native campaign covers 38 final-commit cancellation boundaries, including
+all write prefixes and read start/end points. Every case also cancels confirmation,
+injects a readback error, checks the retry deadline and read-only resolution,
+then stores a new grant and verifies it through two fresh restores. Incomplete
+commits additionally prove refusal before the wear-limit deadline and successful
+retry afterward. Shared-core tests reject an incorrect marker kind and invalid
+offset, hold writes during uncertainty and check replay after arena selection.
+
+This extends real adapter/journal evidence, not a whole-node crash campaign or
+physical flash-driver cancellation guarantee. Cancellation earlier in compaction
+(budget recording, sector erase, copied-record appends) remains a separate next
+step. Tokio's file-store owner does not use this flash-arena path.
+
+Ordinary append and compaction share their route and ratchet encoders, and the
+two authorization snapshot kinds share one compaction write phase. Route encoding
+relies on the core writer's bounds checks instead of cloning and measuring the
+same row first. Equivalence tests compare complete buffers with the former codec
+sequence and reject every shorter output length; ratchet scratch remains zeroizing.

@@ -1,11 +1,12 @@
 use super::*;
-use crate::persistence::TIMEBASE_HEADROOM_MILLIS;
+use crate::persistence::{routing_table_snapshot_len, TIMEBASE_HEADROOM_MILLIS};
 use embedded_storage::nor_flash::{ErrorType, NorFlashError, NorFlashErrorKind};
 use embedded_storage_async::nor_flash::ReadNorFlash;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::vec::Vec;
 
+mod encoding;
 mod power_loss;
 
 static DISCOVERY_GROUP_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

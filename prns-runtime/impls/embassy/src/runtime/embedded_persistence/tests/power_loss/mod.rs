@@ -1,6 +1,7 @@
 use super::*;
 
 mod cancellation;
+mod compaction_commit;
 mod continuation;
 mod flash;
 mod grants;

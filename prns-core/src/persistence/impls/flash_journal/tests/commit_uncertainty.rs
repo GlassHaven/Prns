@@ -7,6 +7,109 @@ enum CommitWrite {
     Suspend,
 }
 
+#[test]
+fn compaction_confirmation_selects_only_the_exact_committed_arena_marker() {
+    embassy_futures::block_on(async {
+        let (mut baseline, _, _) = open(FakeFlash::new()).await;
+        baseline.initialize_empty().await.unwrap();
+        baseline
+            .append(FlashJournalRecordKind::RouteUpsert, b"prior")
+            .await
+            .unwrap();
+        let bytes = baseline.release().bytes;
+        for commit in [CommitWrite::Complete, CommitWrite::Torn] {
+            let mut inner = FakeFlash::new();
+            inner.bytes = bytes;
+            let flash = UncertainCommitFlash {
+                inner,
+                commit: CommitWrite::Complete,
+                commit_attempted: false,
+                fail_readback: false,
+            };
+            let (mut journal, _) =
+                FlashJournal::open(flash, LAYOUT, &mut [0; IO_CHUNK_LEN], |_| {})
+                    .await
+                    .unwrap();
+            journal.begin_compaction().unwrap();
+            let wrong_kind_at = journal.compaction_append_offset().unwrap();
+            journal
+                .append_compacted(FlashJournalRecordKind::RouteUpsert, b"candidate")
+                .await
+                .unwrap();
+            let at = journal.compaction_append_offset().unwrap();
+            journal.flash.commit = commit;
+            journal.flash.commit_attempted = false;
+            journal.flash.fail_readback = true;
+            assert!(
+                matches!(journal.commit_compaction().await, Err(FlashJournalError::CommitUnconfirmed { at: found, .. }) if found == at)
+            );
+            let image = journal.flash.inner.bytes;
+            assert_eq!(
+                journal.confirm_compaction_commit(at).await,
+                Err(FlashJournalError::Flash(FakeError::Interrupted))
+            );
+            assert_eq!(journal.active_epoch(), Some(0));
+            assert_eq!(
+                journal
+                    .append(FlashJournalRecordKind::RouteRemoval, b"blocked")
+                    .await,
+                Err(FlashJournalError::CompactionInProgress)
+            );
+            journal.flash.fail_readback = false;
+            assert_eq!(
+                journal.confirm_compaction_commit(u32::MAX).await,
+                Err(FlashJournalError::PayloadTooLarge)
+            );
+            assert_eq!(
+                journal.confirm_compaction_commit(wrong_kind_at).await,
+                Err(FlashJournalError::VerificationFailed)
+            );
+            assert_eq!(journal.active_epoch(), Some(0));
+            assert_eq!(
+                journal.confirm_compaction_commit(at).await,
+                Ok(match commit {
+                    CommitWrite::Complete => FlashJournalCommitResolution::Committed,
+                    CommitWrite::Torn => FlashJournalCommitResolution::NotCommitted,
+                    CommitWrite::Suspend => unreachable!(),
+                })
+            );
+            assert_eq!(journal.flash.inner.bytes, image);
+            let expected = match commit {
+                CommitWrite::Complete => {
+                    assert_eq!(journal.active_epoch(), Some(1));
+                    assert_eq!(
+                        journal.confirm_compaction_commit(at).await,
+                        Err(FlashJournalError::NoCompaction)
+                    );
+                    journal.flash.commit = CommitWrite::Complete;
+                    journal
+                        .append(FlashJournalRecordKind::RouteRemoval, b"after")
+                        .await
+                        .unwrap();
+                    vec![
+                        (FlashJournalRecordKind::RouteUpsert, b"candidate".to_vec()),
+                        (FlashJournalRecordKind::RouteRemoval, b"after".to_vec()),
+                    ]
+                }
+                CommitWrite::Torn => {
+                    assert_eq!(journal.active_epoch(), Some(0));
+                    journal.abort_compaction();
+                    assert_eq!(
+                        journal
+                            .append(FlashJournalRecordKind::RouteRemoval, b"blocked")
+                            .await,
+                        Err(FlashJournalError::ArenaFull)
+                    );
+                    vec![(FlashJournalRecordKind::RouteUpsert, b"prior".to_vec())]
+                }
+                CommitWrite::Suspend => unreachable!(),
+            };
+            let (_, _, records) = open(journal.release().inner).await;
+            assert_eq!(records, expected);
+        }
+    });
+}
+
 struct UncertainCommitFlash {
     inner: FakeFlash,
     commit: CommitWrite,
