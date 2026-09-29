@@ -80,3 +80,31 @@ The follow-up passed the registered recovery suite (35 tests), all 147 Embassy
 library tests, all-target Embassy clippy, registry and website checks on macOS
 arm64. No radio-simulation, full-workspace, Miri or firmware run is claimed for
 this owner-local test extension.
+
+## Successful storage and settlement-directed rollback
+
+Two more cases drive successful candidate persistence through the same real
+transaction, queue and flash owner. The complete live grant table must remain
+unchanged during preparation and after storage completion until the transaction
+consumes that completion. No settlement command may appear before that point.
+
+For `CompletionDispatched`, the transaction adopts the candidate, becomes ready
+and releases authorization ownership. The journal must contain exactly the prior
+and candidate snapshots, and two fresh boots must restore the candidate.
+
+For `AuthorizationRollbackRequired`, the transaction restores prior live authority
+and queues durable rollback. An injected failure of that rollback write must keep
+completion pending through the retry deadline. Once storage succeeds, the
+transaction becomes ready and releases ownership. The journal must contain exactly
+prior, candidate, prior snapshots; two fresh boots must recover the prior table.
+
+Both acknowledgements are scripted responses to the exact production `Persisted`
+settlement command. These cases exercise the runtime activation/rollback machinery
+with real storage; they do not prove that the engine emits those acknowledgements
+for a real handshake, or cover a crash between candidate commit and rollback.
+Production behavior remains unchanged.
+
+This extension passed the registered recovery suite (37 tests), all 149 Embassy
+library tests, all-target Embassy clippy, format/docs, registry and website checks
+on macOS arm64. The wider radio simulation, full workspace, Miri and firmware
+matrix were not rerun for this owner-local test extension.

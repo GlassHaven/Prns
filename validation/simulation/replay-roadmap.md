@@ -149,6 +149,8 @@ expected values. No production clock change was needed.
    rollback through the real flash owner, preserving prior live and rebooted
    authority. Its node-settlement acknowledgement is scripted; full pairing
    lifecycle and remote management transactions remain separate.
+   Successful storage now also covers completed settlement and settlement-directed
+   rollback, checking live authority, exact durable record order and fresh boots.
 4. Measure representative sparse scale and churn, retaining cleanup, resource
    bounds and correctness assertions rather than increasing node count alone.
 5. Connect selected workloads to ISA emulators. Native radio/controller timing,
