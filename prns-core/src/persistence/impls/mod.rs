@@ -3,7 +3,7 @@ cfg_if::cfg_if! {
         mod file;
         pub mod reticulum_directory;
 
-        pub use file::{FileStore, FileStoreError};
+        pub use file::{FileStore, FileStoreConfirmation, FileStoreError};
     }
 }
 

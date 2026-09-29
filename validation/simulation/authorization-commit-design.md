@@ -647,3 +647,46 @@ outstanding flash I/O, post-commit activation inconsistency, explicit rollback
 durability and complete node-level recovery remain separate open boundaries.
 The new embedded owner state has a real resource cost; firmware resource evidence
 must measure it rather than assume it fits.
+
+## Recovery checkpoint: exact host-file confirmation
+
+The shared std file backend now distinguishes `PublishedDurabilityUnconfirmed`
+from failures before replacement. The former means rename succeeded but directory
+confirmation failed; the visible candidate must not be interpreted as a rejected
+write. Directory creation and removal retain their existing error vocabulary.
+
+`FileStore::confirm_store` compares the complete candidate, including length, in
+bounded chunks without staging or replacing it. Exact matches are file-synced and,
+on Unix, directory-synced before returning `Confirmed`. Missing and different
+values are distinct outcomes, and I/O errors remain unresolved. Other platforms
+retain the existing file-sync-and-rename durability limit. The caller must exclude
+concurrent writers through confirmation and activation; this primitive does not
+itself reserve transaction ownership.
+
+The backend tests cover lost post-rename confirmation, repeated confirmation
+failure and recovery, both authorization regions, empty and multi-chunk values,
+every byte mismatch, shorter and longer values, missing files, and pre-publication
+failures retaining the old value. Staging sentinels, contents, modification times,
+and Unix file identities check that confirmation does not rewrite the snapshot.
+These are file-backend tests, not whole-node simulator or power-loss evidence.
+
+Tokio worker ownership and stale-background-flush exclusion remain the next slice.
+No adapter consumes the new confirmation primitive yet, so its authorization
+rollback behavior is not fixed by this prerequisite alone. Embedded behavior and
+its previously measured resource footprint are unchanged.
+
+Verification on macOS arm64 passed:
+
+```console
+CARGO_INCREMENTAL=0 cargo test --locked -p prns-core persistence::impls::file --quiet
+CARGO_INCREMENTAL=0 cargo test --locked --quiet
+CARGO_INCREMENTAL=0 cargo test --locked --manifest-path prns-runtime/impls/tokio/Cargo.toml --lib --quiet
+CARGO_INCREMENTAL=0 cargo clippy --locked -p prns-core --all-targets -- -D warnings
+cargo fmt --all -- --check
+git diff --check
+```
+
+The focused backend suite passed 14 tests; the root run included 2,126 passing
+core tests with three ignored, and Tokio passed 275 with one ignored. Windows,
+Linux, firmware, Miri, ISA and hardware checks were not run for this std-only
+backend slice. The changed file backend is outside the configured mutation surface.
