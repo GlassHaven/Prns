@@ -17,11 +17,12 @@ a valid envelope alone is not authenticated admission.
 
 Unrestricted announces use the shared channel once per configured radio, including
 with zero peers. Existing runtime announce pacing and backpressure apply to that
-channel. Directed announces stay unicast. `AllExcept(peer)` uses unicast for that
-peer's radio so the excluded peer is not an intended recipient; other radios can
-still broadcast. Thus some relayed announces are directed fan-out. Ordinary
+channel. Ordinary relayed announces also use this shared channel; the previous
+hop can hear them, and core announce deduplication suppresses echoes. Directed
+path responses stay unicast. Explicit `AllExcept(peer)` still uses unicast for
+that peer's radio to preserve exclusion; other radios can broadcast. Ordinary
 non-announce fleet traffic always fans out over known unicast peers. Direct
-traffic never falls back to broadcast. No payload-hash or timer deduplication is used.
+traffic never falls back to broadcast. The adapter adds no payload-hash or timer deduplication.
 
 The experimental payload is `PRNSHL`, version byte `1`, reserved byte `0`, a
 big-endian u16 frame length, and exactly that frame. Only minimum Ethernet padding
@@ -46,7 +47,9 @@ Another covers TX timeout, failure, oversize rejection, and no broadcast fallbac
 These injected tests do not establish RF performance. A later headless G4/Heltec
 smoke verified a full 3542-byte page over this supervisor on the vendor AP/station
 connection; see `personal-hopspot/headless/docs/thinknode-g4.md` for exact hashes
-and limits. Native three-node mesh testing remains.
+and limits. A subsequent three-node mesh check passed pairwise transfers and
+application rejoin; its report is in the headless `docs/qualification` directory.
+Forced multi-hop, sustained-load, and field-loss qualification remain.
 
 The backend uses `AF_PACKET`/`SOCK_DGRAM`, an explicit device binding and EtherType,
 and requires `CAP_NET_RAW`. Opening it does not change radio configuration or

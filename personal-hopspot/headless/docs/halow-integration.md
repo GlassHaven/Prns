@@ -1,15 +1,17 @@
 # HaLoW Hopspot integration
 
-This records the implementation contract and remaining work after the
-2026-09-29 three-device experiments. The headless application now has an opt-in
-Linux HaLoW CLI, radio-only periodic announces, and a HaLoW page-fetch probe.
-The G4 development build includes the feature; TCP-only use remains available. Portable identity/framing, bounded first-frame peer
-admission, shared announce egress, and Linux/Tokio datagrams exist under
-`interfaces::wifi_halow` and the `wifi-halow` feature. Running-node tests exercise
-the supervisor; the earlier bounded `halow_datagram` hardware probe exercises
-only raw datagrams. A subsequent G4-to-Heltec native page-transfer smoke passed
-on their existing AP/station connection; native three-node mesh and load testing
-remain. See `thinknode-g4.md` for the tested executable hashes and result.
+The headless application has an opt-in Linux HaLoW CLI, radio-only periodic
+announces, and a HaLoW page-fetch probe. The G4 development build includes the
+feature; TCP-only use remains available. Portable identity/framing, bounded
+first-frame peer admission, shared announce egress, and Linux/Tokio datagrams
+exist under `interfaces::wifi_halow` and the `wifi-halow` feature.
+
+Running-node tests cover the supervisor. Hardware checks passed on the vendor
+AP/station connection and on a three-node open mesh, including concurrent page
+transfers and application rejoin. Sustained load and forced multi-radio-hop
+testing remain. See [the qualification report](qualification/halow-three-node-2026-09-29.md)
+and [relay-broadcast follow-up](qualification/halow-relay-broadcast-2026-09-29.md)
+for measurements and limits, and `thinknode-g4.md` for build/recovery procedures.
 
 ## Product shape
 
@@ -58,8 +60,10 @@ otherwise first discovery depends on already having discovered someone.
 
 Tokio egress now recognizes a distinct shared broadcast channel grouped with
 its peers by logical supervisor ID. Unrestricted announcements select that channel
-once per radio before pacing and backpressure. Directed and excluded-recipient
-announcements retain direct delivery; ordinary fleet fan-out selects peers only.
+once per radio before pacing and backpressure. Ordinary relayed announces also
+select this channel, allowing the previous hop to overhear and deduplicate them.
+Directed path responses and explicit excluded-recipient announcements retain
+direct delivery; ordinary non-announce fleet fan-out selects peers only.
 Existing point-to-point fleets keep their per-peer behavior. See the transport
 README for frame layout, queue bounds, timeout, expiry, and current limitations.
 

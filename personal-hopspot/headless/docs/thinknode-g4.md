@@ -2,7 +2,9 @@
 
 Status: physical TCP bring-up and a native HaLoW page transfer verified on one
 G4 and one Heltec, 2026-09-29. The native test retained their vendor AP/station
-connection; three-node native mesh behavior remains unqualified. Separate radio
+connection; a subsequent [three-node native mesh qualification](qualification/halow-three-node-2026-09-29.md)
+also passed basic transfers and application rejoin. Sustained load and forced
+multi-radio-hop behavior remain unqualified. Separate radio
 experiments measured group delivery and unicast throughput. Persistent installation,
 firmware replacement, and physical restore remain unqualified. This is a development
 procedure, not a shipping board entry.

@@ -42,6 +42,7 @@ helper. Those paths are being evaluated; USB serial recovery has not been
 qualified for this board.
 
 HaLoW is opt-in in the development bundle and requires a separately configured
-radio; its first end-to-end check used the vendor AP/station connection. Mesh,
-field reliability, Wi-Fi discovery, and browser-node access need further qualification.
+radio. Basic three-node mesh transfers and application rejoin have passed bench
+checks. Sustained load, forced multi-hop routing, field reliability, Wi-Fi discovery,
+and browser-node access need further qualification.
 See the repository's headless README for the experimental radio options.
