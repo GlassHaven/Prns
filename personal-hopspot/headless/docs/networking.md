@@ -71,6 +71,11 @@ a direct rendezvous page transfer and captured multicast beacons. The [DNS-SD fo
 qualifies service browse/resolve and exact page transfer to the advertised IPv6
 endpoint.
 
+The [separate AP qualification](qualification/ap-two-client-g4-2026-09-29.md)
+passed two-client DHCP, exact page transfers, firewall boundary checks, scoped
+discovery captures, and timed restoration. It used one role per 2.4 GHz radio;
+AP+STA coexistence failed its initial smoke and remains unqualified.
+
 ## Qualification sequence
 
 1. Build the opt-in application and validate CLI selection, unchanged TCP/WS/HaLoW
