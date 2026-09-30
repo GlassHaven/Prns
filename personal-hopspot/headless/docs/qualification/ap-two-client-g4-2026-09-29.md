@@ -94,3 +94,8 @@ its output matched the files actually used on each board after normalizing only
 the freshly generated private PSK. Stopped lab executable links were removed
 from all three boards afterward; identity/state and evidence were retained.
 No Rust implementation changed in this qualification.
+
+The later [station recovery smoke](station-recovery-g4-2026-09-30.md) corrected
+the lab AP firewall for AP-originated connections: established replies must be
+accepted before its final rejection. The original client-to-AP results above
+remain valid; this reverse direction was not exercised in that run.

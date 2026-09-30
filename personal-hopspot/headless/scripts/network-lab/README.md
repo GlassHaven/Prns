@@ -75,3 +75,30 @@ existing Wi-Fi credentials and must stay private.
 The process watchdog is not crash-proof recovery. Persistent installation still
 needs its own boot/recovery qualification. See the
 [hardware results](../../docs/qualification/ap-two-client-g4-2026-09-29.md).
+
+## Station-mode recovery
+
+Reverse the roles: generate an AP stage for a Heltec and a client stage for the
+G4. The station's default lab firewall admits discovery but does not open TCP
+listeners. For this qualification, append the following rule to the G4 stage's
+`firewall.nft` before starting it:
+
+```nft
+insert rule inet fw4 input iifname "prnssta0" tcp dport { 42699, 4345 } counter accept comment "prns-wifi-lab"
+```
+
+After association and DHCP, bind the temporary Hopspot to the obtained station
+address on port 4345, select `--auto-wifi-device prnssta0`, and save its PID as
+above. Probe port 42699 from the AP. The AP input chain must allow
+`ct state established,related` before its final rejection: response packets to
+AP-originated connections target ephemeral ports. The generator includes this
+rule. New connections to unlisted administrative ports remain rejected.
+
+Save `/proc/PID/stat` before the outage. Stop only the staged hostapd process,
+checking its PID and command line against the stage directory first. Keep the
+AP's bridge, DHCP server and wired management intact. Confirm station carrier is
+zero and the AP cannot ping it. Restart hostapd with the same private config and
+PID-file options. Require reassociation, a complete page transfer to the same
+identity, and unchanged Hopspot PID **and start time**. Capture recovered
+Auto-WiFi beacons, then clean up both stages. Do not mistake this retained-address
+outage for a DHCP renewal or changed-network test.

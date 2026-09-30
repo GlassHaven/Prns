@@ -81,6 +81,7 @@ pid-file={base}/dnsmasq.pid
 log-facility={base}/dnsmasq.log
 ''')
     write('firewall.nft', '''add chain inet fw4 prns_lab_input
+add rule inet fw4 prns_lab_input ct state established,related counter accept
 add rule inet fw4 prns_lab_input meta l4proto { icmp, ipv6-icmp } counter accept
 add rule inet fw4 prns_lab_input udp dport { 67, 5353, 29716, 29717, 42671 } counter accept
 add rule inet fw4 prns_lab_input tcp dport { 42699, 4345, 4346 } counter accept

@@ -74,7 +74,15 @@ endpoint.
 The [separate AP qualification](qualification/ap-two-client-g4-2026-09-29.md)
 passed two-client DHCP, exact page transfers, firewall boundary checks, scoped
 discovery captures, and timed restoration. It used one role per 2.4 GHz radio;
-AP+STA coexistence failed its initial smoke and remains unqualified.
+AP+STA coexistence failed its initial smoke and remains unqualified. The
+[station recovery smoke](qualification/station-recovery-g4-2026-09-30.md) passed
+AP loss/rejoin and exact page recovery without restarting Hopspot. It also fixed
+the lab AP firewall to admit replies to its own outbound connections. DHCP
+renewal remains separate work. The [address-change investigation](qualification/address-discovery-g4-2026-09-30.md)
+passed forced same-subnet DHCP reacquisition and a direct page transfer at the
+new address. Cold-start routed probes timed out: discovery tokens were visible,
+but application destination announcements were absent. Automatic routed recovery
+is therefore still unqualified.
 
 ## Qualification sequence
 
