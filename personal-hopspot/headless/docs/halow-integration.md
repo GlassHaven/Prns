@@ -8,8 +8,9 @@ exist under `interfaces::wifi_halow` and the `wifi-halow` feature.
 
 Running-node tests cover the supervisor. Hardware checks passed on the vendor
 AP/station connection and on a three-node open mesh, including concurrent page
-transfers and application rejoin. Sustained load and forced multi-radio-hop
-testing remain. See [the qualification report](qualification/halow-three-node-2026-09-29.md)
+transfers and application rejoin. A controlled datagram-medium test also covers
+a forced two-hop route through the real Hopspot nodes and HaLoW supervisors.
+Sustained load and a physically isolated two-radio-hop hardware test remain. See [the qualification report](qualification/halow-three-node-2026-09-29.md)
 and [relay-broadcast follow-up](qualification/halow-relay-broadcast-2026-09-29.md)
 for measurements and limits, and `thinknode-g4.md` for build/recovery procedures.
 
@@ -164,13 +165,16 @@ any helper; do not turn it into an unauthenticated local command proxy.
 
 ## Implementation gates
 
-1. MAC-based peer identity is implemented. Add shared-radio egress and first-frame
-   admission tests before writing the Linux adapter around that contract.
-2. Prove one broadcast reaches both Heltecs, while direct frames address one
-   peer, including startup with no peers, first unicast without a peer-list
-   entry, churn, restart, saturation, malformed input, and receiver exclusion.
-3. Fetch the actual Hopspot page and transfer a resource across native HaLoW;
-   then route through a different interface and a three-node topology.
+1. MAC-based identity, shared-radio egress, bounded first-frame admission, and the
+   Linux packet adapter are implemented and covered by unit/runtime tests.
+2. Three-node hardware captures confirm shared local/relayed announce broadcast
+   and direct page traffic. Concurrent transfers and application restart passed.
+   Sustained load, radio departure, and long-running resource bounds remain.
+3. The real Hopspot page transfers through wired TCP and native HaLoW. A
+   [controlled two-hop regression](qualification/halow-controlled-two-hop.md)
+   forces A→B→C, verifies immediate-hop MAC identity, and checks that removing B
+   prevents progress. Hardware with independently verified endpoint isolation
+   remains necessary before claiming a forced two-radio-hop radio qualification.
 4. Add AP/client discovery and WebSocket/browser access in measured increments.
    Keep ESP-NOW qualification separate from ordinary Wi-Fi operation.
 5. Qualify persistent installation, identity retention across power loss, bounded
