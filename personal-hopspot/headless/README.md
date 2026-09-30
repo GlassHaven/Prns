@@ -96,12 +96,13 @@ TCP rendezvous, peer admission, and discovery lifecycle. This does not advertise
 the independent WebSocket listener or make browser mDNS available.
 
 Device selection scopes discovery and local-subnet admission; it is not a
-firewall. The rendezvous listener binds a wildcard address. Keep OpenWrt firewall
+firewall. The rendezvous service binds separate IPv4 and IPv6 wildcard sockets. Keep OpenWrt firewall
 policy explicit, especially on routed or overlapping networks. Selecting a bridge
 includes its whole broadcast domain, including any attached HaLoW radio.
 See [AP/client networking](docs/networking.md) before enabling it on the G4.
 The [initial hardware smoke](docs/qualification/auto-wifi-g4-2026-09-29.md) passed
-a direct rendezvous transfer; automatic discovery remains unqualified.
+a direct rendezvous transfer. The [DNS-SD follow-up](docs/qualification/auto-wifi-dnssd-g4-2026-09-29.md)
+qualifies native browse/resolve and transfer to the advertised endpoint.
 
 ## Experimental HaLoW attachment
 

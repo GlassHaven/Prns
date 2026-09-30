@@ -120,10 +120,12 @@ def main():
         shutil.copy2(CRATE / "docs/thinknode-g4.md", staging / "INSTALL.md")
         shutil.copy2(CRATE / "docs/networking.md", staging / "networking.md")
         (staging / "qualification").mkdir()
-        shutil.copy2(
-            CRATE / "docs/qualification/auto-wifi-g4-2026-09-29.md",
-            staging / "qualification/auto-wifi-g4-2026-09-29.md",
-        )
+        for report in (
+            "auto-wifi-g4-2026-09-29.md",
+            "auto-wifi-dnssd-g4-2026-09-29.md",
+            "auto-wifi-dnssd-g4-2026-09-29.json",
+        ):
+            shutil.copy2(CRATE / "docs/qualification" / report, staging / "qualification" / report)
         shutil.copy2(ROOT / "LICENSE-MIT", staging / "LICENSE-MIT")
         shutil.copy2(ROOT / "LICENSE-APACHE", staging / "LICENSE-APACHE")
         shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", staging / "THIRD_PARTY_NOTICES.md")

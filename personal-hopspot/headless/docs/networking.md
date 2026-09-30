@@ -55,8 +55,9 @@ cryptographic identities remain responsible for authentication.
 | Native mDNS | UDP 5353 |
 
 These are existing protocol defaults, not a new firewall-opening instruction.
-The rendezvous listener binds a wildcard IPv4 address and admits local-subnet
-peers using the selected LAN prefixes (plus loopback). Device selection is not
+The automatic rendezvous listener owns separate wildcard IPv4 and IPv6 sockets
+on the same port. IPv4 peers use the selected LAN prefixes; IPv6 link-local
+peers must carry a scope matching a selected interface. Loopback remains local. Device selection is not
 an ingress firewall or subnet-isolation guarantee. Apply OpenWrt policy at the
 network boundary. Existing peer/session bounds are inherited from Auto-WiFi;
 appliance-specific memory and abuse/load qualification remain necessary.
@@ -66,8 +67,9 @@ the independent headless WebSocket listener. Browsers do not get native mDNS
 through this setting; a browser still needs its WebSocket endpoint.
 
 The [initial attachment smoke](qualification/auto-wifi-g4-2026-09-29.md) passed
-a direct rendezvous page transfer and captured multicast beacons. DNS-SD
-publication/resolution is still unconfirmed.
+a direct rendezvous page transfer and captured multicast beacons. The [DNS-SD follow-up](qualification/auto-wifi-dnssd-g4-2026-09-29.md) now
+qualifies service browse/resolve and exact page transfer to the advertised IPv6
+endpoint.
 
 ## Qualification sequence
 
@@ -84,3 +86,14 @@ publication/resolution is still unconfirmed.
 Do not ship a persistent network migration until the rollback and recovery paths
 have passed on hardware. These application options do not modify UCI or install
 services. The optional static browser bundle remains separate.
+
+## RAM-only qualification hygiene
+
+Before an upload, check both `df -k /tmp` and available RAM (`free` or
+`/proc/meminfo`). On this board `/tmp` is tmpfs: free persistent overlay space
+does not make room for RAM-backed candidate binaries. Budget the candidate,
+upload staging, retained state, measured process memory, and operating headroom.
+Repeated 5.3 MB copies caused an upload failure and sluggish management during
+the DNS-SD work. After a process has stopped and evidence is saved locally,
+remove its superseded executable and unused static assets. Preserve identities,
+state, running applications, and unrelated device files.
