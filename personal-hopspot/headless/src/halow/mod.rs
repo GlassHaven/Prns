@@ -1,7 +1,6 @@
 //! Attachment only: OpenWrt retains ownership of radio settings.
 use personal_rns::interfaces::wifi_halow::InstanceTag;
 use std::num::{NonZeroU32, NonZeroU8};
-use std::time::Duration;
 
 #[derive(Debug, clap::Args)]
 pub struct HaLowOptions {
@@ -14,18 +13,18 @@ pub struct HaLowOptions {
     /// Maximum admitted MAC peers; each owns bounded runtime and receive queues.
     #[arg(long, default_value = "16", requires = "halow_device")]
     pub halow_peers: NonZeroU8,
-    /// Radio-only discovery announces; peers expire after three intervals idle.
-    #[arg(long, default_value = "300", requires = "halow_device", value_parser = announce_seconds)]
-    pub halow_announce_seconds: NonZeroU32,
+    /// Drop an admitted peer after this many idle seconds; no announces are scheduled.
+    #[arg(long, default_value = "900", requires = "halow_device", value_parser = idle_seconds)]
+    pub halow_idle_seconds: NonZeroU32,
 }
 fn scope(value: &str) -> Result<String, &'static str> {
     InstanceTag::new(value.as_bytes()).map_err(|_| "scope must contain 1–64 bytes")?;
     Ok(value.to_owned())
 }
-fn announce_seconds(value: &str) -> Result<NonZeroU32, &'static str> {
+fn idle_seconds(value: &str) -> Result<NonZeroU32, &'static str> {
     let value: NonZeroU32 = value.parse().map_err(|_| "expected positive seconds")?;
     if value.get() > 86_400 {
-        return Err("announce interval must be at most one day");
+        return Err("peer idle timeout must be at most one day");
     }
     Ok(value)
 }
@@ -52,7 +51,6 @@ pub struct Prepared {
     #[cfg(target_os = "linux")]
     radio: personal_rns::wifi_halow::HaLow<personal_rns::wifi_halow::HaLowSocket>,
     broadcast: personal_rns::interfaces::InterfaceId,
-    interval: Duration,
 }
 impl HaLowOptions {
     pub fn prepare(&self) -> Result<Option<Prepared>, Error> {
@@ -84,9 +82,7 @@ impl HaLowOptions {
             let broadcast_policy = personal_rns::interfaces::wifi_halow::policy_for_bitrate(
                 BitrateBps::guess(4_000_000),
             );
-            let idle_seconds = self
-                .halow_announce_seconds
-                .saturating_mul(NonZeroU32::new(3).unwrap());
+            let idle_seconds = self.halow_idle_seconds;
             Ok(Some(Prepared {
                 radio: HaLow::new(
                     socket,
@@ -99,7 +95,6 @@ impl HaLowOptions {
                     },
                 ),
                 broadcast,
-                interval: Duration::from_secs(u64::from(self.halow_announce_seconds.get())),
             }))
         }
     }
@@ -108,12 +103,12 @@ impl Prepared {
     pub fn attach(
         self,
         handle: &personal_rns::runtime::PrnsNodeHandle,
-    ) -> (personal_rns::interfaces::InterfaceId, Duration) {
+    ) -> personal_rns::interfaces::InterfaceId {
         #[cfg(target_os = "linux")]
         handle.supervise(self.radio);
         #[cfg(not(target_os = "linux"))]
         let _ = handle;
-        (self.broadcast, self.interval)
+        self.broadcast
     }
 }
 

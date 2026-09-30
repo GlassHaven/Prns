@@ -4,3 +4,5 @@ pub mod halow;
 
 #[cfg(feature = "wifi-auto")]
 pub mod auto_wifi;
+
+pub mod control;

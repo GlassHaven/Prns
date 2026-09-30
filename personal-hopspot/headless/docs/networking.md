@@ -62,6 +62,11 @@ an ingress firewall or subnet-isolation guarantee. Apply OpenWrt policy at the
 network boundary. Existing peer/session bounds are inherited from Auto-WiFi;
 appliance-specific memory and abuse/load qualification remain necessary.
 
+Hopspot has no automatic application announcement policy. An authorized controller
+explicitly requests `AnnounceSelf` through the [Remote Control API](remote-control.md).
+Auto-WiFi discovery and DNS-SD still discover transport peers; they do not authorize
+application announcements. HaLoW uses the same explicit control policy.
+
 Native DNS-SD advertises the Auto-WiFi rendezvous service. It does not advertise
 the independent headless WebSocket listener. Browsers do not get native mDNS
 through this setting; a browser still needs its WebSocket endpoint.
@@ -82,7 +87,10 @@ renewal remains separate work. The [address-change investigation](qualification/
 passed forced same-subnet DHCP reacquisition and a direct page transfer at the
 new address. Cold-start routed probes timed out: discovery tokens were visible,
 but application destination announcements were absent. Automatic routed recovery
-is therefore still unqualified.
+was therefore still unqualified in that build. The
+[announcement follow-up](qualification/auto-wifi-routed-g4-2026-09-30.md) demonstrated six routed transfers across cold start, AP rejoin,
+and forced same-subnet DHCP address change using a temporary ticker. That ticker
+is superseded by explicit controller commands; the report is historical lab evidence.
 
 ## Qualification sequence
 

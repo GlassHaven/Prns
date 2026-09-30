@@ -99,3 +99,6 @@ The original G4 Hopspot subsequently verified its 3,542-byte page (76 ms probe
 RTT). Stopped test binaries were removed to recover tmpfs memory. Repository
 validation registry and diff-whitespace checks passed; this follow-up changed
 qualification documentation only.
+
+The [announcement follow-up](auto-wifi-routed-g4-2026-09-30.md) implements the
+scoped announcement fix and passes all six routed-page checks with fresh states.

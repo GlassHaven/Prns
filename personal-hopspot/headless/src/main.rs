@@ -24,6 +24,8 @@ struct Options {
     /// Dedicated private directory for this node's identity and retained state.
     #[arg(long)]
     state_dir: PathBuf,
+    #[command(flatten)]
+    control: personal_hopspot_headless::control::ControlOptions,
     #[cfg(feature = "wifi-auto")]
     #[command(flatten)]
     auto_wifi: personal_hopspot_headless::auto_wifi::AutoWifiOptions,
@@ -48,6 +50,10 @@ struct Options {
 
 #[derive(Debug, thiserror::Error)]
 enum HostError {
+    #[error(transparent)]
+    Control(#[from] personal_hopspot_headless::control::Error),
+    #[error(transparent)]
+    ControlIdentity(#[from] personal_rns::runtime::RemoteControlFileIdentityBootstrapError),
     #[cfg(feature = "wifi-auto")]
     #[error(transparent)]
     AutoWifi(#[from] personal_rns::wifi_auto::AutoWifiSettingsError),
@@ -100,6 +106,28 @@ async fn run(options: Options) -> Result<(), HostError> {
     let hashes = destinations
         .destination_hashes()
         .map_err(HostError::Destination)?;
+    let grants = options.control.grants()?;
+    let (control_secrets, _) = personal_rns::runtime::RemoteControlIdentityDirectory::new(
+        options.state_dir.join("remote_control"),
+    )
+    .load_or_generate()?
+    .into_parts();
+    let control_identities = control_secrets.identities();
+    let target_key = hex::encode(control_identities.target().public_keys().public_key_bytes());
+    let target_destination = control_identities.target().endpoint().destination_hash();
+    let controller_grants = if grants.is_empty() {
+        RemoteControlInitialControllerGrants::Nobody
+    } else {
+        RemoteControlInitialControllerGrants::Grants(
+            RemoteControlControllerGrants::try_from(grants.as_slice())
+                .map_err(personal_hopspot_headless::control::Error::Grants)?,
+        )
+    };
+    let remote_control = RemoteControlService::new(
+        control_secrets,
+        controller_grants,
+        RemoteControlSelfAnnouncement::Destination(hashes.node_page),
+    );
     let persistence = NodePersistence::custom_dir(options.state_dir.join("retained"))?;
     let listener = TcpServer::bind(options.listen).await?;
     let listen = listener.local_addr()?;
@@ -129,7 +157,7 @@ async fn run(options: Options) -> Result<(), HostError> {
         app_state: personal_rns::runtime::NoRemoteControlHostControls,
         storage: GrowableHeap,
         request_endpoints: node_pages::NodePageRoutes,
-        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+        remote_control,
         interfaces: ManuallyAttached,
         persistence,
         on_event: |event, _state: &personal_rns::runtime::NoRemoteControlHostControls| {
@@ -191,7 +219,7 @@ async fn run(options: Options) -> Result<(), HostError> {
         },
     }
     #[cfg(feature = "wifi-halow")]
-    if let Some((target, _)) = radio {
+    if let Some(target) = radio {
         let ready = async {
             while !handle
                 .interfaces()
@@ -216,6 +244,11 @@ async fn run(options: Options) -> Result<(), HostError> {
         "hopspot_ready listen={listen} node_page={}",
         hex::encode(hashes.node_page.as_bytes())
     );
+    println!(
+        "hopspot_remote_control_ready target_key={target_key} destination={} controllers={}",
+        hex::encode(target_destination.as_bytes()),
+        grants.len()
+    );
     #[cfg(feature = "wifi-auto")]
     if !options.auto_wifi.auto_wifi_device.is_empty() {
         println!(
@@ -230,47 +263,7 @@ async fn run(options: Options) -> Result<(), HostError> {
             options.websocket_connections
         );
     }
-    #[cfg(feature = "wifi-halow")]
-    let task_result = {
-        let announces = async {
-            let Some((target, interval)) = radio else {
-                return std::future::pending::<()>().await;
-            };
-            let mut timer = tokio::time::interval(interval);
-            timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            loop {
-                timer.tick().await;
-                // Children register asynchronously. Do not announce onto TCP while
-                // waiting for the radio's shared channel to become available.
-                if !handle
-                    .interfaces()
-                    .iter()
-                    .any(|interface| interface.id == target)
-                {
-                    continue;
-                }
-                for destination in [hashes.node_page, hashes.delivery] {
-                    if let Err(error) = handle
-                        .announce_now(AnnounceNow {
-                            destination,
-                            target: AnnounceTarget::Interface(target),
-                            app_data: AnnounceAppData::Registered,
-                        })
-                        .await
-                    {
-                        eprintln!("halow_announce_failed: {error:?}");
-                    }
-                }
-            }
-        };
-        tokio::select! {
-            result = &mut task => result,
-            () = announces => unreachable!("announce service runs until node shutdown"),
-        }
-    };
-    #[cfg(not(feature = "wifi-halow"))]
-    let task_result = task.await;
-    task_result.map_err(HostError::Node)?;
+    task.await.map_err(HostError::Node)?;
     println!("hopspot_stopped");
     Ok(())
 }

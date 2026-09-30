@@ -407,16 +407,6 @@ fn remote_control_authorization_persisted(
 }
 
 #[cfg(feature = "remote-control-pairing")]
-fn observe_restored_remote_control_grants(restored_count: u32) {
-    let effects = REMOTE_CONTROL_COMPOSITION.lock(|composition| {
-        composition
-            .borrow_mut()
-            .observe_restored_controller_grants(restored_count)
-    });
-    apply_remote_control_effects(effects);
-}
-
-#[cfg(feature = "remote-control-pairing")]
 fn firmware_on_event(event: PrnsEvent<'_>, _state: &RemoteControlHandle) {
     match event {
         PrnsEvent::Message(Message::RemoteControlTargetPairingConfirmationRequired(pairing)) => {

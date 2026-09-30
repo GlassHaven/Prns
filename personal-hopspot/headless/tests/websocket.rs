@@ -44,8 +44,17 @@ async fn host(state: &std::path::Path) -> (Child, DestinationHash, String) {
     let destination = line.split("node_page=").nth(1).expect("host ready").trim();
     let mut bytes = [0; 16];
     hex::decode_to_slice(destination, &mut bytes).unwrap();
-    line.clear();
-    output.read_line(&mut line).await.unwrap();
+    loop {
+        line.clear();
+        assert_ne!(
+            output.read_line(&mut line).await.unwrap(),
+            0,
+            "host stopped before WebSocket ready"
+        );
+        if line.starts_with("hopspot_websocket_ready listen=") {
+            break;
+        }
+    }
     let address = line
         .strip_prefix("hopspot_websocket_ready listen=")
         .expect("WebSocket ready")

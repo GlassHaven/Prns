@@ -112,7 +112,7 @@ configured HaLoW device:
 ```sh
 ./personal-hopspot-headless --state-dir /tmp/hopspot-halow-state \
   --listen 127.0.0.1:4343 --halow-device wlan0 --halow-scope primary-halow \
-  --halow-peers 16 --halow-announce-seconds 300
+  --halow-peers 16 --halow-idle-seconds 900
 ```
 
 This requires Linux and `CAP_NET_RAW` (the vendor lab OS runs as root). Device and
@@ -122,10 +122,10 @@ Socket binding fails startup before touching persistent state. The experimental
 EtherType is `0x88b6` with the versioned Prns HaLoW envelope; both endpoints must
 use this implementation. No radio profile or vendor service is modified.
 
-Startup and periodic announcements advertise the node-page and delivery destinations
-only on the radio's shared broadcast channel. The default interval is five minutes;
-missed intervals are skipped. Idle peers expire after three intervals, checked every
-five seconds. The peer cap defaults to 16. Each peer additionally owns bounded
+Application announcements require an explicit Remote Control API command; there is
+no startup, reconnect, or periodic announcement policy. See [remote control](docs/remote-control.md)
+for controller provisioning and cold-start commands. Idle HaLoW peers expire after
+`--halow-idle-seconds` (default 900), checked every five seconds. The peer cap defaults to 16. Each peer additionally owns bounded
 runtime queues, so raise this cap only with a measured memory budget. Pacing estimates
 are 7.3 Mbps unicast and 4 Mbps broadcast for the measured MCS2 profile. These are
 payload estimates, not commands that set MCS or transmit power.
@@ -138,10 +138,9 @@ The `fetch_page` probe can use the radio instead of TCP:
 ```
 
 It waits for a radio peer, requests a path, establishes a link, and verifies the
-whole page within 60 seconds. For bounded lab tests, set the server's announce
-interval to 3 seconds and `--run-for 90`; otherwise its normal five-minute interval
-can exceed the probe deadline. A G4 development bundle can include the native
-probe with `./tools/prns run build.hopspot.g4 -- ... --with-probe`.
+whole page within 60 seconds. In a bounded lab test, attach the probe, then issue
+`AnnounceSelf` from the authorized controller. A G4 development bundle can include
+the probe with `./tools/prns run build.hopspot.g4 -- ... --with-probe`.
 
 ## Verify a running host
 

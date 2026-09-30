@@ -1528,9 +1528,6 @@ async fn manifold_run(
     #[cfg(feature = "remote-control-pairing")]
     {
         set_remote_control_clock(report.logical_start);
-        observe_restored_remote_control_grants(
-            report.remote_control_controller_grants_restored_count,
-        );
     }
     boot_stage(BootPhase::PersistenceRestoreComplete);
     node.run_manifold_with_persistence_and_interface_store(&INTERFACE_STORE, persistence)

@@ -1,4 +1,3 @@
-
 use super::*;
 use clap::Parser;
 
@@ -29,7 +28,7 @@ fn radio_is_opt_in_and_scope_and_limits_are_validated_before_binding() {
             "wlan0",
             "--halow-scope",
             "radio",
-            "--halow-announce-seconds",
+            "--halow-idle-seconds",
             "0",
         ],
         vec![
@@ -37,7 +36,7 @@ fn radio_is_opt_in_and_scope_and_limits_are_validated_before_binding() {
             "wlan0",
             "--halow-scope",
             "radio",
-            "--halow-announce-seconds",
+            "--halow-idle-seconds",
             "86401",
         ],
     ] {
@@ -47,7 +46,7 @@ fn radio_is_opt_in_and_scope_and_limits_are_validated_before_binding() {
     let configured =
         Cli::try_parse_from(["test", "--halow-device", "wlan0", "--halow-scope", "radio"]).unwrap();
     assert_eq!(configured.radio.halow_peers.get(), 16);
-    assert_eq!(configured.radio.halow_announce_seconds.get(), 300);
+    assert_eq!(configured.radio.halow_idle_seconds.get(), 900);
     #[cfg(not(target_os = "linux"))]
     assert!(matches!(
         configured.radio.prepare(),
