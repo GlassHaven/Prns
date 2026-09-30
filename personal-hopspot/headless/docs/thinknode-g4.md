@@ -3,7 +3,8 @@
 Status: physical TCP bring-up and a native HaLoW page transfer verified on one
 G4 and one Heltec, 2026-09-29. The native test retained their vendor AP/station
 connection; a subsequent [three-node native mesh qualification](qualification/halow-three-node-2026-09-29.md)
-also passed basic transfers and application rejoin. Sustained load and forced
+also passed basic transfers and application rejoin. The optional WebSocket build
+passed [real browser access through HaLoW](qualification/websocket-halow-2026-09-29.md). Sustained load and forced
 multi-radio-hop behavior remain unqualified. Separate radio
 experiments measured group delivery and unicast throughput. Persistent installation,
 firmware replacement, and physical restore remain unqualified. This is a development
@@ -19,7 +20,8 @@ working driver, firmware, regulatory configuration, and board calibration while
 qualifying the application layer.
 
 The remaining writable overlay was only 5,368 KiB before this deployment. The
-3.2 MiB static executable fits in RAM comfortably; simply copying it into flash
+initial 3.2 MiB TCP executable fits in RAM comfortably; the later HaLoW plus
+WebSocket candidate is 3,710,604 bytes. Simply copying it into flash
 would leave limited headroom for state, logs, updates, and rollback. A persistent
 installation needs a space budget, not just a successful copy.
 

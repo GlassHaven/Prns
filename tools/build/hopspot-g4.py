@@ -53,6 +53,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True, help="New application bundle directory; must not exist")
     parser.add_argument("--target-dir", type=Path, default=ROOT / "target/hopspot-g4/cargo")
     parser.add_argument("--with-probe", action="store_true", help="Include the bounded page-fetch qualification executable")
+    parser.add_argument("--with-websocket", action="store_true", help="Include the optional plain WebSocket server")
     args = parser.parse_args()
     output = args.output.resolve()
     if output.exists():
@@ -74,10 +75,11 @@ def main():
         "CC_mipsel_unknown_linux_musl": linker,
         "CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_RUSTFLAGS": RUSTFLAGS,
     })
+    features = ["wifi-halow"] + (["websocket"] if args.with_websocket else [])
     command = [
         "cargo", f"+{args.toolchain}", "build", "--locked", "--release",
         "--manifest-path", str(CRATE / "Cargo.toml"), "--target", TARGET,
-        "--features", "wifi-halow", "--target-dir", str(target_dir), "-Z", "build-std=std,panic_abort", "--bin", BINARY,
+        "--features", ",".join(features), "--target-dir", str(target_dir), "-Z", "build-std=std,panic_abort", "--bin", BINARY,
     ]
     if args.with_probe:
         command.extend(["--example", "fetch_page"])
@@ -88,7 +90,7 @@ def main():
         "schema": 1,
         "artifact_kind": "linux-application-development-bundle",
         "qualification": "TCP plus experimental HaLoW; not a firmware image or a signed public release",
-        "cargo_features": ["wifi-halow"],
+        "cargo_features": features,
         "target": TARGET,
         "source_commit": capture(["git", "rev-parse", "HEAD"]),
         "working_tree_dirty": bool(capture(["git", "status", "--porcelain"])),

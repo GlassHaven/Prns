@@ -159,7 +159,9 @@ pub use crate::usb_auto::{
 #[cfg(all(feature = "weave", feature = "tokio-host"))]
 pub use crate::weave::WeaveInterface;
 #[cfg(all(feature = "websocket", feature = "tokio-host"))]
-pub use crate::websocket::{WebSocketClientInterface, WebSocketServer};
+pub use crate::websocket::WebSocketClientInterface;
+#[cfg(all(feature = "websocket-server", feature = "tokio-host"))]
+pub use crate::websocket::WebSocketServer;
 #[cfg(all(
     feature = "wifi-auto",
     any(feature = "tokio-host", feature = "embassy-host")

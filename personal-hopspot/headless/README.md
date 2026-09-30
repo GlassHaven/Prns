@@ -37,6 +37,42 @@ Use a dedicated state directory. State in `/tmp` survives a process restart but
 is lost at reboot on OpenWrt. Production installation must deliberately choose
 persistent storage, available space, flash-write policy, and a service account.
 
+## Optional WebSocket listener
+
+Build with `--features websocket` (or `--features wifi-halow,websocket`) and opt
+in to a plain WebSocket listener:
+
+```sh
+./personal-hopspot-headless --state-dir ./hopspot-state \
+  --listen 127.0.0.1:4242 --websocket-listen 127.0.0.1:8081 \
+  --websocket-connections 8
+```
+
+Use the board's reachable LAN address instead of loopback for remote browsers.
+The listener carries one raw Reticulum packet per binary WebSocket message;
+configure the browser SDK with `framing: "RawPacket"`. The
+`hopspot_websocket_ready` line reports the actual bound address. It shares the
+same node, destinations, routing, and persistence as TCP and HaLoW, so a browser
+can request a remote HaLoW destination through this listener.
+
+The default limit is eight total accepted sessions and pending handshakes.
+Extra connections wait in the OS backlog; they are not promised an immediate
+HTTP rejection. Existing ten-second handshake deadlines and frame/message bounds
+still apply. Disconnecting a session releases its admission slot.
+
+This is a public Reticulum transport endpoint, accepting browser origins; it
+exposes no administrative commands or HTTP assets. It does not provide TLS.
+Use only the intended network exposure. An HTTPS-hosted browser application's
+ability to reach plain `ws://` and local devices needs its own browser deployment
+qualification. The current smoke serves browser assets from laptop loopback;
+serving an offline browser application from the G4 remains separate work.
+
+The G4 build task enables this only with `--with-websocket`. Its server-only
+feature excludes the TLS client dependencies; the existing `personal-rns/websocket`
+feature still supplies the full client/server transport. See the
+[browser-to-HaLoW qualification](docs/qualification/websocket-halow-2026-09-29.md)
+for the reproducible smoke, measured size/RAM, and limitations.
+
 ## Experimental HaLoW attachment
 
 Build with `--features wifi-halow` (the G4 build task includes it). On an already

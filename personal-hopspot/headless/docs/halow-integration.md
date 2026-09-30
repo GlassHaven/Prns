@@ -119,7 +119,7 @@ and restart causes. Benchmark actual Prns transfers after raw-link qualification
 | Wired TCP | Headless host and lifecycle tests | Persistent service and install transaction |
 | Wi-Fi AP or client | G4 reports both modes; vendor OpenWrt manages them | Explicit choice, retained Ethernet management, DHCP/firewall and concurrency checks |
 | Auto-WiFi and mDNS | Tokio interface family and discovery support | Bind to chosen networks; qualify multicast on AP/client; budget sockets and discovery traffic |
-| WebSocket and browser rendezvous | Tokio WebSocket and browser-rendezvous modules | Minimal MIPS feature set, listener policy, browser interoperability and resource limits |
+| WebSocket and browser rendezvous | Opt-in bounded plain WebSocket listener; real browser-to-HaLoW transfers qualified | TLS/origin deployment, browser rendezvous/discovery, and long-running resource tests |
 | Locally served browser node | Existing browser runtime/playground | Offline asset packaging, storage budget, origin/security-context checks, lifecycle tests |
 | ESP-NOW | Existing embedded support and 2.4 GHz Public Action TX/RX evidence | Linux vendor-category TX/RX and real Espressif interoperability remain unproven |
 
@@ -175,7 +175,8 @@ any helper; do not turn it into an unauthenticated local command proxy.
    forces A→B→C, verifies immediate-hop MAC identity, and checks that removing B
    prevents progress. Hardware with independently verified endpoint isolation
    remains necessary before claiming a forced two-radio-hop radio qualification.
-4. Add AP/client discovery and WebSocket/browser access in measured increments.
+4. Plain WebSocket access has passed the [browser-to-HaLoW smoke](qualification/websocket-halow-2026-09-29.md), including eight concurrent clients.
+   Add AP/client discovery and locally served browser assets in measured increments.
    Keep ESP-NOW qualification separate from ordinary Wi-Fi operation.
 5. Qualify persistent installation, identity retention across power loss, bounded
    state growth, full-storage behavior, and update rollback. Then publish a signed

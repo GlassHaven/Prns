@@ -75,7 +75,7 @@ pub mod pipe;
 #[cfg(feature = "config")]
 mod host_network;
 
-#[cfg(feature = "websocket")]
+#[cfg(feature = "websocket-server")]
 pub mod websocket;
 
 #[cfg(feature = "browser-rendezvous")]

@@ -30,6 +30,14 @@ struct Options {
     /// Local address for the Reticulum TCP interface (not HTTP or management).
     #[arg(long)]
     listen: SocketAddr,
+    #[cfg(feature = "websocket")]
+    /// Plain WebSocket Reticulum listener; public transport, not administration.
+    #[arg(long)]
+    websocket_listen: Option<SocketAddr>,
+    #[cfg(feature = "websocket")]
+    /// Maximum total WebSocket sessions and handshakes.
+    #[arg(long, default_value = "8", requires = "websocket_listen")]
+    websocket_connections: std::num::NonZeroUsize,
     /// Stop gracefully after this many seconds; otherwise run until signalled.
     #[arg(long)]
     run_for: Option<NonZeroU64>,
@@ -87,6 +95,26 @@ async fn run(options: Options) -> Result<(), HostError> {
     let persistence = NodePersistence::custom_dir(options.state_dir.join("retained"))?;
     let listener = TcpServer::bind(options.listen).await?;
     let listen = listener.local_addr()?;
+    #[cfg(feature = "websocket")]
+    let websocket = match options.websocket_listen {
+        Some(address) => Some(
+            personal_rns::websocket::WebSocketServer::bind(
+                address,
+                personal_rns::interfaces::websocket::WEBSOCKET_BITRATE_ESTIMATE,
+                personal_rns::interfaces::websocket::WebSocketFramingSelection::Fixed(
+                    personal_rns::interfaces::websocket::WebSocketWireFraming::RawPacket,
+                ),
+            )
+            .await?
+            .with_connection_limit(options.websocket_connections),
+        ),
+        None => None,
+    };
+    #[cfg(feature = "websocket")]
+    let websocket_address = websocket
+        .as_ref()
+        .map(|server| server.local_addr())
+        .transpose()?;
     let node = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: Some(identity),
         pre_configured_destinations: destinations.into_preconfigured_destinations(),
@@ -109,6 +137,10 @@ async fn run(options: Options) -> Result<(), HostError> {
     });
     let handle = node.handle();
     handle.supervise(listener);
+    #[cfg(feature = "websocket")]
+    if let Some(websocket) = websocket {
+        handle.supervise(websocket);
+    }
     #[cfg(feature = "wifi-halow")]
     let radio = radio.map(|radio| radio.attach(&handle));
     #[cfg(unix)]
@@ -172,6 +204,13 @@ async fn run(options: Options) -> Result<(), HostError> {
         "hopspot_ready listen={listen} node_page={}",
         hex::encode(hashes.node_page.as_bytes())
     );
+    #[cfg(feature = "websocket")]
+    if let Some(address) = websocket_address {
+        println!(
+            "hopspot_websocket_ready listen={address} framing=raw connections={}",
+            options.websocket_connections
+        );
+    }
     #[cfg(feature = "wifi-halow")]
     let task_result = {
         let announces = async {

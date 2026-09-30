@@ -43,6 +43,8 @@ qualified for this board.
 
 HaLoW is opt-in in the development bundle and requires a separately configured
 radio. Basic three-node mesh transfers and application rejoin have passed bench
-checks. Sustained load, forced multi-hop routing, field reliability, Wi-Fi discovery,
-and browser-node access need further qualification.
+checks. The optional `--with-websocket` bundle also passed browser-node page
+transfers through the G4 to both Heltecs. Sustained load, forced radio multi-hop
+routing, field reliability, Wi-Fi discovery, and locally served browser assets
+need further qualification.
 See the repository's headless README for the experimental radio options.

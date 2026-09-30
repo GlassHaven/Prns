@@ -60,7 +60,7 @@ pub use interface_families::udp;
 pub use interface_families::usb_auto;
 #[cfg(all(feature = "weave", feature = "tokio-host"))]
 pub use interface_families::weave;
-#[cfg(all(feature = "websocket", feature = "tokio-host"))]
+#[cfg(all(feature = "websocket-server", feature = "tokio-host"))]
 pub use interface_families::websocket;
 #[cfg(all(
     feature = "wifi-auto",
