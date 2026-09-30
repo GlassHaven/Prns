@@ -72,7 +72,7 @@ async fn probe(options: Options) -> Result<(), ProbeError> {
         app_state: personal_rns::runtime::NoRemoteControlHostControls,
         storage: GrowableHeap,
         request_endpoints: request_endpoints![],
-        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable.into(),
         interfaces: ManuallyAttached,
         persistence: NoPersistence,
         on_event: |_, _| {},

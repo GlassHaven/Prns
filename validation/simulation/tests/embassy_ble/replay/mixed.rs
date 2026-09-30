@@ -59,7 +59,7 @@ fn desktop(tasks: &mut EmbassyTasks<'_>, lab: &VirtualBleLab, inputs: Inputs) ->
         let node = PrnsNode::new_with_entropy_sources(
             |_| PrnsNodeRecipe {
                 transport_identity: None,
-                remote_control: RemoteControlService::Unavailable,
+                remote_control: RemoteControlService::Unavailable.into(),
                 pre_configured_destinations: [echo::destination(TOKIO_ADDRESS)],
                 app_state: NoRemoteControlHostControls,
                 storage: GrowableHeap,

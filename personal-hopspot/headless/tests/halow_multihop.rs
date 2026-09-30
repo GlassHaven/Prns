@@ -154,7 +154,8 @@ async fn hopspot_page_crosses_two_halow_hops_and_requires_the_relay() {
                 app_state: personal_rns::runtime::NoRemoteControlHostControls,
                 storage: GrowableHeap,
                 request_endpoints: node_pages::NodePageRoutes,
-                remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+                remote_control: personal_rns::remote_control::RemoteControlService::Unavailable
+                    .into(),
                 interfaces: ManuallyAttached,
                 persistence: NoPersistence,
                 on_event: |_, _: &personal_rns::runtime::NoRemoteControlHostControls| {},

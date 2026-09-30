@@ -381,7 +381,7 @@ fn restore_diagnostics_report_seeded_refused_and_dropped_totals() {
 async fn run_until_returns_when_a_non_persistent_node_is_asked_to_stop() {
     let node = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: None,
-        remote_control: test_remote_control_service(),
+        remote_control: test_remote_control_service().into(),
         pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
         app_state: crate::runtime::NoRemoteControlHostControls,
         storage: crate::storage::GrowableHeap,
@@ -413,7 +413,7 @@ fn controller_and_target_identities_coexist_without_a_transport_identity() {
     );
     let node = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: None,
-        remote_control,
+        remote_control: remote_control.into(),
         pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
         app_state: crate::runtime::NoRemoteControlHostControls,
         storage: crate::storage::GrowableHeap,
@@ -451,7 +451,7 @@ async fn run_until_with_proof_decider_reaches_a_prove_if_recipe_destination() {
     );
     let node = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: None,
-        remote_control: test_remote_control_service(),
+        remote_control: test_remote_control_service().into(),
         pre_configured_destinations: [PreConfiguredDestination::Single {
             app_name: "personal",
             aspects: &["node"],
@@ -524,7 +524,7 @@ async fn graceful_shutdown_is_observed_after_state_and_ratchet_flushes() {
     let event_sink = Arc::clone(&events);
     let node = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: None,
-        remote_control: test_remote_control_service(),
+        remote_control: test_remote_control_service().into(),
         pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
         app_state: crate::runtime::NoRemoteControlHostControls,
         storage: crate::storage::GrowableHeap,
@@ -572,7 +572,7 @@ async fn a_recipe_managed_write_failure_is_observed_before_run_returns() {
     let event_sink = Arc::clone(&events);
     let node = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: None,
-        remote_control: test_remote_control_service(),
+        remote_control: test_remote_control_service().into(),
         pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
         app_state: crate::runtime::NoRemoteControlHostControls,
         storage: crate::storage::GrowableHeap,
@@ -603,7 +603,7 @@ async fn a_restore_callback_panic_reports_the_manifold_boundary() {
     let persistence = crate::runtime::NodePersistence::custom_dir(&directory).unwrap();
     let node = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: None,
-        remote_control: test_remote_control_service(),
+        remote_control: test_remote_control_service().into(),
         pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
         app_state: crate::runtime::NoRemoteControlHostControls,
         storage: crate::storage::GrowableHeap,
@@ -681,7 +681,7 @@ fn accepted_announce_observers_receive_the_complete_observation() {
 fn new_with_handle_builds_state_from_the_nodes_handle() {
     let prns = PrnsNode::new_with_handle(|handle| PrnsNodeRecipe {
         transport_identity: None,
-        remote_control: test_remote_control_service(),
+        remote_control: test_remote_control_service().into(),
         pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
         app_state: handle,
         storage: crate::storage::GrowableHeap,
@@ -702,7 +702,7 @@ fn host_resource_memory_limits_reach_the_engine_before_run() {
     };
     let prns = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: None,
-        remote_control: test_remote_control_service(),
+        remote_control: test_remote_control_service().into(),
         pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
         app_state: crate::runtime::NoRemoteControlHostControls,
         storage: crate::storage::GrowableHeap,
@@ -740,7 +740,7 @@ async fn explicit_host_preserves_entropy_position_handle_identity_and_timeline()
     let mut node = PrnsNode::new_with_handle_and_host(
         |handle| PrnsNodeRecipe {
             transport_identity: None,
-            remote_control: test_remote_control_service(),
+            remote_control: test_remote_control_service().into(),
             pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
             app_state: handle,
             storage: crate::storage::GrowableHeap,
@@ -797,7 +797,7 @@ fn a_runtime_destination_registers_only_its_selected_route_types() {
 
     let mut prns = PrnsNode::new(PrnsNodeRecipe {
         transport_identity: None,
-        remote_control: test_remote_control_service(),
+        remote_control: test_remote_control_service().into(),
         pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
         app_state: crate::runtime::NoRemoteControlHostControls,
         storage: crate::storage::GrowableHeap,

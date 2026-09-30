@@ -71,7 +71,7 @@ async fn running_node_broadcasts_without_peers_admits_first_frame_and_replies_di
         app_state: NoRemoteControlHostControls,
         storage: GrowableHeap,
         request_endpoints: prns_runtime::request_endpoints![],
-        remote_control: prns_runtime::remote_control::RemoteControlService::Unavailable,
+        remote_control: prns_runtime::remote_control::RemoteControlService::Unavailable.into(),
         interfaces: ManuallyAttached,
         persistence: NoPersistence,
         on_event: |_, _: &NoRemoteControlHostControls| {},

@@ -113,7 +113,7 @@ pub(super) fn with_storage<
     tasks.insert(async move {
         let node = PrnsNode::new(PrnsNodeRecipe {
             transport_identity: None,
-            remote_control: RemoteControlService::Unavailable,
+            remote_control: RemoteControlService::Unavailable.into(),
             pre_configured_destinations: destinations,
             app_state: NoRemoteControlHostControls,
             storage,
