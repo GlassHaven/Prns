@@ -64,8 +64,10 @@ This is a public Reticulum transport endpoint, accepting browser origins; it
 exposes no administrative commands or HTTP assets. It does not provide TLS.
 Use only the intended network exposure. An HTTPS-hosted browser application's
 ability to reach plain `ws://` and local devices needs its own browser deployment
-qualification. The current smoke serves browser assets from laptop loopback;
-serving an offline browser application from the G4 remains separate work.
+qualification. The original smoke served assets from laptop loopback;
+a [separately built static browser bundle](docs/browser-hosting.md) has also been
+qualified on the G4 using its existing HTTP server and the portable crypto path.
+That deployment remains temporary RAM hosting, not persistent installation.
 
 The G4 build task enables this only with `--with-websocket`. Its server-only
 feature excludes the TLS client dependencies; the existing `personal-rns/websocket`

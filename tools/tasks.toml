@@ -105,6 +105,17 @@ requires = ["cargo", "git", "python3", "rustc", "rustup"]
 setup = "Install nightly-2026-06-01 with rust-src and separately verify Zig 0.15.2. Pass --zig and a new --output directory. This produces a development application, not firmware."
 
 [[task]]
+id = "build.hopspot.browser"
+summary = "Build a self-contained Hopspot browser asset bundle for a local static HTTP server."
+domain = "build"
+effect = "workspace-write"
+platforms = ["any"]
+audience = ["developer", "ci"]
+entrypoint = ["python3", "tools/build/hopspot-browser.py"]
+requires = ["bash", "cargo", "git", "node", "npm", "python3", "wasm-bindgen"]
+setup = "Install the prns-js and prns-wasm locked npm dependencies and wasm-bindgen 0.2.126. Supply a new --output directory and the board listener's --websocket-port."
+
+[[task]]
 id = "build.hopspot.t096"
 summary = "Build the Heltec T096 firmware and package its recovery-compatible developer UF2."
 domain = "build"

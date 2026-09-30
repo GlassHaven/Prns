@@ -22,7 +22,8 @@ const header = Buffer.alloc(3);
 header[0] = 0xc5;
 header.writeUInt16BE(pageBytes.length, 1);
 const expected = Buffer.concat([header, pageBytes]);
-const expectedHash = createHash("sha256").update(expected).digest("hex");
+const requestPath = [...createHash("sha256").update("/page/index.mu").digest().subarray(0, 16)];
+const remoteOrigin = process.env.PRNS_BROWSER_ORIGIN;
 const holdMillis = Number(process.env.PRNS_BROWSER_HOLD_MS ?? 0);
 assert(Number.isSafeInteger(holdMillis) && holdMillis >= 0 && holdMillis <= 30000);
 const server = createServer(async (request, response) => {
@@ -57,9 +58,21 @@ try {
     ...(process.env.PRNS_BROWSER_CHANNEL ? { channel: process.env.PRNS_BROWSER_CHANNEL } : {}),
   });
   const results = await Promise.all(destinations.map(async destination => {
-    const page = await browser.newPage();
-    await page.goto(`http://127.0.0.1:${server.address().port}/`);
-    const result = await page.evaluate(async ({ url, destination, holdMillis }) => {
+    const context = await browser.newContext();
+    const blockedRequests = [];
+    if (remoteOrigin) {
+      const allowedOrigin = new URL(remoteOrigin).origin;
+      await context.route("**/*", route => {
+        if (new URL(route.request().url()).origin !== allowedOrigin) {
+          blockedRequests.push(route.request().url());
+          return route.abort();
+        }
+        return route.continue();
+      });
+    }
+    const page = await context.newPage();
+    await page.goto(remoteOrigin ?? `http://127.0.0.1:${server.address().port}/`);
+    const result = await page.evaluate(async ({ url, destination, holdMillis, requestPath }) => {
       const sdk = await import("/sdk/browser/index.js");
       const created = await sdk.Prns.create({
         wasmModuleUrl: new URL("/pkg/prns_wasm.js", location.href),
@@ -88,13 +101,13 @@ try {
             if (path.tag !== "Succeeded") throw new Error(`path: ${JSON.stringify(path)}`);
             const link = await node.establishLink(target);
             if (link.tag !== "Succeeded") throw new Error(`link: ${JSON.stringify(link)}`);
-            const pathHash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("/page/index.mu"))).slice(0, 16);
+            const pathHash = new Uint8Array(requestPath);
             const response = await node.request(link.data.data.linkId, sdk.requestPathHash(pathHash), new Uint8Array());
             if (response.tag !== "Succeeded") throw new Error(`request: ${JSON.stringify(response)}`);
             const bytes = response.data.data.data;
-            const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), byte => byte.toString(16).padStart(2, "0")).join("");
+
             await new Promise(done => setTimeout(done, holdMillis));
-            return { destination, bytes: bytes.length, sha256: hash, rttMillis: response.data.data.rttMillis };
+            return { destination, payload: Array.from(bytes), rttMillis: response.data.data.rttMillis, secureContext: isSecureContext, subtleCrypto: typeof crypto.subtle !== "undefined" };
           })(),
         ]);
       } finally {
@@ -102,12 +115,14 @@ try {
         await node.stop();
         await Promise.all(consumers);
       }
-    }, { url, destination, holdMillis });
-    assert.equal(result.bytes, expected.length);
-    assert.equal(result.sha256, expectedHash, "browser response must match the compiled Hopspot page");
-    return result;
+    }, { url, destination, holdMillis, requestPath });
+    assert.deepEqual(blockedRequests, [], "remote browser assets must be self-contained");
+    const { payload, ...measurement } = result;
+    const received = Buffer.from(payload);
+    assert.deepEqual(received, expected, "browser response must match the compiled Hopspot page");
+    return { ...measurement, bytes: received.length, sha256: createHash("sha256").update(received).digest("hex") };
   }));
-  console.log(JSON.stringify({ browser: await browser.version(), url, results }, null, 2));
+  console.log(JSON.stringify({ browser: await browser.version(), origin: remoteOrigin ?? "loopback", url, results }, null, 2));
 } finally {
   await browser?.close();
   server.close();
