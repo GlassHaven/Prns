@@ -84,3 +84,22 @@ fn halow_kinds_append_without_reusing_persisted_discriminants() {
         Some(InterfaceKind::WifiHaLow)
     );
 }
+
+#[test]
+fn shared_channel_is_a_distinct_halow_wire_in_the_same_fanout_family() {
+    let instance = InstanceTag::new(b"radio").unwrap();
+    let shared =
+        InterfaceId::from_channel_tag(InterfaceKind::WifiHaLowBroadcast, &instance.channel_tag());
+    let supervisor =
+        InterfaceId::from_channel_tag(InterfaceKind::WifiHaLow, &instance.channel_tag());
+    assert_ne!(shared, supervisor);
+    assert_eq!(shared.kind(), InterfaceKind::from_u8(36));
+    assert_eq!(
+        InterfaceKind::WifiHaLowBroadcast.fanout_kind(),
+        Some(InterfaceKind::WifiHaLow)
+    );
+    assert_eq!(
+        InterfaceKind::WifiHaLowBroadcast.radio_family(),
+        crate::interfaces::RadioFamily::HaLow
+    );
+}

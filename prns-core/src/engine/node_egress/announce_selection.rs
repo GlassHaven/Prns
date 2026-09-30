@@ -60,7 +60,7 @@ pub(in crate::engine) fn fleet_announce_fan_target(
     if let Some(target) = directed_to {
         return FanTarget::Only(target);
     }
-    if source.kind() != supervisor.member_kind() {
+    if source.kind().and_then(InterfaceKind::fanout_kind) != Some(supervisor) {
         return FanTarget::All;
     }
     let source_repeats = interfaces
@@ -79,12 +79,11 @@ pub(in crate::engine) fn fleet_fan_target_reaches_any_member(
     supervisor: InterfaceKind,
     fan_target: FanTarget,
 ) -> bool {
-    let Some(member_kind) = supervisor.member_kind() else {
-        return false;
-    };
     interfaces
         .iter()
-        .filter(|descriptor| descriptor.id.kind() == Some(member_kind))
+        .filter(|descriptor| {
+            descriptor.id.kind().and_then(InterfaceKind::fanout_kind) == Some(supervisor)
+        })
         .any(|descriptor| match fan_target {
             FanTarget::All => true,
             FanTarget::Only(target) => descriptor.id == target,

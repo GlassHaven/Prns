@@ -4,6 +4,9 @@ use heapless::Vec;
 
 use crate::interfaces::{InterfaceId, InterfaceKind, MacAddress};
 
+mod wire;
+pub use wire::{decode, encode, WireError, DATAGRAM_MTU, FRAME_MTU};
+
 pub const INSTANCE_TAG_MAX_LEN: usize = 64;
 pub const CHANNEL_TAG_MAX_LEN: usize = 2 + INSTANCE_TAG_MAX_LEN + 6;
 const IDENTITY_VERSION: u8 = 1;
@@ -29,12 +32,18 @@ impl InstanceTag {
     }
 
     #[must_use]
-    pub fn peer_channel_tag(&self, peer: PeerMac) -> Vec<u8, CHANNEL_TAG_MAX_LEN> {
+    pub fn channel_tag(&self) -> Vec<u8, CHANNEL_TAG_MAX_LEN> {
         let mut tag = Vec::new();
-        // Capacity covers the version, length, largest instance tag, and six-byte MAC.
         let _ = tag.push(IDENTITY_VERSION);
         let _ = tag.push(self.0.len() as u8);
         let _ = tag.extend_from_slice(&self.0);
+        tag
+    }
+
+    #[must_use]
+    pub fn peer_channel_tag(&self, peer: PeerMac) -> Vec<u8, CHANNEL_TAG_MAX_LEN> {
+        let mut tag = self.channel_tag();
+        // Capacity covers the version, length, largest instance tag, and six-byte MAC.
         let _ = tag.extend_from_slice(&peer.0.octets());
         tag
     }

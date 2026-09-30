@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-#[cfg(all(feature = "wifi-halow", target_os = "linux"))]
+#[cfg(feature = "wifi-halow")]
 pub mod wifi_halow;
 
 cfg_if::cfg_if! {

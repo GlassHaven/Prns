@@ -1,9 +1,49 @@
 # Native HaLoW datagram backend
 
-`wifi-halow` exposes `HaLowSocket` on Linux. This is the packet I/O foundation,
-**not yet an attachable Prns interface**. Fleet admission, shared announce pacing,
-wire framing, radio configuration, and headless CLI integration remain unfinished.
-The core `wifi_halow` module owns source-MAC identity without allocation or OS APIs.
+`wifi-halow` exposes the attachable `HaLow` supervisor and, on Linux,
+`HaLowSocket`. Attach with `handle.supervise(HaLow::new(socket, instance,
+peer_policy, broadcast_policy, limits))`. The caller provides a configured radio,
+a stable instance tag, distinct pacing policies, and nonzero peer/idle limits.
+Radio configuration and headless CLI integration remain separate work. The core
+`wifi_halow` module owns source-MAC identity and framing without allocation or OS APIs.
+
+## Runtime contract
+
+The supervisor attaches one `WifiHaLowBroadcast` channel immediately and one
+`WifiHaLowPeer` channel per source MAC on receipt of a valid envelope. The original
+frame enters that peer's receive queue without a handshake or station-table poll.
+Reticulum validates the enclosed frame and authenticates identities afterward;
+a valid envelope alone is not authenticated admission.
+
+Unrestricted announces use the shared channel once per configured radio, including
+with zero peers. Existing runtime announce pacing and backpressure apply to that
+channel. Directed announces stay unicast. `AllExcept(peer)` uses unicast for that
+peer's radio so the excluded peer is not an intended recipient; other radios can
+still broadcast. Thus some relayed announces are directed fan-out. Ordinary
+non-announce fleet traffic always fans out over known unicast peers. Direct
+traffic never falls back to broadcast. No payload-hash or timer deduplication is used.
+
+The experimental payload is `PRNSHL`, version byte `1`, reserved byte `0`, a
+big-endian u16 frame length, and exactly that frame. Only minimum Ethernet padding
+(to 46 payload bytes) may trail a short frame. The Ethernet payload cap is 1500
+bytes; Prns frames occupy at most 1490, with advertised link MTU capped at 1426
+so the maximum 64-byte IFAC still fits. The caller must choose the same EtherType
+and wire version at both ends. `0x88b6` remains a lab value, not a Prns assignment.
+
+Peer admission has a caller-selected cap of at most 255 peers, 16 queued datagrams
+per peer, and no allocation on a full receive queue. New sources at capacity and
+frames for full queues are dropped. Both received and successfully kernel-accepted
+sent frames refresh idle expiry; housekeeping runs every five seconds. Successful
+TX does not establish remote liveness. Send backpressure has a two-second deadline.
+A bounded receive burst yields to other work. Runtime egress queues are separately
+bounded. A fatal receive error ends the supervisor and detaches its children;
+automatic socket rebinding is not implemented yet.
+
+A portable injected-datagram test drives a real Prns node through zero-peer
+announcement, malformed-envelope rejection, first-frame admission, directed reply,
+no duplicate broadcast, capacity, TX-refreshed expiry, and supervisor teardown.
+Another covers TX timeout, failure, oversize rejection, and no broadcast fallback.
+These tests do not qualify the new framing/supervisor on hardware.
 
 The backend uses `AF_PACKET`/`SOCK_DGRAM`, an explicit device binding and EtherType,
 and requires `CAP_NET_RAW`. Opening it does not change radio configuration or

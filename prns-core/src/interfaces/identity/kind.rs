@@ -40,10 +40,26 @@ prns_macros::iterable_enum! {
         WeavePeer = 33,
         WifiHaLow = 34,
         WifiHaLowPeer = 35,
+        WifiHaLowBroadcast = 36,
     }
 }
 
 impl InterfaceKind {
+    /// The family whose fan-out includes this wire, including shared channels
+    /// that exist before any remote peer has been discovered.
+    #[must_use]
+    pub const fn fanout_kind(self) -> Option<Self> {
+        match self {
+            Self::WifiHaLowBroadcast => Some(Self::WifiHaLow),
+            _ => self.supervisor_kind(),
+        }
+    }
+
+    #[must_use]
+    pub const fn is_shared_broadcast(self) -> bool {
+        matches!(self, Self::WifiHaLowBroadcast)
+    }
+
     #[must_use]
     pub const fn from_u8(byte: u8) -> Option<Self> {
         match byte {
@@ -83,6 +99,7 @@ impl InterfaceKind {
             33 => Some(Self::WeavePeer),
             34 => Some(Self::WifiHaLow),
             35 => Some(Self::WifiHaLowPeer),
+            36 => Some(Self::WifiHaLowBroadcast),
             _ => None,
         }
     }
@@ -126,6 +143,7 @@ impl InterfaceKind {
             Self::WeavePeer => "weave-peer",
             Self::WifiHaLow => "wifi-halow",
             Self::WifiHaLowPeer => "wifi-halow-peer",
+            Self::WifiHaLowBroadcast => "wifi-halow-broadcast",
         }
     }
 

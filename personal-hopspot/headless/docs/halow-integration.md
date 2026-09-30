@@ -3,9 +3,12 @@
 This records the implementation contract and remaining work after the
 2026-09-29 three-device experiments. The running headless application is still
 TCP-only. The G4 build task and web installation guide exist; the native HaLoW
-transport is not yet attached to the runtime. The portable peer identity and
-Linux/Tokio datagram backend now exist under `interfaces::wifi_halow` and the
-`wifi-halow` feature; they are exercised by the bounded `halow_datagram` example.
+supervisor is now attachable through the runtime but not yet wired into the
+headless application's CLI. Portable identity/framing, bounded first-frame peer
+admission, shared announce egress, and Linux/Tokio datagrams exist under
+`interfaces::wifi_halow` and the `wifi-halow` feature. Running-node tests exercise
+the supervisor; the earlier bounded `halow_datagram` hardware probe exercises
+only raw datagrams. The new framed transport still needs on-device qualification.
 
 ## Product shape
 
@@ -52,12 +55,12 @@ aggregation. A direct transmission must never silently fall back to broadcast
 when its peer disappears. Announce fan-out must work even with zero known peers,
 otherwise first discovery depends on already having discovered someone.
 
-The current Tokio egress expands fleet announcements into a per-peer loop.
-Introduce a shared-medium egress capability before that expansion. Preserve the
-engine's original intent through pacing and backpressure; do not try to recover
-it afterward with payload hashes or timing-based duplicate suppression. Account
-and pace physical broadcasts once per radio instance, and keep direct queues
-bounded and fair. Compatibility with existing point-to-point fleets matters.
+Tokio egress now recognizes a distinct shared broadcast channel grouped with
+its peers by logical supervisor ID. Unrestricted announcements select that channel
+once per radio before pacing and backpressure. Directed and excluded-recipient
+announcements retain direct delivery; ordinary fleet fan-out selects peers only.
+Existing point-to-point fleets keep their per-peer behavior. See the transport
+README for frame layout, queue bounds, timeout, expiry, and current limitations.
 
 The exact handling of `FanTarget::Only`, `AllExcept`, and non-announce fan-out
 must be explicit. A physical broadcast cannot exclude one receiving station.

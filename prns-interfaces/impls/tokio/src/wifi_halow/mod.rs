@@ -1,15 +1,16 @@
-//! Linux HaLoW data-plane building blocks; runtime fleet attachment is separate.
-
-use std::io;
+//! First-frame HaLoW peer admission and shared announce delivery.
 
 use prns_core::interfaces::wifi_halow::PeerMac;
-use prns_core::interfaces::MacAddress;
-pub use prns_ffi::ethernet::EtherType;
-use prns_ffi::ethernet::{PacketSocket, Reception};
-use tokio::io::unix::AsyncFd;
+use std::io;
 
-const DISCARD_BURST_LIMIT: usize = 32;
+mod fleet;
+pub use fleet::{HaLow, HaLowLimits};
+#[cfg(target_os = "linux")]
+mod socket;
+#[cfg(target_os = "linux")]
+pub use socket::{EtherType, HaLowSocket};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Destination {
     Broadcast,
     Peer(PeerMac),
@@ -20,54 +21,20 @@ pub struct ReceivedDatagram {
     pub length: usize,
 }
 
-/// One shared normal-data socket on an already configured Linux mesh device.
-/// This does not configure the radio or inject 802.11 management frames.
-pub struct HaLowSocket(AsyncFd<PacketSocket>);
+/// Cancel-safe datagram operations on one configured radio. Implementations must
+/// preserve source MACs and discard truncated packets and local transmit echoes.
+#[allow(async_fn_in_trait)]
+pub trait HaLowDatagrams: Send + Sync + 'static {
+    async fn send(&self, destination: Destination, payload: &[u8]) -> io::Result<()>;
+    async fn receive(&self, buffer: &mut [u8]) -> io::Result<ReceivedDatagram>;
+}
 
-impl HaLowSocket {
-    pub fn bind(interface: &str, protocol: EtherType) -> io::Result<Self> {
-        AsyncFd::new(PacketSocket::bind(interface, protocol)?).map(Self)
+#[cfg(target_os = "linux")]
+impl HaLowDatagrams for HaLowSocket {
+    async fn send(&self, destination: Destination, payload: &[u8]) -> io::Result<()> {
+        self.send(destination, payload).await
     }
-
-    /// Success means the kernel accepted the frame, not that any peer received it.
-    pub async fn send(&self, destination: Destination, payload: &[u8]) -> io::Result<()> {
-        let address = match destination {
-            Destination::Broadcast => MacAddress::new([0xff; 6]),
-            Destination::Peer(peer) => peer.address(),
-        };
-        loop {
-            let mut ready = self.0.writable().await?;
-            match ready.try_io(|socket| socket.get_ref().send(address, payload)) {
-                Ok(Err(error)) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Ok(result) => return result,
-                Err(_) => continue,
-            }
-        }
-    }
-
-    /// The first datagram carries its source identity without consulting a peer table.
-    pub async fn receive(&self, buffer: &mut [u8]) -> io::Result<ReceivedDatagram> {
-        if buffer.is_empty() {
-            return Err(io::Error::from(io::ErrorKind::InvalidInput));
-        }
-        let mut discarded = 0;
-        loop {
-            let mut ready = self.0.readable().await?;
-            let received = match ready.try_io(|socket| socket.get_ref().receive(buffer)) {
-                Ok(Err(error)) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Ok(result) => result?,
-                Err(_) => continue,
-            };
-            if let Reception::Frame { source, length } = received {
-                if let Ok(source) = PeerMac::new(source) {
-                    return Ok(ReceivedDatagram { source, length });
-                }
-            }
-            discarded += 1;
-            if discarded == DISCARD_BURST_LIMIT {
-                discarded = 0;
-                tokio::task::yield_now().await;
-            }
-        }
+    async fn receive(&self, buffer: &mut [u8]) -> io::Result<ReceivedDatagram> {
+        self.receive(buffer).await
     }
 }

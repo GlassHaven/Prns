@@ -37,7 +37,7 @@ impl InterfaceKind {
         match self {
             Self::BluetoothAuto | Self::BluetoothPeer => RadioFamily::Bluetooth,
             Self::LoRa | Self::Rnode => RadioFamily::LoRa,
-            Self::WifiHaLow | Self::WifiHaLowPeer => RadioFamily::HaLow,
+            Self::WifiHaLow | Self::WifiHaLowPeer | Self::WifiHaLowBroadcast => RadioFamily::HaLow,
             Self::AutoWifi
             | Self::WifiPeer
             | Self::WifiDirect
