@@ -118,7 +118,7 @@ and restart causes. Benchmark actual Prns transfers after raw-link qualification
 | --- | --- | --- |
 | Wired TCP | Headless host and lifecycle tests | Persistent service and install transaction |
 | Wi-Fi AP or client | G4 reports both modes; vendor OpenWrt manages them | Explicit choice, retained Ethernet management, DHCP/firewall and concurrency checks |
-| Auto-WiFi and mDNS | Tokio interface family and discovery support | Bind to chosen networks; qualify multicast on AP/client; budget sockets and discovery traffic |
+| Auto-WiFi and mDNS | Opt-in headless device selection and native DNS-SD | Qualify multicast on AP/client; separate vendor bridge; budget sockets and discovery traffic |
 | WebSocket and browser rendezvous | Opt-in bounded plain WebSocket listener; real browser-to-HaLoW transfers qualified | TLS/origin deployment, browser rendezvous/discovery, and long-running resource tests |
 | Locally served browser node | Hashed static bundle; plain G4 HTTP origin, portable crypto, UI connect/close and browser identity reload qualified | Persistent storage does not fit current payload; HTTPS, other browsers, and appliance UI remain |
 | ESP-NOW | Existing embedded support and 2.4 GHz Public Action TX/RX evidence | Linux vendor-category TX/RX and real Espressif interoperability remain unproven |

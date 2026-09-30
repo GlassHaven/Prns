@@ -22,6 +22,7 @@ hex = "0.4"
 default = []
 wifi-halow = ["personal-rns/wifi-halow"]
 websocket = ["personal-rns/websocket-server"]
+wifi-auto = ["personal-rns/wifi-auto-mdns"]
 
 [dev-dependencies]
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }

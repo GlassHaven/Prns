@@ -24,6 +24,9 @@ struct Options {
     /// Dedicated private directory for this node's identity and retained state.
     #[arg(long)]
     state_dir: PathBuf,
+    #[cfg(feature = "wifi-auto")]
+    #[command(flatten)]
+    auto_wifi: personal_hopspot_headless::auto_wifi::AutoWifiOptions,
     #[cfg(feature = "wifi-halow")]
     #[command(flatten)]
     halow: halow::HaLowOptions,
@@ -45,6 +48,9 @@ struct Options {
 
 #[derive(Debug, thiserror::Error)]
 enum HostError {
+    #[cfg(feature = "wifi-auto")]
+    #[error(transparent)]
+    AutoWifi(#[from] personal_rns::wifi_auto::AutoWifiSettingsError),
     #[cfg(feature = "wifi-halow")]
     #[error(transparent)]
     HaLow(#[from] halow::Error),
@@ -84,6 +90,8 @@ fn lock_state(directory: &Path) -> Result<File, HostError> {
 async fn run(options: Options) -> Result<(), HostError> {
     #[cfg(feature = "wifi-halow")]
     let radio = options.halow.prepare()?;
+    #[cfg(feature = "wifi-auto")]
+    let auto_wifi = options.auto_wifi.settings()?;
     let _state_lock = lock_state(&options.state_dir)?;
     // Refuse corrupt identities rather than silently changing this node's address.
     let identity =
@@ -137,6 +145,10 @@ async fn run(options: Options) -> Result<(), HostError> {
     });
     let handle = node.handle();
     handle.supervise(listener);
+    #[cfg(feature = "wifi-auto")]
+    if let Some(settings) = auto_wifi {
+        handle.supervise(personal_hopspot_headless::auto_wifi::supervisor(settings));
+    }
     #[cfg(feature = "websocket")]
     if let Some(websocket) = websocket {
         handle.supervise(websocket);
@@ -204,6 +216,13 @@ async fn run(options: Options) -> Result<(), HostError> {
         "hopspot_ready listen={listen} node_page={}",
         hex::encode(hashes.node_page.as_bytes())
     );
+    #[cfg(feature = "wifi-auto")]
+    if !options.auto_wifi.auto_wifi_device.is_empty() {
+        println!(
+            "hopspot_auto_wifi_configured devices={} discovery=multicast,mdns",
+            options.auto_wifi.auto_wifi_device.join(",")
+        );
+    }
     #[cfg(feature = "websocket")]
     if let Some(address) = websocket_address {
         println!(

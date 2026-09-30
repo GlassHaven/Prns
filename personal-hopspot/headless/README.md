@@ -6,8 +6,9 @@ and recipe-managed identity/route/ratchet persistence. The listen address and
 private state directory must be supplied explicitly.
 
 TCP is always available. The optional `wifi-halow` feature attaches a native
-HaLoW interface on Linux; it does not configure the radio. HTTP, remote
-administration, and Wi-Fi Auto are not exposed by this entry point yet.
+HaLoW interface on Linux; it does not configure the radio. HTTP
+and remote administration are not exposed by this entry point. Auto-WiFi is
+optional and requires explicit network-device selection.
 
 ## Build and run
 
@@ -74,6 +75,33 @@ feature excludes the TLS client dependencies; the existing `personal-rns/websock
 feature still supplies the full client/server transport. See the
 [browser-to-HaLoW qualification](docs/qualification/websocket-halow-2026-09-29.md)
 for the reproducible smoke, measured size/RAM, and limitations.
+
+## Optional Auto-WiFi discovery
+
+Build with `--features wifi-auto` and repeat `--auto-wifi-device NAME` for each
+intended LAN. Omitting the option leaves Auto-WiFi disabled, even when compiled in.
+The G4 build task includes this only with `--with-auto-wifi`.
+
+```sh
+./personal-hopspot-headless --state-dir ./hopspot-state --listen 127.0.0.1:4242 \
+  --auto-wifi-device br-lan
+```
+
+Use the actual address-owning LAN device, not an enslaved bridge port. The
+`hopspot_auto_wifi_configured` line means the supervisor was attached, not that
+an interface exists, discovery succeeded, or peers are connected. Devices can
+appear later. Native DNS-SD and the existing Reticulum link-local multicast
+protocol share the same device selection; the existing Auto-WiFi runtime owns
+TCP rendezvous, peer admission, and discovery lifecycle. This does not advertise
+the independent WebSocket listener or make browser mDNS available.
+
+Device selection scopes discovery and local-subnet admission; it is not a
+firewall. The rendezvous listener binds a wildcard address. Keep OpenWrt firewall
+policy explicit, especially on routed or overlapping networks. Selecting a bridge
+includes its whole broadcast domain, including any attached HaLoW radio.
+See [AP/client networking](docs/networking.md) before enabling it on the G4.
+The [initial hardware smoke](docs/qualification/auto-wifi-g4-2026-09-29.md) passed
+a direct rendezvous transfer; automatic discovery remains unqualified.
 
 ## Experimental HaLoW attachment
 

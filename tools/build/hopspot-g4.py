@@ -49,11 +49,12 @@ def verify_elf(data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--zig", type=Path, required=True, help="Verified Zig 0.15.2 executable")
-    parser.add_argument("--toolchain", default="nightly-2026-06-01", help="Rustup toolchain; exact compiler commit is checked")
+    parser.add_argument("--toolchain", default="nightly", help="Rustup toolchain; exact compiler commit is checked")
     parser.add_argument("--output", type=Path, required=True, help="New application bundle directory; must not exist")
     parser.add_argument("--target-dir", type=Path, default=ROOT / "target/hopspot-g4/cargo")
     parser.add_argument("--with-probe", action="store_true", help="Include the bounded page-fetch qualification executable")
     parser.add_argument("--with-websocket", action="store_true", help="Include the optional plain WebSocket server")
+    parser.add_argument("--with-auto-wifi", action="store_true", help="Include explicitly scoped Auto-WiFi and native DNS-SD")
     args = parser.parse_args()
     output = args.output.resolve()
     if output.exists():
@@ -76,6 +77,8 @@ def main():
         "CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_RUSTFLAGS": RUSTFLAGS,
     })
     features = ["wifi-halow"] + (["websocket"] if args.with_websocket else [])
+    if args.with_auto_wifi:
+        features.append("wifi-auto")
     command = [
         "cargo", f"+{args.toolchain}", "build", "--locked", "--release",
         "--manifest-path", str(CRATE / "Cargo.toml"), "--target", TARGET,
@@ -115,12 +118,18 @@ def main():
         if args.with_probe:
             shutil.copy2(probe, staging / "fetch_page")
         shutil.copy2(CRATE / "docs/thinknode-g4.md", staging / "INSTALL.md")
+        shutil.copy2(CRATE / "docs/networking.md", staging / "networking.md")
+        (staging / "qualification").mkdir()
+        shutil.copy2(
+            CRATE / "docs/qualification/auto-wifi-g4-2026-09-29.md",
+            staging / "qualification/auto-wifi-g4-2026-09-29.md",
+        )
         shutil.copy2(ROOT / "LICENSE-MIT", staging / "LICENSE-MIT")
         shutil.copy2(ROOT / "LICENSE-APACHE", staging / "LICENSE-APACHE")
         shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", staging / "THIRD_PARTY_NOTICES.md")
         (staging / "build.json").write_text(json.dumps(metadata, indent=2) + "\n")
-        files = sorted(staging.iterdir())
-        (staging / "SHA256SUMS").write_text("".join(f"{sha256(path)}  {path.name}\n" for path in files))
+        files = sorted(path for path in staging.rglob("*") if path.is_file())
+        (staging / "SHA256SUMS").write_text("".join(f"{sha256(path)}  {path.relative_to(staging).as_posix()}\n" for path in files))
         staging.rename(output)
     print(f"G4 development application bundle: {output}")
 

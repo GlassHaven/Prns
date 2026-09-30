@@ -44,12 +44,17 @@ use the repository task to build an application bundle:
 
 The task checks the compiler commit and Zig version, uses a locked Cargo build
 with `build-std=std,panic_abort`, and rejects the wrong ELF architecture or a
-dynamic loader. `--toolchain` may name an already installed alias, but its compiler
+dynamic loader. `--toolchain` defaults to the installed `nightly` alias, but its compiler
 must match the pinned commit. The output directory must be new. The bundle includes
 the executable, this procedure, licenses, third-party notices, `build.json`, and
 `SHA256SUMS`.
 It is unsigned development output; checksums do not establish release authenticity
 or independent reproducibility. No upload or device modification occurs.
+
+`--with-auto-wifi` includes optional Auto-WiFi and native DNS-SD. Runtime
+participation still requires an explicit `--auto-wifi-device` selection; consult
+[the networking guide](networking.md) before selecting a vendor bridge.
+Static browser assets remain a separate optional bundle.
 
 The linker wrapper selects `mipsel-linux-musleabi`, `mips32r2`, and `-msoft-float`.
 The binary is statically linked; this does not qualify dynamic compatibility
