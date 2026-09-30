@@ -13,6 +13,9 @@ use personal_rns::runtime::{
 use personal_rns::storage::GrowableHeap;
 use personal_rns::tcp::TcpServer;
 
+#[cfg(feature = "wifi-halow")]
+use personal_hopspot_headless::halow;
+
 const ANNOUNCE_DATA: &[u8] = b"Personal Hopspot (Headless)";
 
 #[derive(Debug, Parser)]
@@ -21,6 +24,9 @@ struct Options {
     /// Dedicated private directory for this node's identity and retained state.
     #[arg(long)]
     state_dir: PathBuf,
+    #[cfg(feature = "wifi-halow")]
+    #[command(flatten)]
+    halow: halow::HaLowOptions,
     /// Local address for the Reticulum TCP interface (not HTTP or management).
     #[arg(long)]
     listen: SocketAddr,
@@ -31,6 +37,9 @@ struct Options {
 
 #[derive(Debug, thiserror::Error)]
 enum HostError {
+    #[cfg(feature = "wifi-halow")]
+    #[error(transparent)]
+    HaLow(#[from] halow::Error),
     #[error("host I/O: {0}")]
     Io(#[from] std::io::Error),
     #[error("state directory is already in use or cannot be locked: {0}")]
@@ -65,6 +74,8 @@ fn lock_state(directory: &Path) -> Result<File, HostError> {
 }
 
 async fn run(options: Options) -> Result<(), HostError> {
+    #[cfg(feature = "wifi-halow")]
+    let radio = options.halow.prepare()?;
     let _state_lock = lock_state(&options.state_dir)?;
     // Refuse corrupt identities rather than silently changing this node's address.
     let identity =
@@ -98,6 +109,8 @@ async fn run(options: Options) -> Result<(), HostError> {
     });
     let handle = node.handle();
     handle.supervise(listener);
+    #[cfg(feature = "wifi-halow")]
+    let radio = radio.map(|radio| radio.attach(&handle));
     #[cfg(unix)]
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut interrupt = Box::pin(tokio::signal::ctrl_c());
@@ -133,11 +146,73 @@ async fn run(options: Options) -> Result<(), HostError> {
             return Err(HostError::NotReady);
         },
     }
+    #[cfg(feature = "wifi-halow")]
+    if let Some((target, _)) = radio {
+        let ready = async {
+            while !handle
+                .interfaces()
+                .iter()
+                .any(|interface| interface.id == target)
+            {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            handle
+                .engine_inspection_snapshot()
+                .await
+                .ok_or(HostError::NotReady)
+        };
+        tokio::select! {
+            result = tokio::time::timeout(Duration::from_secs(5), ready) => {
+                result.map_err(|_| HostError::NotReady)??;
+            }
+            result = &mut task => { result.map_err(HostError::Node)?; return Err(HostError::NotReady); }
+        }
+    }
     println!(
         "hopspot_ready listen={listen} node_page={}",
         hex::encode(hashes.node_page.as_bytes())
     );
-    task.await.map_err(HostError::Node)?;
+    #[cfg(feature = "wifi-halow")]
+    let task_result = {
+        let announces = async {
+            let Some((target, interval)) = radio else {
+                return std::future::pending::<()>().await;
+            };
+            let mut timer = tokio::time::interval(interval);
+            timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                timer.tick().await;
+                // Children register asynchronously. Do not announce onto TCP while
+                // waiting for the radio's shared channel to become available.
+                if !handle
+                    .interfaces()
+                    .iter()
+                    .any(|interface| interface.id == target)
+                {
+                    continue;
+                }
+                for destination in [hashes.node_page, hashes.delivery] {
+                    if let Err(error) = handle
+                        .announce_now(AnnounceNow {
+                            destination,
+                            target: AnnounceTarget::Interface(target),
+                            app_data: AnnounceAppData::Registered,
+                        })
+                        .await
+                    {
+                        eprintln!("halow_announce_failed: {error:?}");
+                    }
+                }
+            }
+        };
+        tokio::select! {
+            result = &mut task => result,
+            () = announces => unreachable!("announce service runs until node shutdown"),
+        }
+    };
+    #[cfg(not(feature = "wifi-halow"))]
+    let task_result = task.await;
+    task_result.map_err(HostError::Node)?;
     println!("hopspot_stopped");
     Ok(())
 }

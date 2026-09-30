@@ -4,7 +4,7 @@ use prns_core::interfaces::wifi_halow::{self as contract, InstanceTag, PeerMac};
 use prns_core::interfaces::{
     ConnectionState, ConnectionView, EffectiveInterfacePolicy, IngressCapability,
     InterfaceDescriptor, InterfaceId, InterfaceKind, InterfaceVitals, MtuPolicy, ReportsStatus,
-    StatusView, IFAC_MAX_SIZE,
+    StatusView,
 };
 use prns_runtime::manifold::driver::TokioInterfaceStatus;
 use prns_runtime::manifold::interface_seam::{
@@ -20,7 +20,7 @@ const PEER_QUEUE_DEPTH: usize = 16;
 const RECEIVE_BURST_LIMIT: usize = 32;
 const SEND_TIMEOUT: Duration = Duration::from_secs(2);
 const EXPIRY_INTERVAL: Duration = Duration::from_secs(5);
-const HW_MTU: usize = contract::FRAME_MTU - IFAC_MAX_SIZE;
+const HW_MTU: usize = contract::HARDWARE_MTU;
 
 /// Resource limits apply before Reticulum authentication. A MAC is an address,
 /// not a trusted identity; full tables reject new sources without evicting live peers.

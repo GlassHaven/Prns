@@ -43,7 +43,10 @@ A portable injected-datagram test drives a real Prns node through zero-peer
 announcement, malformed-envelope rejection, first-frame admission, directed reply,
 no duplicate broadcast, capacity, TX-refreshed expiry, and supervisor teardown.
 Another covers TX timeout, failure, oversize rejection, and no broadcast fallback.
-These tests do not qualify the new framing/supervisor on hardware.
+These injected tests do not establish RF performance. A later headless G4/Heltec
+smoke verified a full 3542-byte page over this supervisor on the vendor AP/station
+connection; see `personal-hopspot/headless/docs/thinknode-g4.md` for exact hashes
+and limits. Native three-node mesh testing remains.
 
 The backend uses `AF_PACKET`/`SOCK_DGRAM`, an explicit device binding and EtherType,
 and requires `CAP_NET_RAW`. Opening it does not change radio configuration or

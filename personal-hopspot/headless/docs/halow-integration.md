@@ -1,14 +1,15 @@
 # HaLoW Hopspot integration
 
 This records the implementation contract and remaining work after the
-2026-09-29 three-device experiments. The running headless application is still
-TCP-only. The G4 build task and web installation guide exist; the native HaLoW
-supervisor is now attachable through the runtime but not yet wired into the
-headless application's CLI. Portable identity/framing, bounded first-frame peer
+2026-09-29 three-device experiments. The headless application now has an opt-in
+Linux HaLoW CLI, radio-only periodic announces, and a HaLoW page-fetch probe.
+The G4 development build includes the feature; TCP-only use remains available. Portable identity/framing, bounded first-frame peer
 admission, shared announce egress, and Linux/Tokio datagrams exist under
 `interfaces::wifi_halow` and the `wifi-halow` feature. Running-node tests exercise
 the supervisor; the earlier bounded `halow_datagram` hardware probe exercises
-only raw datagrams. The new framed transport still needs on-device qualification.
+only raw datagrams. A subsequent G4-to-Heltec native page-transfer smoke passed
+on their existing AP/station connection; native three-node mesh and load testing
+remain. See `thinknode-g4.md` for the tested executable hashes and result.
 
 ## Product shape
 

@@ -52,6 +52,7 @@ def main():
     parser.add_argument("--toolchain", default="nightly-2026-06-01", help="Rustup toolchain; exact compiler commit is checked")
     parser.add_argument("--output", type=Path, required=True, help="New application bundle directory; must not exist")
     parser.add_argument("--target-dir", type=Path, default=ROOT / "target/hopspot-g4/cargo")
+    parser.add_argument("--with-probe", action="store_true", help="Include the bounded page-fetch qualification executable")
     args = parser.parse_args()
     output = args.output.resolve()
     if output.exists():
@@ -76,15 +77,18 @@ def main():
     command = [
         "cargo", f"+{args.toolchain}", "build", "--locked", "--release",
         "--manifest-path", str(CRATE / "Cargo.toml"), "--target", TARGET,
-        "--target-dir", str(target_dir), "-Z", "build-std=std,panic_abort", "--bin", BINARY,
+        "--features", "wifi-halow", "--target-dir", str(target_dir), "-Z", "build-std=std,panic_abort", "--bin", BINARY,
     ]
+    if args.with_probe:
+        command.extend(["--example", "fetch_page"])
     subprocess.run(command, cwd=ROOT, env=env, check=True)
     executable = target_dir / TARGET / "release" / BINARY
     verify_elf(executable.read_bytes())
     metadata = {
         "schema": 1,
         "artifact_kind": "linux-application-development-bundle",
-        "qualification": "tcp-only; not a firmware image or a signed public release",
+        "qualification": "TCP plus experimental HaLoW; not a firmware image or a signed public release",
+        "cargo_features": ["wifi-halow"],
         "target": TARGET,
         "source_commit": capture(["git", "rev-parse", "HEAD"]),
         "working_tree_dirty": bool(capture(["git", "status", "--porcelain"])),
@@ -97,11 +101,17 @@ def main():
         "c_target": "mipsel-linux-musleabi -mcpu=mips32r2 -msoft-float",
         "binary": {"path": BINARY, "bytes": executable.stat().st_size, "sha256": sha256(executable)},
     }
+    probe = target_dir / TARGET / "release/examples/fetch_page"
+    if args.with_probe:
+        verify_elf(probe.read_bytes())
+        metadata["probe"] = {"path": "fetch_page", "bytes": probe.stat().st_size, "sha256": sha256(probe)}
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".hopspot-g4-", dir=output.parent) as temporary:
         staging = Path(temporary) / "bundle"
         staging.mkdir()
         shutil.copy2(executable, staging / BINARY)
+        if args.with_probe:
+            shutil.copy2(probe, staging / "fetch_page")
         shutil.copy2(CRATE / "docs/thinknode-g4.md", staging / "INSTALL.md")
         shutil.copy2(ROOT / "LICENSE-MIT", staging / "LICENSE-MIT")
         shutil.copy2(ROOT / "LICENSE-APACHE", staging / "LICENSE-APACHE")

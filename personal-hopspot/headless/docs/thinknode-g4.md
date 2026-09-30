@@ -1,9 +1,11 @@
 # ThinkNode G4: headless bring-up and future installer procedure
 
-Status: physical TCP bring-up verified on one G4, 2026-09-29. Separate three-node
-HaLow experiments measured group delivery and unicast throughput. The native
-Prns HaLow interface, persistent installation, firmware replacement, and physical
-restore remain unqualified. This is a development procedure, not a shipping board entry.
+Status: physical TCP bring-up and a native HaLoW page transfer verified on one
+G4 and one Heltec, 2026-09-29. The native test retained their vendor AP/station
+connection; three-node native mesh behavior remains unqualified. Separate radio
+experiments measured group delivery and unicast throughput. Persistent installation,
+firmware replacement, and physical restore remain unqualified. This is a development
+procedure, not a shipping board entry.
 
 ## Observed platform
 
@@ -144,3 +146,28 @@ application installation is more supportable than a one-click firmware promise.
 HaLow qualification should separately prove over-air group delivery, suppression
 of unwanted unicast replication, peer association behavior, and Reticulum
 forwarding across multiple nodes. Wired TCP success establishes none of those.
+
+## Native HaLoW application smoke, 2026-09-29
+
+The G4 ran the `wifi-halow` headless application from RAM, with TCP bound only to
+`127.0.0.1:4343`, using device `wlan0`, scope `lab-g4`, a two-peer cap,
+three-second announcements, and a 90-second lifetime. The first Heltec ran `fetch_page` with
+`--halow-device wlan0 --halow-scope lab-heltec` and the advertised destination.
+No TCP target was supplied to the probe. Both device-side SHA-256 values matched
+before execution:
+
+- Application: `4a797cc47b35591c32ac7a50576569818fb125ecbe465cedced0c5099dc3352c`.
+- Probe: `1982303b56667dc4c9cbcaa3f94e824d59966540b8d7e7543323beec5cfc355a`.
+
+The probe reported `hopspot_page_verified bytes=3542 rtt=RttMillis(73)`. This
+verifies discovery, native framed data, a Reticulum link, and exact page content
+larger than one HaLoW frame. It is one close-range functional smoke, not a
+throughput or reliability measurement. Both Morse health checks passed. The
+existing TCP Hopspot process and radio configuration were retained; no flashing
+or persistent installation was performed.
+
+The new build task's `--with-probe` option packages both executables and their
+hashes. See [the headless README](../README.md#experimental-halow-attachment) for
+attachment, interval, scope, and memory-limit semantics. The temporary host
+flushed routing/ratchet state and reported `hopspot_stopped` at its deadline;
+neither temporary process remained, and wireless UCI changes were empty.

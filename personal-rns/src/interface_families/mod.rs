@@ -46,3 +46,6 @@ pub mod wifi_auto;
 pub mod wifi_aware;
 #[cfg(all(feature = "wifi-direct", feature = "tokio-host"))]
 pub mod wifi_direct;
+
+#[cfg(all(feature = "wifi-halow", feature = "tokio-host"))]
+pub mod wifi_halow;

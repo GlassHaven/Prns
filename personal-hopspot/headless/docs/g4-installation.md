@@ -4,9 +4,10 @@ Hopspot runs as a Linux application on the G4's existing operating system. The
 installation workflow starts here in the web flasher, with a downloadable
 application and guided setup rather than a replacement firmware image.
 
-**Development preview:** the headless TCP application has run on a G4. A signed
-public download, native HaLoW interface, and persistent installer are not ready
-yet. There is no public install button for this board at this stage.
+**Development preview:** TCP and an experimental native HaLoW interface have
+served a complete Hopspot page on a G4. A signed public download and persistent
+installer are not ready yet. There is no public install button for this board
+at this stage.
 
 ## What you will need
 
@@ -40,6 +41,7 @@ workflow would need a compatible authenticated endpoint on the device or a local
 helper. Those paths are being evaluated; USB serial recovery has not been
 qualified for this board.
 
-Native HaLoW, Wi-Fi discovery, and browser-node access will be listed here as
-they pass end-to-end hardware checks. The current TCP preview does not enable
-those interfaces.
+HaLoW is opt-in in the development bundle and requires a separately configured
+radio; its first end-to-end check used the vendor AP/station connection. Mesh,
+field reliability, Wi-Fi discovery, and browser-node access need further qualification.
+See the repository's headless README for the experimental radio options.

@@ -4,6 +4,9 @@ use heapless::Vec;
 
 use crate::interfaces::{InterfaceId, InterfaceKind, MacAddress};
 
+mod policy;
+pub use policy::{policy_for_bitrate, HARDWARE_MTU};
+
 mod wire;
 pub use wire::{decode, encode, WireError, DATAGRAM_MTU, FRAME_MTU};
 

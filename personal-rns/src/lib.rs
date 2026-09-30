@@ -198,3 +198,6 @@ pub use prns_interfaces_tokio::from_plan::{
 
 #[cfg(feature = "shared-instance")]
 pub use prns_runtime::runtime::rns_remote_management;
+
+#[cfg(all(feature = "wifi-halow", feature = "tokio-host"))]
+pub use interface_families::wifi_halow;
