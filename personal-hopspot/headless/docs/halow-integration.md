@@ -1,7 +1,7 @@
 # HaLoW Hopspot integration
 
-The headless application has an opt-in Linux HaLoW CLI, radio-only periodic
-announces, and a HaLoW page-fetch probe. The G4 development build includes the
+The headless application has an opt-in Linux HaLoW CLI, explicit controller-driven
+announcements, and a HaLoW page-fetch probe. The G4 development build includes the
 feature; TCP-only use remains available. Portable identity/framing, bounded
 first-frame peer admission, shared announce egress, and Linux/Tokio datagrams
 exist under `interfaces::wifi_halow` and the `wifi-halow` feature.

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{Sender, UnboundedSender};
 use tokio::sync::oneshot;
 
 use crate::engine::{
@@ -85,7 +85,8 @@ pub enum HostCommand {
     RegisterStreamReader {
         link_id: LinkId,
         stream_id: StreamId,
-        sink: UnboundedSender<StreamInbound>,
+        sink: Sender<StreamInbound>,
+        failure: oneshot::Sender<StreamReceiveFailure>,
         ready: oneshot::Sender<()>,
     },
     /// Register a sink for the next inbound resource on this link: the run loop routes the resource's chunks to it and signals completion, suppressed from the app event stream. `ready` fires once registered, so a segment arriving the instant after cannot slip past to the app.
@@ -138,6 +139,29 @@ pub struct StreamInbound {
     pub eof: bool,
     pub compressed: bool,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamReceiveFailure {
+    Overflowed,
+    LinkClosed,
+    SourceStopped,
+    MalformedCompressedChunk,
+}
+
+impl std::fmt::Display for StreamReceiveFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Overflowed => formatter.write_str("byte-stream receive queue overflowed"),
+            Self::LinkClosed => formatter.write_str("byte-stream link closed"),
+            Self::SourceStopped => formatter.write_str("byte-stream source stopped"),
+            Self::MalformedCompressedChunk => {
+                formatter.write_str("malformed compressed byte-stream chunk")
+            }
+        }
+    }
+}
+
+impl std::error::Error for StreamReceiveFailure {}
 
 pub enum ResourceInbound {
     /// The transfer's packed metadata, arriving ahead of the first chunk when one traveled.

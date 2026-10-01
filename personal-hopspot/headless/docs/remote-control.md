@@ -94,8 +94,10 @@ ordinary directed traffic uses peer channels.
   measured throughput. Radio configuration and service management are later slices.
 - The example takes the target key and endpoint explicitly. A durable controller
   target registry would improve repeated lab use.
-- Streaming is the next Remote Control slice. It should reuse verified identity and
-  explicit grants, with its own flow control, cancellation, and delivery semantics.
+- Streaming groundwork now includes a versioned invalidation frame and a bounded
+  Tokio byte-stream receive queue that reports overflow. The subscription request,
+  separate stream grant, server producer, controller watch API, and device qualification
+  remain to be implemented. See [the stream contract](remote-control-streaming.md).
 
 ## Deployment status
 

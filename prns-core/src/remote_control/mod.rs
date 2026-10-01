@@ -22,6 +22,7 @@ mod message;
 mod pagination;
 mod pairing;
 mod service;
+mod stream;
 
 pub use self::core::*;
 pub use bootstrap::*;
@@ -34,6 +35,7 @@ pub use message::*;
 pub use pagination::*;
 pub use pairing::*;
 pub use service::*;
+pub use stream::*;
 
 #[cfg(test)]
 mod tests;

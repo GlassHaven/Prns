@@ -723,9 +723,10 @@ where
                 link_id,
                 stream_id,
                 sink,
+                failure,
                 ready,
             } => {
-                journal.register_stream_reader(link_id, stream_id, sink);
+                journal.register_stream_reader(link_id, stream_id, sink, failure);
                 let _ = ready.send(());
                 CommandEffect::UNCHANGED
             }
