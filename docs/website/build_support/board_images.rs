@@ -16,6 +16,13 @@ pub(crate) fn generate() {
         ("MESH_POCKET", "mesh-pocket.webp"),
         ("HELTEC_MESH_NODE_T096", "heltec-mesh-node-t096.webp"),
         ("MESH_TOWER_V2", "mesh-tower-v2.webp"),
+        ("HELTEC_E290", "heltec-e290.webp"),
+        (
+            "HELTEC_WIRELESS_STICK_LITE_V3",
+            "heltec-wireless-stick-lite-v3.webp",
+        ),
+        ("RAK4631", "rak4631.webp"),
+        ("MUZI_BASE_DUO", "muzi-base-duo.webp"),
     ];
 
     let mut generated =

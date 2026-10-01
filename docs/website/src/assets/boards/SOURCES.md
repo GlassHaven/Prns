@@ -34,10 +34,17 @@ transparent background inside a dark "slot" (`.flash-board-slot--inset` in
 | Heltec MeshPocket | https://heltec.org/project/meshpocket/ | https://heltec.org/wp-content/uploads/2025/03/5.1-1.png | connected-background flood-fill (white enclosure preserved) | vendor catalog image, nominative use |
 | Heltec Mesh Node T096 | https://heltec.org/project/t096/ | https://heltec.org/wp-content/uploads/2026/03/T096_1.png | real alpha (vendor PNG) | vendor image, nominative use |
 | Heltec MeshTower V2 | https://heltec.org/project/meshtower/ | https://heltec.org/wp-content/uploads/2025/06/1-2.png | real alpha (vendor PNG, full solar + antenna + enclosure kit) | vendor image, nominative use |
+| Heltec Vision Master E290 | https://heltec.org/project/vision-master-e290/ | https://heltec.org/wp-content/uploads/2024/06/0fe1c762582fa015eeb11bd46af9699.png | real alpha (vendor PNG); cropped to the board's alpha bounds below `y=175`, which drops the vendor logo watermark in the top-left corner | vendor image, nominative use |
+| Heltec Wireless Stick Lite V3 | https://heltec.org/project/wireless-stick-lite-v2/ | https://heltec.org/wp-content/uploads/2023/09/wireless-stickLite-front.png | real alpha (vendor PNG); cropped to the board's alpha bounds | vendor image, nominative use |
+| RAK WisBlock Starter Kit (RAK4631) | https://store.rakwireless.com/products/wisblock-starter-kit | https://cdn.shopify.com/s/files/1/0177/8784/6756/files/RAK4630.png?v=1770026490 | real alpha (vendor PNG, the RAK4631-variant kit image); cropped to the kit's alpha bounds | vendor catalog image, nominative use |
+| muzi works Base Duo | https://muzi.works/products/base-duo | https://cdn.shopify.com/s/files/1/0657/6973/4201/files/base-duo.png?v=1765232558 | connected-background flood-fill (opaque render on a flat `#F2F2F2` canvas; the seed takes the corner color, so the white-canvas recipe applies unchanged) | vendor catalog image, nominative use |
 
 Real-alpha vendor originals are not stored in the repo; the source URL above is
 the pointer, and regeneration is a plain download, a lanczos `scale=160`, and a
-quality-90 WebP encode.
+quality-90 WebP encode. When the vendor canvas leaves the board small, crop to
+its alpha bounds first so the thumbnail fills the slot (`cropdetect` on the
+extracted alpha, then `crop=W:H:X:Y`), as the `cropped to ... alpha bounds` rows
+above do.
 
 All product images are shown nominatively, only to identify hardware (no
 endorsement implied); see the site footer disclaimer.

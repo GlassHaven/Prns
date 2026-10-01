@@ -216,6 +216,10 @@ impl BoardTarget {
             "t1000-e" => Some(&board_images::SEEED_CARD_TRACKER_T1000_E),
             "t096" => Some(&board_images::HELTEC_MESH_NODE_T096),
             "mesh-tower-v2" => Some(&board_images::MESH_TOWER_V2),
+            "heltec-e290" => Some(&board_images::HELTEC_E290),
+            "heltec-wireless-stick-lite-v3" => Some(&board_images::HELTEC_WIRELESS_STICK_LITE_V3),
+            "rak4631" => Some(&board_images::RAK4631),
+            "muzi-base-duo" => Some(&board_images::MUZI_BASE_DUO),
             _ => None,
         }
     }
@@ -715,6 +719,17 @@ mod tests {
             .map(|board| (board.slug, board.tier, board.image().is_some()))
             .collect::<Vec<_>>();
         assert_eq!(cards, vec![("mesh-tower-v2", Tier::Qualification, true)]);
+    }
+
+    #[test]
+    fn every_catalog_board_has_a_thumbnail() {
+        let missing = SHIPPING_BOARD_TARGETS
+            .iter()
+            .chain(QUALIFICATION_BOARD_TARGETS)
+            .filter(|board| board.image().is_none())
+            .map(|board| board.slug)
+            .collect::<Vec<_>>();
+        assert_eq!(missing, Vec::<&str>::new());
     }
 
     #[test]
