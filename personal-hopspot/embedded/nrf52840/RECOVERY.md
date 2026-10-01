@@ -92,20 +92,26 @@ or drive enumeration.
 
 - `./tools/prns run build.hopspot.t1000e`: recovery UF2 built at application
   base `0x27000`, nRF52840 family `0xADA52840`.
-- `cargo test --locked -p prns-flash-manifest`: 64 tests passed.
+- `cargo test --locked -p prns-flash-manifest`: 79 tests passed.
 - `cargo test --locked --manifest-path prns-interfaces/impls/embassy/Cargo.toml --features usb usb_auto::device`:
   five tests passed, including both commands and malformed transfers.
-- `cargo test --locked --manifest-path docs/website/Cargo.toml`: 45 tests passed.
+- `cargo test --locked --manifest-path docs/website/Cargo.toml`: 51 tests passed.
 - `npm run test:flasher` in `docs/website`: 82 tests passed, including recovery
   without preparation, invalidation, concurrency, cancellation, and failures.
-- Focused Playwright specs `recovery.spec.mjs`, `nrf-dfu-core.spec.mjs`, and
-  `nrf-serial-dfu-bridge.spec.mjs`: four Chromium tests passed. Recovery UI
-  accessibility was checked with axe. The initial full browser invocation
-  could not launch because its pinned Chromium was absent; the focused run
+- `npm run test:browser` in `docs/website`: all 36 Chromium tests passed on
+  the integrated upstream static website. This includes the recovery UI,
+  production Nordic bridge, existing guided installs, and static route
+  hydration. Recovery UI accessibility was checked with axe. Before
+  integration, four focused tests also passed. The initial browser invocation
+  could not launch because its pinned Chromium was absent; subsequent runs
   used that pinned browser after installing it into temporary storage.
 - Clippy with warnings denied passed for the manifest, website, USB handler,
-  and the T1000-E and T096 target configurations. Touched Rust files were
-  formatted; documentation links and `git diff --check` were clean.
+  and the T1000-E and T096 target configurations. The shared SoftDevice reset
+  callback also passed target Clippy for MeshPocket with
+  `mesh-pocket-battery-5000`, Muzi Base Duo with `softdevice-s140-v6`, and
+  RAK4631. The first MeshPocket invocation omitted its required battery
+  feature and was corrected before compiling that target. Touched Rust files
+  were formatted; documentation links and `git diff --check` were clean.
 
 No new firmware was installed on the physical tracker during these checks.
 The restored Meshtastic installation remains in place. The new routes are
