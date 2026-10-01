@@ -225,4 +225,19 @@ impl Storage {
             .expect("valid grant snapshot")
             .collect()
     }
+    pub fn accesses(&self) -> Vec<personal_rns::remote_control::RemoteControlTargetAccess> {
+        let store = FileStore::new(self.directory());
+        let region = SnapshotRegion::RemoteControlTargetAccesses;
+        let Some(len) = store.stored_len(region).expect("read access length") else {
+            return Vec::new();
+        };
+        let mut bytes = vec![0; len];
+        let bytes = store
+            .load(region, &mut bytes)
+            .expect("load sealed accesses")
+            .expect("stored accesses");
+        personal_rns::persistence::read_remote_control_target_accesses_snapshot(bytes)
+            .expect("valid access snapshot")
+            .collect()
+    }
 }

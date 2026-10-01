@@ -130,3 +130,37 @@ fn vitals(id: InterfaceId, radio: RadioIndication) -> InterfaceVitals {
         details: PeerDetails::Unknown,
     }
 }
+
+pub struct ConfiguredInterface {
+    pub tag: Vec<u8>,
+    pub bitrate: BitrateBps,
+    pub connection: std::sync::Arc<std::sync::Mutex<ConnectionState>>,
+}
+impl ReportsStatus for ConfiguredInterface {
+    fn status_view(&self) -> Option<StatusView> {
+        let id = self.descriptor().id;
+        let connection = self.connection.clone();
+        Some(Arc::new(move || {
+            let mut status = vitals(id, RadioIndication::NotRadio);
+            status.connection = *connection.lock().expect("scenario connection");
+            vec![status]
+        }))
+    }
+}
+impl Interface for ConfiguredInterface {
+    const HW_MTU: usize = personal_rns::wire::BROADCAST_MTU;
+    const KIND: InterfaceKind = InterfaceKind::Loopback;
+    fn channel_tag(&self) -> &[u8] {
+        &self.tag
+    }
+    fn descriptor(&self) -> InterfaceDescriptor {
+        EffectiveInterfacePolicy {
+            bitrate: self.bitrate,
+            ..policy()
+        }
+        .descriptor(InterfaceId::from_channel_tag(Self::KIND, &self.tag))
+    }
+    async fn run<S: InterfaceSeam>(self, _: S) {
+        pending::<()>().await;
+    }
+}

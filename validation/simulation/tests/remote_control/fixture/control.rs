@@ -11,21 +11,38 @@ impl Lab<'_> {
         self.link_with_identity(controller, LinkIdentity::Controller)
     }
     pub fn link_with_identity(&mut self, controller: usize, identity: LinkIdentity) -> LinkId {
+        self.connect(controller, identity, TargetProvisioning::Explicit)
+    }
+    pub fn link_pinned(&mut self, controller: usize) -> LinkId {
+        self.connect(
+            controller,
+            LinkIdentity::Controller,
+            TargetProvisioning::Persisted,
+        )
+    }
+    fn connect(
+        &mut self,
+        controller: usize,
+        identity: LinkIdentity,
+        provisioning: TargetProvisioning,
+    ) -> LinkId {
         let handle = self.nodes[controller].handle.clone();
         let target = RemoteControlTargetIdentity::new(*self.nodes[TARGET].target.public_keys());
         let task = self.insert(async move {
             let endpoint = target.endpoint();
             let target_hash = target.identity_hash();
-            let access = RemoteControlTargetAccess::new(
-                target,
-                RemoteControlControllerAuthority::Operator,
-                requests(),
-            )
-            .expect("pinned target access");
-            handle
-                .set_remote_control_target_access(access)
-                .await
-                .expect("local target provisioning");
+            if matches!(provisioning, TargetProvisioning::Explicit) {
+                let access = RemoteControlTargetAccess::new(
+                    target,
+                    RemoteControlControllerAuthority::Operator,
+                    requests(),
+                )
+                .expect("pinned target access");
+                handle
+                    .set_remote_control_target_access(access)
+                    .await
+                    .expect("local target provisioning");
+            }
             if handle
                 .destination_identity_hash(endpoint.destination_hash())
                 .await
@@ -154,4 +171,9 @@ pub fn encoded(request: RemoteControlRequest) -> Vec<u8> {
         .expect("bounded control request");
     bytes.truncate(len);
     bytes
+}
+
+enum TargetProvisioning {
+    Explicit,
+    Persisted,
 }

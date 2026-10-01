@@ -33,3 +33,11 @@ Two trusted identities saturate 256 active handlers and 1,024 queued requests. T
 Pressure cases explicitly use larger fixture actor/frame/trace budgets. The long heartbeat case initially exhausted the baseline trace budget; the corrected test retains the whole trace rather than accepting eviction. No production capacity, quota, wire protocol or scheduling policy changed. Pending watch-response-lane races and broader combined lifecycle permutations remain for subsequent qualification.
 
 The 31-test target and its strict clippy command passed on macOS arm64. The previous native library/persistence results still apply because this slice changes tests and a type reexport only; those libraries were not retested after the reexport.
+
+## Pairing and convergence
+
+The Tokio target suite now has 39 passing tests. Production pairing approval persists both target grants and controller pins, with two independent restores of each side. Invalid invitation proofs stay silent; controller/target rejection and expiry do not publish trust. Storage cuts before publication and at transaction finish restore each owner's surviving trust separately. Replaced target/controller keys do not inherit pinned access/grants. Old app futures are destroyed on target reconstruction; fresh traffic uses a closed/reopened control link and a bounded completion horizon.
+
+Inventory qualification changes interfaces and peers between pages, then refetches from `First` after quiescence against independently constructed identifiers. Watch polling coalesces intermediate changes into invalidation, and reconnect starts a new resync sequence. The simulator's config decoration reports its actual connection state; radio measurements remain unavailable. There is no frozen pagination guarantee.
+
+Graceful fixture teardown drives up to 2.5 seconds of controlled time: the native route-save debounce may delay a worker by two seconds. Abrupt reconstruction remains a separate actor cancellation operation.

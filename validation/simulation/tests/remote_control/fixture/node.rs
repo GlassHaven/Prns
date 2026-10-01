@@ -37,6 +37,22 @@ impl Lab<'_> {
         policy: ControllerPolicy,
         storage: Option<persistence::Storage>,
     ) {
+        self.start_node_with_secrets(index, policy, storage, secrets(index));
+    }
+
+    fn start_node_with_secrets(
+        &mut self,
+        index: usize,
+        policy: ControllerPolicy,
+        storage: Option<persistence::Storage>,
+        secrets: RemoteControlNodeIdentitySecrets,
+    ) {
+        let timeline_origin = InstantMillis(
+            TIMELINE_ORIGIN
+                .0
+                .checked_add(self.medium.now().get())
+                .expect("boot timeline"),
+        );
         let generation = self.boot_generations[index];
         self.boot_generations[index] = generation.checked_add(1).expect("boot generation");
         let interface = self
@@ -44,12 +60,12 @@ impl Lab<'_> {
             .attach(&(index as u64).to_be_bytes())
             .expect("unique control interface");
         let endpoint = interface.endpoint_id();
-        let secrets = secrets(index);
         let identity = *secrets.identities().controller();
         let target = RemoteControlTargetIdentity::new(*secrets.identities().target().public_keys());
         let calls = self.calls.clone();
         let gates = self.app_gates.clone();
         let max_invocations = self.budgets.app_invocations;
+        let pairing = self.pairing.clone();
         let (ready, mut ready_rx) = oneshot::channel();
         let (shutdown, stopping) = oneshot::channel();
         let task = self
@@ -126,12 +142,14 @@ impl Lab<'_> {
                             app_state: (),
                             storage: GrowableHeap,
                             request_endpoints: personal_rns::request_endpoints![],
-                            on_event: |_, _: &()| {},
+                            on_event: move |event, _: &()| {
+                                pairing::observe(&pairing, index, generation, event)
+                            },
                             interfaces: ManuallyAttached,
                             persistence,
                         }
                     },
-                    TokioHost::with_runtime_entropy(TIMELINE_ORIGIN, host_stream),
+                    TokioHost::with_runtime_entropy(timeline_origin, host_stream),
                     entropy,
                 )
                 .with_crypto_pool(CryptoPoolConfig::Inline)
@@ -186,12 +204,23 @@ fn fill_seed(output: &mut [u8], seed: u8, generation: u64) {
 
 impl Lab<'_> {
     pub fn restart_target(&mut self, storage: persistence::Storage) {
+        self.restart_node(TARGET, storage);
+    }
+    pub fn restart_node(&mut self, index: usize, storage: persistence::Storage) {
+        self.restart_node_with_secrets(index, storage, secrets(index));
+    }
+    pub fn restart_node_with_secrets(
+        &mut self,
+        index: usize,
+        storage: persistence::Storage,
+        secrets: RemoteControlNodeIdentitySecrets,
+    ) {
         self.runner
-            .cancel(self.nodes[TARGET].task)
+            .cancel(self.nodes[index].task)
             .expect("remove old boot");
-        self.start_node(TARGET, ControllerPolicy::Nobody, Some(storage));
+        self.start_node_with_secrets(index, ControllerPolicy::Nobody, Some(storage), secrets);
         let last = self.nodes.len() - 1;
-        self.nodes.swap(TARGET, last);
+        self.nodes.swap(index, last);
         self.nodes.pop().expect("discard old handles");
         for controller in [CONTROLLER, OUTSIDER, OPERATOR] {
             self.set_reachability(controller, Reachability::Reachable);

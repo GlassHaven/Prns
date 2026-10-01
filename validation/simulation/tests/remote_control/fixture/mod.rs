@@ -17,6 +17,7 @@ use prns_simulation::*;
 mod control;
 mod host;
 mod node;
+pub mod pairing;
 pub mod persistence;
 mod watch;
 pub use control::encoded;
@@ -51,6 +52,13 @@ pub enum Event {
     Linked(LinkId),
     Response(Result<Vec<u8>, SendError<SendRequestFailure>>),
     Done,
+    PairingOpened(personal_rns::engine::RemoteControlPairingOpened),
+    PairingResponse(
+        Result<
+            personal_rns::engine::RemoteControlControllerPairingResponseReceived,
+            personal_rns::runtime::InitiateRemoteControlControllerPairingError,
+        >,
+    ),
     WatchOpened(RemoteControlInterfaceWatch),
     WatchRead {
         watch: RemoteControlInterfaceWatch,
@@ -66,6 +74,7 @@ pub struct Lab<'a> {
     boot_generations: [u64; NODE_COUNT],
     app_gates: Rc<RefCell<Vec<host::MessageGate>>>,
     budgets: FixtureBudgets,
+    pub pairing: Rc<RefCell<Vec<pairing::PairingObservation>>>,
 }
 
 pub fn requests() -> RemoteControlRequestSet {
@@ -212,6 +221,7 @@ pub fn with_budgets<R>(
         app_gates: Rc::new(RefCell::new(Vec::new())),
         budgets,
         calls: Rc::new(RefCell::new(Vec::new())),
+        pairing: Rc::new(RefCell::new(Vec::new())),
     };
     for index in 0..NODE_COUNT {
         lab.start_node(
@@ -247,7 +257,13 @@ pub fn with_budgets<R>(
     for node in nodes {
         node.shutdown.send(()).expect("live shutdown receiver");
     }
-    let stopped = lab.settle();
+    let mut stopped = lab.settle();
+    for _ in 0..2_500 {
+        if stopped.len() == NODE_COUNT {
+            break;
+        }
+        stopped.extend(lab.advance(1));
+    }
     assert_eq!(stopped.len(), NODE_COUNT);
     for (task, event) in stopped {
         let Event::Stopped { node, result } = event else {
@@ -313,14 +329,14 @@ impl Lab<'_> {
         completed
     }
     pub fn set_reachability(&self, node: usize, reachability: Reachability) {
-        assert_eq!(
+        assert!(matches!(
             self.medium.set_reachability(
                 self.nodes[TARGET].endpoint,
                 self.nodes[node].endpoint,
                 reachability
             ),
-            Ok(TopologyMutation::Applied)
-        );
+            Ok(TopologyMutation::Applied | TopologyMutation::Unchanged)
+        ));
     }
     pub fn expect_done(&mut self, task: ManualTaskId) {
         let completed = self.settle();

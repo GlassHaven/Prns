@@ -47,9 +47,13 @@ impl RemoteControlHostControls for InspectionHost {
                     .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
             }
             Command::InventoryInterfaceConfig { id } => {
-                remote_control_interface_config_from_snapshots(&self.0.interfaces(), id, |_, _| {
-                    Ok(())
-                })
+                remote_control_interface_config_from_snapshots(
+                    &self.0.interfaces(),
+                    id,
+                    |snapshot, card| {
+                        card.set_config(&format!("connection={:?}", snapshot.connection))
+                    },
+                )
                 .map(Response::InventoryInterfaceConfig)
                 .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
             }

@@ -19,3 +19,7 @@ mod authority;
 mod revocation;
 
 mod pressure;
+
+mod pairing;
+
+mod convergence;
