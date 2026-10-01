@@ -28,8 +28,10 @@ Repeat `--controller-public-key` for additional controllers. The initial grant i
 Operator with `Describe`, `AnnounceSelf`, `DescribeBuild`, `InventoryInterfaces`,
 `InventoryInterfaceConfig`, and `InventoryInterfacePeers`; it cannot administer grants
 or mutate interfaces. For a lab controller that also needs the bounded application
-probe, use `--app-controller-public-key` instead. Do not provision the same key with
-both options. `AppMessage` is a separate grant and is never implied by inspection.
+probe, use `--app-controller-public-key`. For an interface-change stream, use
+`--watch-controller-public-key`. These are separate permissions and neither is
+implied by inspection. Passing the same public key to both options combines
+them into one grant for that controller.
 On fresh state, no option means nobody is authorized. These are initial grants;
 the runtime can also restore a retained authorization snapshot. Omitting a CLI
 key is not a general revocation mechanism for previously persisted grants. The
@@ -60,6 +62,8 @@ controller --state-dir /private/controller-state invoke \
 controller --state-dir /private/controller-state invoke \
   --tcp 192.168.12.1:4242 --target-key "$TARGET_PUBLIC_KEY" \
   --action app-message --message-hex 0101
+controller --state-dir /private/controller-state invoke \
+  --tcp 192.168.12.1:4242 --target-key "$TARGET_PUBLIC_KEY" --action watch
 ```
 
 The example demonstrates the public API sequence: provision trusted target access,
@@ -70,6 +74,9 @@ the interface inventory. The application probe uses version byte `01`, operation
 `01`, and responds with those bytes followed by the verified 16-byte controller hash.
 Only an explicitly app-granted controller can reach the handler. Both request and reply
 are limited to 96 bytes. Other probe payloads produce an app-level `ApplyFailed` response.
+The watch action emits JSON lines for admission and stream frames over 12 seconds.
+An initial `ResyncRequired` asks the controller to fetch current snapshots;
+later resyncs invalidate them, while heartbeats confirm the stream is live.
 Cold-start control does not require the target to periodically
 announce first. The command has a bounded lifetime and closes its link afterward.
 The target's configured self-announcement destination is its node page. HaLoW
@@ -94,10 +101,10 @@ ordinary directed traffic uses peer channels.
   measured throughput. Radio configuration and service management are later slices.
 - The example takes the target key and endpoint explicitly. A durable controller
   target registry would improve repeated lab use.
-- Streaming groundwork now includes a versioned invalidation frame and a bounded
-  Tokio byte-stream receive queue that reports overflow. The subscription request,
-  separate stream grant, server producer, controller watch API, and device qualification
-  remain to be implemented. See [the stream contract](remote-control-streaming.md).
+- Interface-watch streaming now includes the authenticated subscription request,
+  separate grant, bounded Tokio producer and reader, and typed controller API.
+  Device qualification and finer invalidation events remain. See
+  [the stream contract](remote-control-streaming.md).
 
 ## Deployment status
 

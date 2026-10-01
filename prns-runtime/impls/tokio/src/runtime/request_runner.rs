@@ -11,6 +11,9 @@ use crate::engine::{
 };
 use crate::identity::IdentityHash;
 use crate::remote_control::RemoteControlControllerGrantTable;
+use crate::remote_control::{
+    RemoteControlProtocolError, RemoteControlRequestKind, RemoteControlResponse,
+};
 use crate::routing::links::request::RequestId;
 use crate::routing::links::LinkId;
 use crate::routing::request_handlers::RequestPathHash;
@@ -18,9 +21,12 @@ use crate::units::RttMillis;
 use crate::wire::DestinationHash;
 use prns_runtime::runtime::placement::{
     admit_remote_control_request, dispatch_verified_admitted_remote_control_request,
-    verify_admitted_remote_control_request, AdmittedRemoteControlRequest,
+    verify_admitted_remote_control_request, VerifiedAdmittedRemoteControlRequest,
 };
 
+use super::interface_watch::{
+    InterfaceWatchRegistry, WatchAdmission, WatchReservation, WatchReserveFailure,
+};
 use super::node_facade::{
     PrnsNodeHandle, RemoteControlAuthorizationPersistence, ResponseSendError,
 };
@@ -34,6 +40,7 @@ use super::request_endpoints::{
 };
 use super::request_endpoints::{ResponseCapacityExceeded, ResponseSink};
 use super::AssembledRemoteControl;
+use crate::routing::links::channel::byte_stream::StreamId;
 
 pub(super) const REQUEST_QUEUE_DEPTH: usize = 1024;
 const MAX_IN_FLIGHT: usize = 256;
@@ -72,13 +79,45 @@ impl RunnerRequest {
 
 enum PreparedRequestRoute {
     Application,
-    RemoteControl(Box<AdmittedRemoteControlRequest>),
+    RemoteControl(Box<VerifiedAdmittedRemoteControlRequest>),
+    InterfaceWatch {
+        stream_id: StreamId,
+        reservation: Result<WatchReservation, WatchReserveFailure>,
+    },
     Declined(Decline),
 }
 
 struct PreparedRunnerRequest {
     request: RunnerRequest,
     route: PreparedRequestRoute,
+}
+
+impl PreparedRunnerRequest {
+    /// Reserve synchronously with admission, before a response-lane wait can yield.
+    /// Grant revocation and link closure can then cancel pending and active watches alike.
+    fn reserve_interface_watch(
+        mut self,
+        commands: &PrnsNodeHandle,
+        watches: &InterfaceWatchRegistry,
+    ) -> Self {
+        if let PreparedRequestRoute::RemoteControl(verified) = &self.route {
+            if let Some(stream_id) = verified.watch_interfaces_stream() {
+                self.route = match self.request.requester {
+                    Some(controller) => PreparedRequestRoute::InterfaceWatch {
+                        stream_id,
+                        reservation: watches.reserve(
+                            commands.clone(),
+                            self.request.link_id,
+                            stream_id,
+                            controller,
+                        ),
+                    },
+                    None => PreparedRequestRoute::Declined(Decline::Ignore),
+                };
+            }
+        }
+        self
+    }
 }
 
 fn prepare_request<St, R: RequestEndpointSet<St>>(
@@ -94,7 +133,12 @@ fn prepare_request<St, R: RequestEndpointSet<St>>(
             self_announcement,
             &request.inbound(),
         ) {
-            Ok(admission) => PreparedRequestRoute::RemoteControl(Box::new(admission)),
+            Ok(admission) => {
+                match verify_admitted_remote_control_request(admission, &request.inbound()) {
+                    Ok(verified) => PreparedRequestRoute::RemoteControl(Box::new(verified)),
+                    Err(decline) => PreparedRequestRoute::Declined(decline),
+                }
+            }
             Err(error) => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!(
@@ -131,7 +175,7 @@ fn prepare_request<St, R: RequestEndpointSet<St>>(
         target: "prns.runtime",
         event = "request_routed",
         route = match &route {
-            PreparedRequestRoute::RemoteControl(_) => "remote_control",
+            PreparedRequestRoute::RemoteControl(_) | PreparedRequestRoute::InterfaceWatch { .. } => "remote_control",
             PreparedRequestRoute::Application => "application",
             PreparedRequestRoute::Declined(_) => "declined",
         },
@@ -231,6 +275,7 @@ pub(super) async fn run_router<St, C, R: RequestEndpointSet<St>>(
     controls: &C,
     remote_control: &mut AssembledRemoteControl,
     mut requests: mpsc::Receiver<RunnerRequest>,
+    interface_watches: &InterfaceWatchRegistry,
     authorization: RemoteControlAuthorizationRuntime<'_>,
     commands: PrnsNodeHandle,
 ) -> Result<(), RemoteControlAuthorizationPersistenceFailure>
@@ -248,6 +293,11 @@ where
             Some(()) = in_flight.next(), if !in_flight.is_empty() => {}
             Some(command) = authorization.controller_grants.receive() => {
                 command.apply(remote_control, authorization.persistence).await?;
+                if let Some(grants) = remote_control.controller_grants() {
+                    interface_watches.reconcile_grants(grants);
+                } else {
+                    interface_watches.cancel_all();
+                }
             }
             Some(command) = authorization.target_accesses.receive() => {
                 command.apply(remote_control);
@@ -256,6 +306,11 @@ where
                 command
                     .apply(remote_control, authorization.persistence, &commands)
                     .await?;
+                if let Some(grants) = remote_control.controller_grants() {
+                    interface_watches.reconcile_grants(grants);
+                } else {
+                    interface_watches.cancel_all();
+                }
             }
             request = requests.recv(), if accepting => match request {
                 Some(request) => {
@@ -268,13 +323,15 @@ where
                             response_lanes.insert(request.link_id, Arc::downgrade(&lane));
                             lane
                         });
-                    let request = prepare_request::<St, R>(remote_control, request);
+                    let request = prepare_request::<St, R>(remote_control, request)
+                        .reserve_interface_watch(&commands, interface_watches);
                     in_flight.push(dispatch_guarded::<St, C, R>(
                         state,
                         controls,
                         &commands,
                         request,
                         response_lane,
+                        interface_watches,
                     ));
                 }
                 None => return Ok(()),
@@ -289,6 +346,7 @@ async fn dispatch_guarded<St, C, R: RequestEndpointSet<St>>(
     commands: &PrnsNodeHandle,
     request: PreparedRunnerRequest,
     response_lane: Arc<Mutex<()>>,
+    interface_watches: &InterfaceWatchRegistry,
 ) where
     C: prns_runtime::runtime::RemoteControlHostControls
         + prns_runtime::runtime::RemoteControlAppMessages<St>,
@@ -300,6 +358,7 @@ async fn dispatch_guarded<St, C, R: RequestEndpointSet<St>>(
         commands,
         request,
         response_lane,
+        interface_watches,
     ))
     .catch_unwind()
     .await
@@ -328,6 +387,7 @@ async fn dispatch<St, C, R: RequestEndpointSet<St>>(
     commands: &PrnsNodeHandle,
     request: PreparedRunnerRequest,
     response_lane: Arc<Mutex<()>>,
+    interface_watches: &InterfaceWatchRegistry,
 ) where
     C: prns_runtime::runtime::RemoteControlHostControls
         + prns_runtime::runtime::RemoteControlAppMessages<St>,
@@ -338,11 +398,8 @@ async fn dispatch<St, C, R: RequestEndpointSet<St>>(
     let responder = inbound.respond_token();
     let mut body = RunnerResponse::Buffered(std::vec::Vec::new());
     let dispatched = match route {
-        PreparedRequestRoute::RemoteControl(admission) => {
-            let verified = match verify_admitted_remote_control_request(*admission, &inbound) {
-                Ok(verified) => verified,
-                Err(decline) => return handle_decline(commands, link_id, decline),
-            };
+        PreparedRequestRoute::RemoteControl(verified) => {
+            let verified = *verified;
             if let Some(grant) = verified.authorize_controller_grant() {
                 let _response_guard = response_lane.lock().await;
                 commands
@@ -361,6 +418,61 @@ async fn dispatch<St, C, R: RequestEndpointSet<St>>(
                 state, controls, commands, inbound, &mut body, verified,
             )
             .await
+        }
+        PreparedRequestRoute::InterfaceWatch {
+            stream_id,
+            reservation,
+        } => {
+            let _response_guard = response_lane.lock().await;
+            if let Ok(reserved) = &reservation {
+                if matches!(
+                    interface_watches.admission(reserved),
+                    WatchAdmission::Withdrawn
+                ) {
+                    return;
+                }
+            }
+            let response = match &reservation {
+                Ok(_) => RemoteControlResponse::WatchInterfaces { stream_id },
+                Err(_) => RemoteControlResponse::ProtocolError(RemoteControlProtocolError::Busy {
+                    request: RemoteControlRequestKind::WatchInterfaces,
+                }),
+            };
+            let mut encoded = [0; RemoteControlResponse::MAX_ENCODED_LEN];
+            let Ok(len) = response.write_into(&mut encoded) else {
+                if let Ok(reserved) = &reservation {
+                    interface_watches.cancel(reserved);
+                }
+                return;
+            };
+            let Some(bytes) = encoded.get(..len) else {
+                if let Ok(reserved) = &reservation {
+                    interface_watches.cancel(reserved);
+                }
+                return;
+            };
+            let settled = commands
+                .respond_owned_packed_settled(responder, bytes.to_vec())
+                .await;
+            match settled {
+                Ok(_) => {
+                    if let Ok(start) = reservation {
+                        start.start();
+                    }
+                }
+                Err(error) => {
+                    if let Ok(reserved) = &reservation {
+                        interface_watches.cancel(reserved);
+                    }
+                    if matches!(
+                        response_failure_cleanup(&error),
+                        ResponseFailureCleanup::CloseLink
+                    ) {
+                        commands.close_link(link_id);
+                    }
+                }
+            }
+            return;
         }
         PreparedRequestRoute::Application => {
             dispatch_request::<St, R>(state, commands, request.path_hash, inbound, &mut body).await
@@ -399,16 +511,10 @@ async fn dispatch<St, C, R: RequestEndpointSet<St>>(
                 }
             };
             if let Err(error) = result {
-                let link_already_gone = matches!(
-                    error,
-                    ResponseSendError::Rejected(
-                        RespondFailure::Rejected(RespondRejection::NoSuchLink)
-                            | RespondFailure::Resource(SendResourceFailure::Rejected(
-                                SendResourceRejection::NoSuchLink,
-                            )),
-                    )
-                );
-                if link_already_gone {
+                if matches!(
+                    response_failure_cleanup(&error),
+                    ResponseFailureCleanup::AlreadyClosed
+                ) {
                     #[cfg(feature = "tracing")]
                     tracing::debug!(
                         target: "prns.runtime",
@@ -451,12 +557,20 @@ async fn dispatch<St, C, R: RequestEndpointSet<St>>(
     }
 }
 
-fn handle_decline(commands: &PrnsNodeHandle, link_id: LinkId, decline: Decline) {
-    match decline {
-        Decline::CloseLink => {
-            commands.close_link(link_id);
-        }
-        Decline::Ignore | Decline::ResponseTooLarge => {}
+enum ResponseFailureCleanup {
+    AlreadyClosed,
+    CloseLink,
+}
+
+fn response_failure_cleanup(error: &ResponseSendError) -> ResponseFailureCleanup {
+    match error {
+        ResponseSendError::Rejected(
+            RespondFailure::Rejected(RespondRejection::NoSuchLink)
+            | RespondFailure::Resource(SendResourceFailure::Rejected(
+                SendResourceRejection::NoSuchLink,
+            )),
+        ) => ResponseFailureCleanup::AlreadyClosed,
+        _ => ResponseFailureCleanup::CloseLink,
     }
 }
 
@@ -604,6 +718,179 @@ mod tests {
         ));
     }
 
+    #[tokio::test]
+    async fn revocation_while_waiting_for_a_response_lane_remains_silent() {
+        use crate::remote_control::{
+            FixedRemoteControlControllerGrantTable, RemoteControlControllerAuthority,
+            RemoteControlControllerGrant, RemoteControlRequest, RemoteControlRequestSet,
+        };
+        let (commands, mut receiver) = mpsc::unbounded_channel();
+        let handle = PrnsNodeHandle::over(commands);
+        let watches = InterfaceWatchRegistry::default();
+        let mut remote_control = remote_control_with_administration();
+        let controller = controller(0x56);
+        remote_control
+            .set_controller_grant(
+                RemoteControlControllerGrant::new(
+                    controller,
+                    RemoteControlControllerAuthority::Operator,
+                    RemoteControlRequestSet::only(RemoteControlRequestKind::WatchInterfaces),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let mut data = vec![0; RemoteControlRequest::MAX_ENCODED_LEN];
+        let len = RemoteControlRequest::WatchInterfaces {
+            stream_id: StreamId::new(3).unwrap(),
+        }
+        .write_into(&mut data)
+        .unwrap();
+        data.truncate(len);
+        let destination = remote_control.target_endpoint().unwrap().destination_hash();
+        let path_hash = remote_control.request_endpoint_id().unwrap();
+        let prepared =
+            prepare_request::<crate::runtime::NoRemoteControlHostControls, PongRequestEndpointSet>(
+                &mut remote_control,
+                RunnerRequest {
+                    destination,
+                    link_id: LinkId::new([0x57; 16]),
+                    request_id: RequestId([0x58; 16]),
+                    requester: Some(controller.identity_hash()),
+                    path_hash,
+                    requested_at: InstantMillis(59),
+                    rtt: RttMillis::new(60),
+                    data,
+                },
+            )
+            .reserve_interface_watch(&handle, &watches);
+        assert!(matches!(
+            prepared.route,
+            PreparedRequestRoute::InterfaceWatch { .. }
+        ));
+        let lane = Arc::new(Mutex::new(()));
+        let guard = lane.lock().await;
+        let dispatch = dispatch_guarded::<
+            crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
+            PongRequestEndpointSet,
+        >(
+            &crate::runtime::NoRemoteControlHostControls,
+            &crate::runtime::NoRemoteControlHostControls,
+            &handle,
+            prepared,
+            lane.clone(),
+            &watches,
+        );
+        tokio::pin!(dispatch);
+        std::future::poll_fn(|cx| {
+            assert!(std::future::Future::poll(dispatch.as_mut(), cx).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        watches.reconcile_grants(&FixedRemoteControlControllerGrantTable::<8>::default());
+        drop(guard);
+        dispatch.await;
+        tokio::task::yield_now().await;
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+    }
+
+    #[tokio::test]
+    async fn admitted_watch_responds_before_its_initial_resync_frame() {
+        use crate::remote_control::{
+            RemoteControlControllerAuthority, RemoteControlControllerGrant, RemoteControlRequest,
+            RemoteControlRequestKind, RemoteControlRequestSet, RemoteControlResponse,
+            RemoteControlStreamEvent, REMOTE_CONTROL_STREAM_EVENT_LEN,
+        };
+        use crate::routing::links::channel::byte_stream::{parse, StreamId};
+
+        let (commands, mut command_rx) = mpsc::unbounded_channel();
+        let handle = PrnsNodeHandle::over(commands);
+        let mut remote_control = remote_control_with_administration();
+        let controller = controller(0x56);
+        remote_control
+            .set_controller_grant(
+                RemoteControlControllerGrant::new(
+                    controller,
+                    RemoteControlControllerAuthority::Operator,
+                    RemoteControlRequestSet::only(RemoteControlRequestKind::WatchInterfaces),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let stream_id = StreamId::new(0x234).unwrap();
+        let mut data = vec![0; RemoteControlRequest::MAX_ENCODED_LEN];
+        let len = RemoteControlRequest::WatchInterfaces { stream_id }
+            .write_into(&mut data)
+            .unwrap();
+        data.truncate(len);
+        let request = RunnerRequest {
+            destination: remote_control.target_endpoint().unwrap().destination_hash(),
+            link_id: LinkId::new([0x57; 16]),
+            request_id: RequestId([0x58; 16]),
+            requester: Some(controller.identity_hash()),
+            path_hash: remote_control.request_endpoint_id().unwrap(),
+            requested_at: InstantMillis(59),
+            rtt: RttMillis::new(60),
+            data,
+        };
+        let prepared = prepare_request::<
+            crate::runtime::NoRemoteControlHostControls,
+            PongRequestEndpointSet,
+        >(&mut remote_control, request);
+        let watches = InterfaceWatchRegistry::default();
+        let prepared = prepared.reserve_interface_watch(&handle, &watches);
+        let dispatch = dispatch_guarded::<
+            crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
+            PongRequestEndpointSet,
+        >(
+            &crate::runtime::NoRemoteControlHostControls,
+            &crate::runtime::NoRemoteControlHostControls,
+            &handle,
+            prepared,
+            Arc::new(Mutex::new(())),
+            &watches,
+        );
+        let exercise = async {
+            let Some(HostCommand::RespondAny(response)) = command_rx.recv().await else {
+                panic!("watch acceptance response");
+            };
+            assert_eq!(
+                RemoteControlResponse::parse(response.packed.as_slice()),
+                Ok(RemoteControlResponse::WatchInterfaces { stream_id }),
+            );
+            assert!(command_rx.try_recv().is_err());
+            response
+                .completion
+                .unwrap()
+                .send(Settlement::Respond(Ok(())))
+                .unwrap();
+            let Some(HostCommand::AwaitedEngine { issued, completion }) =
+                tokio::time::timeout(std::time::Duration::from_secs(1), command_rx.recv())
+                    .await
+                    .unwrap()
+            else {
+                panic!("initial watch stream frame");
+            };
+            let PrnsCommand::SendToChannel(send) = issued.command else {
+                panic!("watch frame uses the link channel");
+            };
+            let frame = parse(send.body.as_slice()).unwrap();
+            assert_eq!(frame.header.stream_id, stream_id);
+            assert!(!frame.header.eof);
+            assert_eq!(frame.payload.len(), REMOTE_CONTROL_STREAM_EVENT_LEN);
+            assert_eq!(
+                RemoteControlStreamEvent::parse(frame.payload),
+                Ok(RemoteControlStreamEvent::ResyncRequired { sequence: 1 }),
+            );
+            drop(completion);
+        };
+        tokio::join!(dispatch, exercise);
+    }
+
     #[test]
     fn static_file_sink_preserves_filename_and_borrowed_bytes() {
         static FILE: [u8; 32] = [0x42; 32];
@@ -650,6 +937,7 @@ mod tests {
         let handle = PrnsNodeHandle::over(commands);
         let mut remote_control = remote_control();
         let link_id = LinkId::new([0x44; 16]);
+        let interface_watches = InterfaceWatchRegistry::default();
         dispatch_guarded::<
             crate::runtime::NoRemoteControlHostControls,
             crate::runtime::NoRemoteControlHostControls,
@@ -675,6 +963,7 @@ mod tests {
                 },
             ),
             Arc::new(Mutex::new(())),
+            &interface_watches,
         )
         .await;
 
@@ -707,6 +996,7 @@ mod tests {
         let (commands, mut command_rx) = mpsc::unbounded_channel();
         let handle = PrnsNodeHandle::over(commands);
         let mut remote_control = remote_control();
+        let interface_watches = InterfaceWatchRegistry::default();
         let dispatched = dispatch_guarded::<
             crate::runtime::NoRemoteControlHostControls,
             crate::runtime::NoRemoteControlHostControls,
@@ -729,6 +1019,7 @@ mod tests {
                 },
             ),
             Arc::new(Mutex::new(())),
+            &interface_watches,
         );
         let settled = async {
             let Some(HostCommand::RespondAny(respond)) = command_rx.recv().await else {
@@ -836,6 +1127,7 @@ mod tests {
             persistence_worker.remote_control_authorization_persistence();
 
         {
+            let interface_watches = InterfaceWatchRegistry::default();
             let router = run_router::<
                 crate::runtime::NoRemoteControlHostControls,
                 crate::runtime::NoRemoteControlHostControls,
@@ -845,6 +1137,7 @@ mod tests {
                 &crate::runtime::NoRemoteControlHostControls,
                 &mut remote_control,
                 request_rx,
+                &interface_watches,
                 RemoteControlAuthorizationRuntime {
                     controller_grants: &mut controller_grants,
                     target_accesses: &mut target_accesses,
@@ -941,6 +1234,7 @@ mod tests {
             persistence_worker.remote_control_authorization_persistence();
 
         {
+            let interface_watches = InterfaceWatchRegistry::default();
             let router = run_router::<
                 crate::runtime::NoRemoteControlHostControls,
                 crate::runtime::NoRemoteControlHostControls,
@@ -950,6 +1244,7 @@ mod tests {
                 &crate::runtime::NoRemoteControlHostControls,
                 &mut remote_control,
                 request_rx,
+                &interface_watches,
                 RemoteControlAuthorizationRuntime {
                     controller_grants: &mut controller_grants,
                     target_accesses: &mut target_accesses,

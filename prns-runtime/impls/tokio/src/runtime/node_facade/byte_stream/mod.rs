@@ -21,6 +21,7 @@ use crate::routing::links::LinkId;
 
 use super::PrnsNodeHandle;
 
+pub use crate::manifold::driver::StreamReaderRegistrationError;
 pub use crate::routing::links::channel::byte_stream::StreamId;
 
 /// RNS `StreamDataMessage.MAX_DATA_LEN`.
@@ -65,6 +66,7 @@ impl ByteStreamReader {
 
 fn receive_error(failure: StreamReceiveFailure) -> io::Error {
     let kind = match failure {
+        StreamReceiveFailure::AlreadyRegistered => io::ErrorKind::AlreadyExists,
         StreamReceiveFailure::Overflowed | StreamReceiveFailure::MalformedCompressedChunk => {
             io::ErrorKind::InvalidData
         }
@@ -249,6 +251,24 @@ impl PrnsNodeHandle {
         link_id: LinkId,
         stream_id: StreamId,
     ) -> ByteStreamReader {
+        self.register_byte_stream_reader(link_id, stream_id).await.0
+    }
+
+    /// Register exclusively; an existing reader and stream remain untouched on failure.
+    pub async fn try_byte_stream_reader(
+        &self,
+        link_id: LinkId,
+        stream_id: StreamId,
+    ) -> Result<ByteStreamReader, StreamReaderRegistrationError> {
+        let (reader, registered) = self.register_byte_stream_reader(link_id, stream_id).await;
+        registered.map(|()| reader)
+    }
+
+    async fn register_byte_stream_reader(
+        &self,
+        link_id: LinkId,
+        stream_id: StreamId,
+    ) -> (ByteStreamReader, Result<(), StreamReaderRegistrationError>) {
         let (sink, inbound) = mpsc::channel(BYTE_STREAM_RECEIVE_QUEUE_DEPTH);
         let (failure, failure_rx) = oneshot::channel();
         let (ready, registered) = oneshot::channel();
@@ -259,8 +279,10 @@ impl PrnsNodeHandle {
             failure,
             ready,
         });
-        let _ = registered.await;
-        ByteStreamReader::new(inbound, failure_rx)
+        let registration = registered
+            .await
+            .unwrap_or(Err(StreamReaderRegistrationError::NodeStopped));
+        (ByteStreamReader::new(inbound, failure_rx), registration)
     }
 
     /// Open a byte-stream writer on this link and stream id: an `AsyncWrite` framing each write as a stream-data channel send.

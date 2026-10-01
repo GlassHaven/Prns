@@ -12,6 +12,9 @@ pub struct ControlOptions {
     /// Grants read-only inspection, AnnounceSelf and the bounded AppMessage probe.
     #[arg(long, value_parser = controller)]
     pub app_controller_public_key: Vec<RemoteControlControllerIdentity>,
+    /// Grants read-only inspection plus a bounded interface-change stream.
+    #[arg(long, value_parser = controller)]
+    pub watch_controller_public_key: Vec<RemoteControlControllerIdentity>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -38,6 +41,12 @@ pub fn app_operator_requests() -> RemoteControlRequestSet {
     requests
 }
 
+pub fn watch_operator_requests() -> RemoteControlRequestSet {
+    let mut requests = operator_requests();
+    requests.insert(RemoteControlRequestKind::WatchInterfaces);
+    requests
+}
+
 pub fn public_identity(value: &str) -> Result<PublicIdentityMaterial, hex::FromHexError> {
     let mut bytes = [0; IDENTITY_PUBLIC_KEY_LEN];
     hex::decode_to_slice(value, &mut bytes)?;
@@ -51,28 +60,32 @@ fn controller(value: &str) -> Result<RemoteControlControllerIdentity, hex::FromH
 
 impl ControlOptions {
     pub fn grants(&self) -> Result<Vec<RemoteControlControllerGrant>, Error> {
-        let mut grants = self
-            .controller_public_key
-            .iter()
-            .map(|controller| {
+        let mut requested = std::collections::BTreeMap::new();
+        for (controllers, permissions) in [
+            (&self.controller_public_key, operator_requests()),
+            (&self.app_controller_public_key, app_operator_requests()),
+            (&self.watch_controller_public_key, watch_operator_requests()),
+        ] {
+            for controller in controllers {
+                let entry = requested
+                    .entry(*controller.identity_hash().as_bytes())
+                    .or_insert((*controller, operator_requests()));
+                for permission in permissions.iter() {
+                    entry.1.insert(permission);
+                }
+            }
+        }
+        let grants = requested
+            .into_values()
+            .map(|(controller, requests)| {
                 RemoteControlControllerGrant::new(
-                    *controller,
+                    controller,
                     RemoteControlControllerAuthority::Operator,
-                    operator_requests(),
+                    requests,
                 )
                 .map_err(Error::Permissions)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        for controller in &self.app_controller_public_key {
-            grants.push(
-                RemoteControlControllerGrant::new(
-                    *controller,
-                    RemoteControlControllerAuthority::Operator,
-                    app_operator_requests(),
-                )
-                .map_err(Error::Permissions)?,
-            );
-        }
         if !grants.is_empty() {
             RemoteControlControllerGrants::try_from(grants.as_slice()).map_err(Error::Grants)?;
         }
@@ -117,6 +130,15 @@ mod tests {
         assert!(app_grants[0]
             .effective_requests()
             .supports(RemoteControlRequestKind::AppMessage));
+        let watch = Cli::try_parse_from(["host", "--watch-controller-public-key", &key]).unwrap();
+        let watch_grants = watch.control.grants().unwrap();
+        assert_eq!(
+            watch_grants[0].effective_requests(),
+            watch_operator_requests()
+        );
+        assert!(!watch_grants[0]
+            .effective_requests()
+            .supports(RemoteControlRequestKind::AppMessage));
         let duplicate = Cli::try_parse_from([
             "host",
             "--controller-public-key",
@@ -125,11 +147,24 @@ mod tests {
             &key,
         ])
         .unwrap();
-        assert!(matches!(
-            duplicate.control.grants(),
-            Err(Error::Grants(
-                RemoteControlControllerGrantsError::Duplicate { .. }
-            ))
-        ));
+        assert_eq!(duplicate.control.grants().unwrap().len(), 1);
+        let combined = Cli::try_parse_from([
+            "host",
+            "--app-controller-public-key",
+            &key,
+            "--watch-controller-public-key",
+            &key,
+        ])
+        .unwrap()
+        .control
+        .grants()
+        .unwrap();
+        assert_eq!(combined.len(), 1);
+        assert!(combined[0]
+            .effective_requests()
+            .supports(RemoteControlRequestKind::AppMessage));
+        assert!(combined[0]
+            .effective_requests()
+            .supports(RemoteControlRequestKind::WatchInterfaces));
     }
 }

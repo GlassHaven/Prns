@@ -14,7 +14,9 @@ use crate::runtime::node_introspection::{AnnounceRateHistory, AnnounceRateSnapsh
 use crate::runtime::ReliabilityMetricsSnapshot;
 use crate::units::RttMillis;
 
-use super::host_protocol::{ResourceInbound, StreamInbound, StreamReceiveFailure};
+use super::host_protocol::{
+    ResourceInbound, StreamInbound, StreamReaderRegistrationError, StreamReceiveFailure,
+};
 
 struct RequestPending {
     completion: oneshot::Sender<Result<(std::vec::Vec<u8>, RttMillis), SendRequestFailure>>,
@@ -91,9 +93,9 @@ where
         stream_id: StreamId,
         sink: Sender<StreamInbound>,
         failure: oneshot::Sender<StreamReceiveFailure>,
-    ) {
+    ) -> Result<(), StreamReaderRegistrationError> {
         self.delivery
-            .register_stream_reader(link_id, stream_id, sink, failure);
+            .register_stream_reader(link_id, stream_id, sink, failure)
     }
 
     pub(super) fn register_resource_sink(
@@ -170,11 +172,17 @@ impl JournalDelivery {
         stream_id: StreamId,
         sink: Sender<StreamInbound>,
         failure: oneshot::Sender<StreamReceiveFailure>,
-    ) {
-        self.stream_readers.insert(
-            (link_id, stream_id),
-            StreamReaderDelivery::Receiving { sink, failure },
-        );
+    ) -> Result<(), StreamReaderRegistrationError> {
+        match self.stream_readers.entry((link_id, stream_id)) {
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(StreamReaderDelivery::Receiving { sink, failure });
+                Ok(())
+            }
+            std::collections::hash_map::Entry::Occupied(_) => {
+                let _ = failure.send(StreamReceiveFailure::AlreadyRegistered);
+                Err(StreamReaderRegistrationError::AlreadyRegistered)
+            }
+        }
     }
 
     fn register_resource_sink(&mut self, link_id: LinkId, sink: UnboundedSender<ResourceInbound>) {
@@ -421,13 +429,50 @@ mod stream_tests {
     use crate::routing::links::channel::byte_stream::StreamDataHeader;
 
     #[test]
+    fn duplicate_registration_preserves_the_existing_reader() {
+        let mut delivery = JournalDelivery::default();
+        let link_id = LinkId::new([7; 16]);
+        let stream_id = StreamId::new(3).unwrap();
+        let (sink, mut original) = tokio::sync::mpsc::channel(1);
+        let (failure, _original_failure) = oneshot::channel();
+        delivery
+            .register_stream_reader(link_id, stream_id, sink, failure)
+            .unwrap();
+        let (duplicate, _inbound) = tokio::sync::mpsc::channel(1);
+        let (failure, mut duplicate_failure) = oneshot::channel();
+        assert_eq!(
+            delivery.register_stream_reader(link_id, stream_id, duplicate, failure),
+            Err(StreamReaderRegistrationError::AlreadyRegistered)
+        );
+        assert_eq!(
+            duplicate_failure.try_recv(),
+            Ok(StreamReceiveFailure::AlreadyRegistered)
+        );
+        let header = StreamDataHeader {
+            stream_id,
+            eof: false,
+            compressed: false,
+        }
+        .to_bytes();
+        let frame = [header[0], header[1], b'x'];
+        delivery.route_stream_or_forward(Journaled::ChannelMessageReceived {
+            link_id,
+            message_type: STREAM_DATA_TYPE,
+            data: &frame,
+        });
+        assert_eq!(original.try_recv().unwrap().payload, b"x");
+    }
+
+    #[test]
     fn full_stream_reader_is_marked_failed_without_unbounded_buffering() {
         let mut delivery = JournalDelivery::default();
         let link_id = LinkId::new([7; 16]);
         let stream_id = StreamId::new(3).unwrap();
         let (sink, mut inbound) = tokio::sync::mpsc::channel(1);
         let (failure, mut outcome) = oneshot::channel();
-        delivery.register_stream_reader(link_id, stream_id, sink, failure);
+        delivery
+            .register_stream_reader(link_id, stream_id, sink, failure)
+            .unwrap();
         let header = StreamDataHeader {
             stream_id,
             eof: false,
@@ -462,7 +507,9 @@ mod stream_tests {
         let stream_id = StreamId::new(4).unwrap();
         let (sink, inbound) = tokio::sync::mpsc::channel(1);
         let (failure, _outcome) = oneshot::channel();
-        delivery.register_stream_reader(link_id, stream_id, sink, failure);
+        delivery
+            .register_stream_reader(link_id, stream_id, sink, failure)
+            .unwrap();
         drop(inbound);
         let header = StreamDataHeader {
             stream_id,
@@ -493,7 +540,9 @@ mod stream_tests {
         let stream_id = StreamId::new(5).unwrap();
         let (sink, _inbound) = tokio::sync::mpsc::channel(1);
         let (failure, mut outcome) = oneshot::channel();
-        delivery.register_stream_reader(link_id, stream_id, sink, failure);
+        delivery
+            .register_stream_reader(link_id, stream_id, sink, failure)
+            .unwrap();
         delivery.route_stream_or_forward(Journaled::LinkClosed {
             link_id,
             reason: LinkClosedReason::PeerClosed,

@@ -207,7 +207,7 @@ async fn reader_is_withheld_until_the_run_loop_acks_registration() {
         "the reader is held back until the run loop acknowledges the registration",
     );
 
-    ready.send(()).expect("the opener is parked on the ack");
+    ready.send(Ok(())).expect("the opener is parked on the ack");
     open.await.expect("the reader future resolves once acked");
 }
 

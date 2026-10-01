@@ -11,6 +11,18 @@ pub const DEFAULT_MAX_REMOTE_CONTROL_TARGET_ACCESSES: usize = 8;
 pub const REMOTE_CONTROL_REQUEST_ENDPOINT_ID: &str = "/remote-control";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteControlInterfaceWatchSupport {
+    Unavailable,
+    RuntimeSnapshots,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteControlAppMessageSupport {
+    Unavailable,
+    InstalledHandler,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RemoteControlCapabilities {
     requests: RemoteControlRequestSet,
 }
@@ -148,11 +160,31 @@ pub struct RemoteControlConfiguration<'a> {
 
 impl<'a> RemoteControlService<'a> {
     /// Advertise host requests only when an installed provider declares them.
-    pub fn with_installed_controls(mut self, host: RemoteControlRequestSet, app: bool) -> Self {
+    pub fn with_installed_controls(
+        self,
+        host: RemoteControlRequestSet,
+        app: RemoteControlAppMessageSupport,
+    ) -> Self {
+        self.with_installed_providers(host, app, RemoteControlInterfaceWatchSupport::Unavailable)
+    }
+
+    /// Include the runtime stream producer only when it is installed on this host.
+    pub fn with_installed_providers(
+        mut self,
+        host: RemoteControlRequestSet,
+        app: RemoteControlAppMessageSupport,
+        interface_watch: RemoteControlInterfaceWatchSupport,
+    ) -> Self {
         if let Self::Available(config) = &mut self {
             let mut requests = RemoteControlRequestSet::only(RemoteControlRequestKind::Describe);
             for kind in config.capabilities.requests().iter() {
-                if !kind.handled_by_host() && kind != RemoteControlRequestKind::AppMessage {
+                if !kind.handled_by_host()
+                    && !matches!(
+                        kind,
+                        RemoteControlRequestKind::AppMessage
+                            | RemoteControlRequestKind::WatchInterfaces
+                    )
+                {
                     requests.insert(kind);
                 }
             }
@@ -161,12 +193,21 @@ impl<'a> RemoteControlService<'a> {
                     requests.insert(kind);
                 }
             }
-            if app
+            if matches!(app, RemoteControlAppMessageSupport::InstalledHandler)
                 && config
                     .capabilities
                     .supports(RemoteControlRequestKind::AppMessage)
             {
                 requests.insert(RemoteControlRequestKind::AppMessage);
+            }
+            if matches!(
+                interface_watch,
+                RemoteControlInterfaceWatchSupport::RuntimeSnapshots
+            ) && config
+                .capabilities
+                .supports(RemoteControlRequestKind::WatchInterfaces)
+            {
+                requests.insert(RemoteControlRequestKind::WatchInterfaces);
             }
             config.capabilities = RemoteControlCapabilities::from_requests(requests)
                 .unwrap_or(RemoteControlCapabilities::describe_only());

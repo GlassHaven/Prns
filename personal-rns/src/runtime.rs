@@ -79,12 +79,13 @@ pub use prns_runtime_tokio::runtime::{
     RegionFlush, RegisterRequestEndpointError, RemoteControlAuthorizationPersistence,
     RemoteControlAuthorizationPersistenceFailure, RemoteControlAuthorizationSeedReport,
     RemoteControlFileIdentityBootstrapError, RemoteControlHandle, RemoteControlIdentityDirectory,
-    RemoteControlTargetHandle, RequestOptions, RequestPathError, ResourceAdmissionPeer,
+    RemoteControlInterfaceWatch, RemoteControlTargetHandle, RemoteControlWatchOpenError,
+    RemoteControlWatchReadError, RequestOptions, RequestPathError, ResourceAdmissionPeer,
     ResourceOfferAdmission, ResourceOfferMonitor, ResourceProgress, ResourceReceipt,
     ResourceReceiveError, ResourceSendError, ResponseSendError, RouteSeedProgress, RouteSeedReport,
     RuntimeRequestHandlerError, SaveOnLearn, SaveOnLearnWiring, SegmentCompression,
-    SharedInstanceIdentityError, StreamId, Subscription, TokioHandleEntropy, TunnelSeedReport,
-    AUTO_COMPRESS_MAX_LEN,
+    SharedInstanceIdentityError, StreamId, StreamReaderRegistrationError, Subscription,
+    TokioHandleEntropy, TunnelSeedReport, AUTO_COMPRESS_MAX_LEN,
 };
 
 #[cfg(all(feature = "tokio-host", feature = "scheduler-tuning"))]

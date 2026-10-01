@@ -5,8 +5,8 @@ use crate::engine::{
 use crate::identity::IdentityHash;
 use crate::interfaces::{DiscoveryGroupId, InterfaceId, InterfaceMode};
 use crate::remote_control::{
-    RemoteControlAnnounceSelfOutcome, RemoteControlAppMessage, RemoteControlApplyOutcome,
-    RemoteControlAuthorizeControllerOutcome, RemoteControlBuildVersion,
+    RemoteControlAnnounceSelfOutcome, RemoteControlAppMessage, RemoteControlAppMessageSupport,
+    RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome, RemoteControlBuildVersion,
     RemoteControlControllerAuthority, RemoteControlControllerGrant,
     RemoteControlControllerGrantTable, RemoteControlControllerIdentity,
     RemoteControlControllerInventory, RemoteControlControllerPage, RemoteControlDescription,
@@ -15,17 +15,19 @@ use crate::remote_control::{
     RemoteControlDisplayAutoOff, RemoteControlDisplayVisibility, RemoteControlEspRadioMode,
     RemoteControlGnssPower, RemoteControlGroupOutcome, RemoteControlInterfaceConfigOutcome,
     RemoteControlInterfaceGroup, RemoteControlInterfaceInventory, RemoteControlInterfacePage,
-    RemoteControlInterfacePeersOutcome, RemoteControlInterfacePower, RemoteControlLoRaOutcome,
-    RemoteControlLoRaProfile, RemoteControlMessageWriteError, RemoteControlModeOutcome,
-    RemoteControlPeerPage, RemoteControlPowerOutcome, RemoteControlProtocolError,
-    RemoteControlRequest, RemoteControlRequestKind, RemoteControlRequestParseError,
-    RemoteControlRequestSet, RemoteControlResponse, RemoteControlResponseKind,
-    RemoteControlResponseParseError, RemoteControlRevokeControllerOutcome,
-    RemoteControlSelfAnnouncement, RemoteControlSleepOutcome, RemoteControlStationUplink,
-    RemoteControlSystemPower, RemoteControlWifiCredentialRevision, RemoteControlWifiStageOutcome,
-    RemoteControlWifiStation, RemoteControlWifiStationOutcome, RemoteControlWifiTransactionStatus,
-    RevokeRemoteControlControllerOutcome, SetRemoteControlControllerGrantOutcome,
+    RemoteControlInterfacePeersOutcome, RemoteControlInterfacePower,
+    RemoteControlInterfaceWatchSupport, RemoteControlLoRaOutcome, RemoteControlLoRaProfile,
+    RemoteControlMessageWriteError, RemoteControlModeOutcome, RemoteControlPeerPage,
+    RemoteControlPowerOutcome, RemoteControlProtocolError, RemoteControlRequest,
+    RemoteControlRequestKind, RemoteControlRequestParseError, RemoteControlRequestSet,
+    RemoteControlResponse, RemoteControlResponseKind, RemoteControlResponseParseError,
+    RemoteControlRevokeControllerOutcome, RemoteControlSelfAnnouncement, RemoteControlSleepOutcome,
+    RemoteControlStationUplink, RemoteControlSystemPower, RemoteControlWifiCredentialRevision,
+    RemoteControlWifiStageOutcome, RemoteControlWifiStation, RemoteControlWifiStationOutcome,
+    RemoteControlWifiTransactionStatus, RevokeRemoteControlControllerOutcome,
+    SetRemoteControlControllerGrantOutcome,
 };
+use crate::routing::links::channel::byte_stream::StreamId;
 use crate::routing::links::request::REQUEST_WIRE_OVERHEAD;
 use crate::units::ByteLimit;
 use crate::wire::DestinationHash;
@@ -52,6 +54,10 @@ pub enum RemoteControlError {
         expected: RemoteControlResponseKind,
         found: RemoteControlResponseKind,
     },
+    UnexpectedStream {
+        expected: StreamId,
+        found: StreamId,
+    },
     AnnounceSelf(RemoteControlAnnounceSelfFailure),
 }
 
@@ -73,6 +79,10 @@ impl core::fmt::Display for RemoteControlError {
             Self::UnexpectedResponse { expected, found } => write!(
                 formatter,
                 "remote control response kind was {found:?}, expected {expected:?}"
+            ),
+            Self::UnexpectedStream { expected, found } => write!(
+                formatter,
+                "remote control stream id was {found:?}, expected {expected:?}"
             ),
             Self::AnnounceSelf(failure) => {
                 write!(
@@ -123,6 +133,38 @@ impl RemoteControlDescribe {
 pub struct RemoteControlAnnounceSelf;
 
 pub struct RemoteControlAppMessageExchange;
+
+pub struct RemoteControlWatchInterfaces;
+
+impl RemoteControlWatchInterfaces {
+    pub const RESPONSE_CAPACITY: usize =
+        RemoteControlRequestKind::WatchInterfaces.maximum_response_encoded_len();
+    pub const MAXIMUM_RESPONSE_BYTES: ByteLimit =
+        ByteLimit::Maximum(Self::RESPONSE_CAPACITY as u64);
+
+    pub fn write_request(stream_id: StreamId, out: &mut [u8]) -> Result<usize, RemoteControlError> {
+        RemoteControlRequest::WatchInterfaces { stream_id }
+            .write_into(out)
+            .map_err(RemoteControlError::Encode)
+    }
+
+    pub fn parse_response(bytes: &[u8], expected: StreamId) -> Result<(), RemoteControlError> {
+        match RemoteControlResponse::parse(bytes).map_err(RemoteControlError::Response)? {
+            RemoteControlResponse::WatchInterfaces { stream_id } if stream_id == expected => Ok(()),
+            RemoteControlResponse::WatchInterfaces { stream_id } => {
+                Err(RemoteControlError::UnexpectedStream {
+                    expected,
+                    found: stream_id,
+                })
+            }
+            RemoteControlResponse::ProtocolError(error) => Err(RemoteControlError::Remote(error)),
+            response => Err(RemoteControlError::UnexpectedResponse {
+                expected: RemoteControlResponseKind::WatchInterfaces,
+                found: response.kind(),
+            }),
+        }
+    }
+}
 
 impl RemoteControlAppMessageExchange {
     pub const RESPONSE_CAPACITY: usize = 2 + crate::remote_control::REMOTE_CONTROL_APP_MESSAGE_CAP;
@@ -489,8 +531,8 @@ pub trait RemoteControlHostControls {
         RemoteControlRequestSet::empty()
     }
 
-    fn supports_app_messages(&self) -> bool {
-        false
+    fn app_message_support(&self) -> RemoteControlAppMessageSupport {
+        RemoteControlAppMessageSupport::Unavailable
     }
 
     async fn execute_remote_control(
@@ -552,19 +594,19 @@ impl<AppState> RemoteControlAppMessages<AppState> for NoRemoteControlHostControl
     }
 }
 
+enum AppMessageHandler<App> {
+    Unavailable,
+    Installed(App),
+}
+
 pub struct RemoteControlNodeControls<Host, App> {
     host: Host,
-    app: App,
-    app_enabled: bool,
+    app: AppMessageHandler<App>,
 }
 
 impl<Host, App> RemoteControlNodeControls<Host, App> {
-    const fn new(host: Host, app: App, app_enabled: bool) -> Self {
-        Self {
-            host,
-            app,
-            app_enabled,
-        }
+    const fn new(host: Host, app: AppMessageHandler<App>) -> Self {
+        Self { host, app }
     }
 }
 
@@ -574,8 +616,11 @@ impl<Host: RemoteControlHostControls, App> RemoteControlHostControls
     fn supported_requests(&self) -> RemoteControlRequestSet {
         self.host.supported_requests()
     }
-    fn supports_app_messages(&self) -> bool {
-        self.app_enabled
+    fn app_message_support(&self) -> RemoteControlAppMessageSupport {
+        match &self.app {
+            AppMessageHandler::Unavailable => RemoteControlAppMessageSupport::Unavailable,
+            AppMessageHandler::Installed(_) => RemoteControlAppMessageSupport::InstalledHandler,
+        }
     }
     async fn execute_remote_control(
         &self,
@@ -594,9 +639,12 @@ impl<AppState, Host, App: RemoteControlAppMessages<AppState>> RemoteControlAppMe
         controller: IdentityHash,
         payload: &[u8],
     ) -> Result<RemoteControlAppMessage, RemoteControlHostCommandError> {
-        self.app
-            .handle_app_message(state, controller, payload)
-            .await
+        match &self.app {
+            AppMessageHandler::Unavailable => Err(RemoteControlHostCommandError::Unsupported),
+            AppMessageHandler::Installed(app) => {
+                app.handle_app_message(state, controller, payload).await
+            }
+        }
     }
 }
 
@@ -624,7 +672,7 @@ impl<'a, Controls> RemoteControlNodeSetup<'a, Controls> {
     {
         RemoteControlNodeSetup {
             service: self.service,
-            controls: RemoteControlNodeControls::new(controls, NoRemoteControlHostControls, false),
+            controls: RemoteControlNodeControls::new(controls, AppMessageHandler::Unavailable),
         }
     }
 
@@ -635,7 +683,7 @@ impl<'a, Controls> RemoteControlNodeSetup<'a, Controls> {
     ) -> RemoteControlNodeSetup<'a, RemoteControlNodeControls<Host, App>> {
         RemoteControlNodeSetup {
             service: self.service,
-            controls: RemoteControlNodeControls::new(host, app, true),
+            controls: RemoteControlNodeControls::new(host, AppMessageHandler::Installed(app)),
         }
     }
 
@@ -643,10 +691,22 @@ impl<'a, Controls> RemoteControlNodeSetup<'a, Controls> {
     where
         Controls: RemoteControlHostControls,
     {
+        self.into_parts_with_interface_watch(RemoteControlInterfaceWatchSupport::Unavailable)
+    }
+
+    /// Runtime assembly declares its own stream producer, separately from host command providers.
+    pub(crate) fn into_parts_with_interface_watch(
+        self,
+        interface_watch: RemoteControlInterfaceWatchSupport,
+    ) -> (crate::remote_control::RemoteControlService<'a>, Controls)
+    where
+        Controls: RemoteControlHostControls,
+    {
         (
-            self.service.with_installed_controls(
+            self.service.with_installed_providers(
                 self.controls.supported_requests(),
-                self.controls.supports_app_messages(),
+                self.controls.app_message_support(),
+                interface_watch,
             ),
             self.controls,
         )
@@ -1435,6 +1495,13 @@ impl RemoteControlRequestEndpoint {
                 require_available(available_requests, RemoteControlRequestKind::AppMessage)?;
                 Ok(AdmittedRemoteControlOperation::AppMessage(payload))
             }
+            Ok(RemoteControlRequest::WatchInterfaces { stream_id }) => {
+                require_available(
+                    available_requests,
+                    RemoteControlRequestKind::WatchInterfaces,
+                )?;
+                Ok(AdmittedRemoteControlOperation::WatchInterfaces { stream_id })
+            }
             Ok(RemoteControlRequest::InventoryInterfaces { page }) => {
                 require_available(
                     available_requests,
@@ -1695,7 +1762,10 @@ impl RemoteControlRequestEndpoint {
         Controls: RemoteControlHostControls + RemoteControlAppMessages<AppState>,
     {
         let response = match operation {
-            AdmittedRemoteControlOperation::AppMessage(_) => return Err(Decline::Ignore),
+            AdmittedRemoteControlOperation::AppMessage(_)
+            | AdmittedRemoteControlOperation::WatchInterfaces { .. } => {
+                return Err(Decline::Ignore)
+            }
             AdmittedRemoteControlOperation::Host(command) => {
                 execute_remote_control_host(controls, command).await
             }
@@ -1822,6 +1892,9 @@ enum AdmittedRemoteControlOperation {
         destination: DestinationHash,
     },
     AppMessage(RemoteControlAppMessage),
+    WatchInterfaces {
+        stream_id: StreamId,
+    },
     AppMessageReady {
         controller: IdentityHash,
         payload: RemoteControlAppMessage,
@@ -1963,6 +2036,13 @@ pub struct VerifiedAdmittedRemoteControlRequest {
 }
 
 impl VerifiedAdmittedRemoteControlRequest {
+    pub fn watch_interfaces_stream(&self) -> Option<StreamId> {
+        match self.operation {
+            AdmittedRemoteControlOperation::WatchInterfaces { stream_id } => Some(stream_id),
+            _ => None,
+        }
+    }
+
     pub fn authorize_controller_grant(&self) -> Option<RemoteControlControllerGrant> {
         match self.operation {
             AdmittedRemoteControlOperation::AuthorizeControllerGrant { grant } => Some(grant),
@@ -2475,15 +2555,19 @@ mod tests {
             );
             let controls = RemoteControlNodeControls::new(
                 NoRemoteControlHostControls,
-                RecordingApp(Mutex::new(std::vec::Vec::new())),
-                true,
+                AppMessageHandler::Installed(RecordingApp(Mutex::new(std::vec::Vec::new()))),
             );
             let available = RemoteControlRequestSet::only(RemoteControlRequestKind::AppMessage);
-            for (requester, payload, should_respond) in [
-                (Some(denied.identity_hash()), &[1u8, 2][..], false),
-                (None, &[1u8, 2][..], false),
-                (Some(allowed.identity_hash()), &[1u8, 2][..], true),
-                (Some(allowed.identity_hash()), &[0u8][..], true),
+            enum AdmissionExpectation {
+                Silent,
+                Respond,
+            }
+            use AdmissionExpectation::{Respond, Silent};
+            for (requester, payload, expectation) in [
+                (Some(denied.identity_hash()), &[1u8, 2][..], Silent),
+                (None, &[1u8, 2][..], Silent),
+                (Some(allowed.identity_hash()), &[1u8, 2][..], Respond),
+                (Some(allowed.identity_hash()), &[0u8][..], Respond),
             ] {
                 let request = RemoteControlRequest::AppMessage(
                     RemoteControlAppMessage::from_slice(payload).unwrap(),
@@ -2514,13 +2598,12 @@ mod tests {
                 .await;
                 assert_eq!(
                     result,
-                    if should_respond {
-                        Ok(())
-                    } else {
-                        Err(Decline::Ignore)
+                    match expectation {
+                        Respond => Ok(()),
+                        Silent => Err(Decline::Ignore),
                     }
                 );
-                if should_respond {
+                if matches!(expectation, Respond) {
                     assert!(!response.is_empty());
                     let expected = if payload == [0] {
                         RemoteControlResponse::ProtocolError(
@@ -2541,7 +2624,10 @@ mod tests {
                     assert!(response.is_empty());
                 }
             }
-            let calls = controls.app.0.lock().unwrap();
+            let AppMessageHandler::Installed(app) = &controls.app else {
+                panic!("installed app handler");
+            };
+            let calls = app.0.lock().unwrap();
             assert_eq!(calls.len(), 2);
             assert_eq!(calls[0].0, allowed.identity_hash());
             assert_eq!(calls[0].1, [1, 2]);
@@ -3105,6 +3191,80 @@ mod tests {
             &inbound(Some(allowed.identity_hash()), &describe).inbound(),
         )
         .is_ok());
+    }
+
+    #[test]
+    fn watch_interfaces_requires_its_own_grant_and_exact_verified_request() {
+        let allowed = identity(0x53);
+        let stream_id = StreamId::new(0x123).unwrap();
+        let request = RemoteControlRequest::WatchInterfaces { stream_id };
+        let mut data = [0; RemoteControlRequest::MAX_ENCODED_LEN];
+        let len = request.write_into(&mut data).unwrap();
+        let fixture = InboundRequestFixture {
+            destination: DestinationHash::new([0x21; 16]),
+            link_id: LinkId::new([0x43; 16]),
+            request_id: RequestId([0x65; 16]),
+            requester: Some(allowed.identity_hash()),
+            requested_at: InstantMillis(1_000),
+            rtt: RttMillis::new(20),
+            data: &data[..len],
+        };
+        let grant = controller_grants_permitting(
+            allowed,
+            RemoteControlRequestSet::only(RemoteControlRequestKind::WatchInterfaces),
+        );
+        let unavailable = RemoteControlRequestSet::only(RemoteControlRequestKind::Describe);
+        assert_eq!(
+            admit_remote_control_request(
+                &grant,
+                unavailable,
+                RemoteControlSelfAnnouncement::Unavailable,
+                &fixture.inbound(),
+            )
+            .err(),
+            Some(RemoteControlAdmitError::KindNotPermitted),
+        );
+        let no_permission = controller_grants_permitting(
+            allowed,
+            RemoteControlRequestSet::only(RemoteControlRequestKind::Describe),
+        );
+        assert_eq!(
+            admit_remote_control_request(
+                &no_permission,
+                RemoteControlRequestSet::all(),
+                RemoteControlSelfAnnouncement::Unavailable,
+                &fixture.inbound(),
+            )
+            .err(),
+            Some(RemoteControlAdmitError::KindNotPermitted),
+        );
+        let admission = admit_remote_control_request(
+            &grant,
+            RemoteControlRequestSet::all(),
+            RemoteControlSelfAnnouncement::Unavailable,
+            &fixture.inbound(),
+        )
+        .unwrap();
+        assert_eq!(
+            verify_admitted_remote_control_request(admission, &fixture.inbound())
+                .unwrap()
+                .watch_interfaces_stream(),
+            Some(stream_id),
+        );
+        let other_stream = StreamId::new(0x124).unwrap();
+        let mut response = [0; RemoteControlResponse::MAX_ENCODED_LEN];
+        let response_len = RemoteControlResponse::WatchInterfaces {
+            stream_id: other_stream,
+        }
+        .write_into(&mut response)
+        .unwrap();
+        assert_eq!(
+            RemoteControlWatchInterfaces::parse_response(&response[..response_len], stream_id),
+            Err(RemoteControlError::UnexpectedStream {
+                expected: stream_id,
+                found: other_stream,
+            }),
+        );
     }
 
     #[test]

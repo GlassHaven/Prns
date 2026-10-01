@@ -1,33 +1,58 @@
-# Remote Control streaming work
+# Remote Control interface watch
 
-The first streaming foundation is in `prns-core::remote_control::stream` and the
-Tokio byte-stream receive path. It is not yet an advertised Remote Control
-capability or a controller-facing subscription. Existing bounded `AppMessage`
-requests remain request/response operations.
+The interface watch is a separately granted Remote Control capability. A target
+advertises `WatchInterfaces` only when the service configures it and the runtime
+installs its snapshot producer. Tokio installs that producer; portable and Embassy
+assembly keep the capability absent. An authorized controller chooses a stream ID
+and registers its reader before sending the request. The authenticated response must echo that ID;
+admission failures remain silent.
 
 The event frame is version 1 and exactly 14 bytes: version (1), kind (1),
 sequence (4, big-endian), interface ID (8). `InterfaceChanged` and
-`PeersChanged` invalidate the corresponding paged snapshots. `ResyncRequired`
-has a zero interface ID and tells the controller to refetch all snapshots.
-Events contain no partial counters or fabricated radio readings. A sequence gap
-requires the same full resync. Sequence numbers are scoped to one subscription,
-so reconnect starts with a fresh full snapshot.
+`PeersChanged` invalidate corresponding paged snapshots. `ResyncRequired`
+invalidates all snapshots. `Heartbeat` keeps idle links observable. The last
+two kinds have a zero interface ID. A sequence gap requires a full refetch, and
+each new subscription begins with a resync. Events contain no fabricated radio
+readings or partial counters. The public Tokio reader parses frames and reports
+sequence gaps as a typed error, so controller code can refetch snapshots. Reads
+preserve partial frames across cancellation. Stream IDs belong to one reader per
+link: duplicate registration fails locally before sending an admission request.
+Use a fresh stream ID or reconnect rather than reusing an existing ID.
 
-The Tokio byte-stream reader now has a 32-frame receive queue. If the manifold
-cannot enqueue a frame, it sends a typed `Overflowed` outcome; the reader returns
-an `InvalidData` error that retains that cause instead of exposing a truncated
-stream. Link closure and source shutdown have separate terminal outcomes. The
-sender continues to use the channel's existing send window. This protects memory
-and loss detection, but does not itself
-provide a Remote Control event producer or subscription.
+The Tokio producer compares stable interface state every 500 ms and coalesces
+changes within the interval into one `ResyncRequired`. Byte counters, rate counters,
+and changing radio measurements are excluded from that comparison. It sends a heartbeat every five seconds.
+The node admits at most eight watches, bounds each reader to 32 chunks, and
+stops a watch when its grant is revoked. Pending admissions are reserved before
+waiting for a response lane, so revocation also cancels a watch waiting to start.
+Canceled workers retain capacity until they finish. A blocked write times out
+after two seconds; cleanup gets another two seconds to send EOF, then closes the
+control link if it cannot finish. Node shutdown aborts its remaining workers.
+The runtime cancels watches on link closure, and reconnect starts a new
+subscription. Dropping a reader alone does not unsubscribe; close its control
+link to stop the subscription. Reader overflow and link loss have distinct typed
+errors.
 
-The next slice is a separately granted `WatchInterfaces` request, admitted after
-the controller's identity has been verified. The host should advertise it only
-when a producer is installed. Admission failures must remain silent. The
-controller should choose a stream ID and register its reader before sending the
-subscription request; the authenticated response accepts that ID. Limit active subscriptions and buffered
-events per node; coalesce repeated invalidations and send `ResyncRequired` if
-the producer cannot preserve a complete sequence. Closing the controller handle
-must cancel its subscription. Verify slow-reader, link-loss, reconnect, grant
-revocation, and multi-controller behavior before enabling it on the G4 and
-Heltec lab hosts.
+Further qualification needs an end-to-end multi-controller run on the G4 and
+Heltec, including a peer join, a slow reader, and link closure. The producer
+currently uses full resync invalidations; precise `InterfaceChanged` and
+`PeersChanged` events can replace them when a direct change source is available.
+
+## Host verification
+
+The review added regressions for canceled partial reads, duplicate reader ownership,
+revocation while waiting for a response lane, cancellation before stream start,
+old-reservation cleanup after replacement, and blocked-writer cleanup. These run
+on the development host; they do not qualify radio performance on the devices.
+
+```sh
+cargo test -p prns-core --lib remote_control
+cargo test -p prns-runtime --lib
+cargo test --manifest-path prns-runtime/impls/tokio/Cargo.toml --lib
+cargo test --manifest-path prns-runtime/impls/embassy/Cargo.toml --lib
+cargo test --manifest-path personal-hopspot/headless/Cargo.toml
+cargo check -p prns-core -p prns-runtime --no-default-features
+cargo clippy --manifest-path prns-runtime/impls/tokio/Cargo.toml --lib --tests -- -D warnings
+cargo clippy --manifest-path personal-hopspot/headless/Cargo.toml --all-targets -- -D warnings
+cargo build --manifest-path personal-hopspot/headless/Cargo.toml
+```

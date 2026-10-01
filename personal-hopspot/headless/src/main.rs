@@ -131,6 +131,7 @@ async fn run(options: Options) -> Result<(), HostError> {
         RemoteControlRequestKind::InventoryInterfaceConfig,
         RemoteControlRequestKind::InventoryInterfacePeers,
         RemoteControlRequestKind::AppMessage,
+        RemoteControlRequestKind::WatchInterfaces,
     ] {
         capabilities = capabilities.with_request(kind);
     }

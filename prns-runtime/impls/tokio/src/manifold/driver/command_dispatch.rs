@@ -726,8 +726,8 @@ where
                 failure,
                 ready,
             } => {
-                journal.register_stream_reader(link_id, stream_id, sink, failure);
-                let _ = ready.send(());
+                let result = journal.register_stream_reader(link_id, stream_id, sink, failure);
+                let _ = ready.send(result);
                 CommandEffect::UNCHANGED
             }
             HostCommand::RegisterResourceSink {

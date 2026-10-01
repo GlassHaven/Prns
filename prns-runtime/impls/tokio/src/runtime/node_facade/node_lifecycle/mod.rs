@@ -36,8 +36,8 @@ use crate::units::RttMillis;
 use crate::wire::DestinationHash;
 
 use prns_runtime::runtime::{
-    assemble_node, configure_preconfigured_destination, AssembledNode,
-    ConfigurePreconfiguredDestinationError, Diagnostic,
+    configure_preconfigured_destination, AssembledNode, ConfigurePreconfiguredDestinationError,
+    Diagnostic,
 };
 
 use super::super::remote_control_controller_grants::{
@@ -548,7 +548,11 @@ where
             remote_control_controller_grants,
             remote_control_target_accesses,
         };
-        let (node, interfaces, persistence_intent) = assemble_node(build_recipe(handle.clone()));
+        let (node, interfaces, persistence_intent) =
+            prns_runtime::runtime::placement::assemble_node_with_interface_watch(
+                build_recipe(handle.clone()),
+                crate::remote_control::RemoteControlInterfaceWatchSupport::RuntimeSnapshots,
+            );
         let node_persistence =
             persistence::PersistenceIntent::into_node_persistence(persistence_intent);
         interfaces.attach(&handle);
@@ -886,6 +890,7 @@ where
         let egress = Egress::new(std::vec::Vec::new());
         let store = handle.store.clone();
         let (req_tx, req_rx) = mpsc::channel(REQUEST_QUEUE_DEPTH);
+        let interface_watches = super::super::interface_watch::InterfaceWatchRegistry::default();
         let admission_decider = handle.resource_admission.clone();
         let admission_cleanup = handle.resource_admission.clone();
         let manifold = async {
@@ -911,6 +916,7 @@ where
                     remote_control_pairing_persistence.observe(&journaled);
                     if let Journaled::LinkClosed { link_id, .. } = &journaled {
                         admission_cleanup.remove(*link_id);
+                        interface_watches.cancel_link(*link_id);
                     }
                     notify_accepted_announce(&mut accepted_announce_observer, &journaled);
                     let event = PrnsEvent::from(journaled);
@@ -962,6 +968,7 @@ where
                 &controls,
                 &mut remote_control,
                 req_rx,
+                &interface_watches,
                 RemoteControlAuthorizationRuntime {
                     controller_grants: &mut remote_control_controller_grants_rx,
                     target_accesses: &mut remote_control_target_accesses_rx,

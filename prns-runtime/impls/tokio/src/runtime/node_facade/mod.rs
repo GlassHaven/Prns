@@ -57,7 +57,9 @@ use super::remote_control_target_accesses::{
 };
 use super::request_endpoints::RespondToken;
 use super::{InterfaceStore, SendError};
-pub use byte_stream::{ByteStreamReader, ByteStreamWriter, StreamId};
+pub use byte_stream::{
+    ByteStreamReader, ByteStreamWriter, StreamId, StreamReaderRegistrationError,
+};
 pub use interface_lifecycle::{
     AttachIntent, Attachable, AttachedInterface, AttachedSupervisor, DetachedFleet, Fleet,
     InterfaceArbitration, InterfaceAttachmentMetadata, InterfaceEventSource, InterfaceSupervisor,
@@ -77,7 +79,10 @@ pub use persistence::{
     SaveOnLearnWiring, TunnelSeedReport,
 };
 pub(crate) use persistence::{AuthorizationOwnerError, AuthorizationTransaction};
-pub use remote_control::{RemoteControlHandle, RemoteControlTargetHandle};
+pub use remote_control::{
+    RemoteControlHandle, RemoteControlInterfaceWatch, RemoteControlTargetHandle,
+    RemoteControlWatchOpenError, RemoteControlWatchReadError,
+};
 pub use request_response::{RequestOptions, ResponseSendError};
 pub use resource_admission::{ResourceAdmissionPeer, ResourceOfferAdmission, ResourceOfferMonitor};
 pub use resource_transfer::{

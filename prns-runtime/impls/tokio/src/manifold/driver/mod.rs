@@ -46,7 +46,8 @@ pub use host_protocol::{
     AddInterfaceCommand, HostCommand, HostResourceMetadata, HostResourcePayload,
     HostResourcePayloadError, ProvideDecompressedHostCommand, RequestAnyHostCommand,
     ResourceInbound, RespondAnyHostCommand, SendResourceHostCommand,
-    SendResourceSegmentHostCommand, StreamInbound, StreamReceiveFailure,
+    SendResourceSegmentHostCommand, StreamInbound, StreamReaderRegistrationError,
+    StreamReceiveFailure,
 };
 pub(crate) use host_protocol::{HostResourceDigestPreparation, HostResourceRecycler};
 pub use interface_seam::TokioInterfaceSeam;

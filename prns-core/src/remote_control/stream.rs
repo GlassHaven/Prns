@@ -13,6 +13,7 @@ enum RemoteControlStreamEventKind {
     InterfaceChanged = 1,
     PeersChanged = 2,
     ResyncRequired = 3,
+    Heartbeat = 4,
 }
 
 impl RemoteControlStreamEventKind {
@@ -21,6 +22,7 @@ impl RemoteControlStreamEventKind {
             value if value == Self::InterfaceChanged as u8 => Some(Self::InterfaceChanged),
             value if value == Self::PeersChanged as u8 => Some(Self::PeersChanged),
             value if value == Self::ResyncRequired as u8 => Some(Self::ResyncRequired),
+            value if value == Self::Heartbeat as u8 => Some(Self::Heartbeat),
             _ => None,
         }
     }
@@ -39,6 +41,9 @@ pub enum RemoteControlStreamEvent {
     ResyncRequired {
         sequence: u32,
     },
+    Heartbeat {
+        sequence: u32,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -54,7 +59,8 @@ impl RemoteControlStreamEvent {
         match self {
             Self::InterfaceChanged { sequence, .. }
             | Self::PeersChanged { sequence, .. }
-            | Self::ResyncRequired { sequence } => *sequence,
+            | Self::ResyncRequired { sequence }
+            | Self::Heartbeat { sequence } => *sequence,
         }
     }
 
@@ -79,6 +85,10 @@ impl RemoteControlStreamEvent {
             ),
             Self::ResyncRequired { .. } => (
                 RemoteControlStreamEventKind::ResyncRequired,
+                [0; INTERFACE_ID_LEN],
+            ),
+            Self::Heartbeat { .. } => (
+                RemoteControlStreamEventKind::Heartbeat,
                 [0; INTERFACE_ID_LEN],
             ),
         };
@@ -126,6 +136,12 @@ impl RemoteControlStreamEvent {
                 }
                 Ok(Self::ResyncRequired { sequence })
             }
+            RemoteControlStreamEventKind::Heartbeat => {
+                if interface_bytes != [0; INTERFACE_ID_LEN] {
+                    return Err(RemoteControlStreamEventError::InvalidInterface);
+                }
+                Ok(Self::Heartbeat { sequence })
+            }
             RemoteControlStreamEventKind::InterfaceChanged => Ok(Self::InterfaceChanged {
                 sequence,
                 interface: InterfaceId::new(interface_bytes),
@@ -155,6 +171,7 @@ mod tests {
                 interface,
             },
             RemoteControlStreamEvent::ResyncRequired { sequence: 44 },
+            RemoteControlStreamEvent::Heartbeat { sequence: 45 },
         ] {
             let mut bytes = [0; REMOTE_CONTROL_STREAM_EVENT_LEN];
             assert_eq!(event.write_into(&mut bytes), Ok(bytes.len()));

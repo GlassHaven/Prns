@@ -1,7 +1,11 @@
 mod connection;
 mod pairing;
+mod watch;
 
 pub use connection::RemoteControlTargetHandle;
+pub use watch::{
+    RemoteControlInterfaceWatch, RemoteControlWatchOpenError, RemoteControlWatchReadError,
+};
 
 use crate::engine::RequestResponseTimeout;
 use crate::identity::IdentityHash;
@@ -22,7 +26,7 @@ use crate::runtime::{
     RemoteControlSetInterfaceLoRaProfile, RemoteControlSetInterfaceMode,
     RemoteControlSetInterfacePower, RemoteControlSetInterfaceWifiStation,
     RemoteControlSetStationUplink, RemoteControlSetSystemPower, RemoteControlSleepRadios,
-    RemoteControlStageWifiCredentials, RemoteControlWakeRadios,
+    RemoteControlStageWifiCredentials, RemoteControlWakeRadios, RemoteControlWatchInterfaces,
 };
 use crate::units::RttMillis;
 use prns_core::capabilities::power::PowerSnapshot;
@@ -43,7 +47,7 @@ use prns_core::remote_control::{
     RemoteControlWifiStation, RemoteControlWifiStationOutcome, RemoteControlWifiTransactionStatus,
 };
 
-use super::{PrnsNodeHandle, RequestOptions};
+use super::{PrnsNodeHandle, RequestOptions, StreamId};
 
 pub struct RemoteControlHandle<'a> {
     node: &'a PrnsNodeHandle,
@@ -89,6 +93,35 @@ impl PrnsNodeHandle {
 }
 
 impl RemoteControlHandle<'_> {
+    /// Register the reader before requesting the stream so the first frame cannot race registration.
+    pub async fn watch_interfaces(
+        &self,
+        stream_id: StreamId,
+    ) -> Result<(RemoteControlInterfaceWatch, RttMillis), RemoteControlWatchOpenError> {
+        let reader = self
+            .node
+            .try_byte_stream_reader(self.link_id, stream_id)
+            .await
+            .map_err(RemoteControlWatchOpenError::Registration)?;
+        let mut encoded = [0; RemoteControlRequest::MAX_ENCODED_LEN];
+        let len = RemoteControlWatchInterfaces::write_request(stream_id, &mut encoded)?;
+        let (response, rtt) = self
+            .node
+            .request_owned_with_options(
+                self.link_id,
+                RequestEndpointId::of(REMOTE_CONTROL_REQUEST_ENDPOINT_ID),
+                encoded[..len].to_vec(),
+                RequestOptions {
+                    response_timeout: RequestResponseTimeout::LinkDefault,
+                    maximum_response_bytes: RemoteControlWatchInterfaces::MAXIMUM_RESPONSE_BYTES,
+                },
+            )
+            .await
+            .map_err(RemoteControlError::Request)?;
+        RemoteControlWatchInterfaces::parse_response(&response, stream_id)?;
+        Ok((RemoteControlInterfaceWatch::new(reader), rtt))
+    }
+
     pub async fn app_message(
         &self,
         payload: RemoteControlAppMessage,

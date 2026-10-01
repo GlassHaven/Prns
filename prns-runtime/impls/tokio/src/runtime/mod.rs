@@ -3,6 +3,7 @@ mod entropy;
 mod identity_blackhole_commands;
 mod identity_bootstrap;
 mod interface_store;
+mod interface_watch;
 mod node_facade;
 pub mod node_introspection;
 #[cfg(feature = "rnx")]
@@ -48,12 +49,13 @@ pub use node_facade::{
     PreparedFlush, PreparedResourceReceiver, PrnsNode, PrnsNodeHandle, PrnsNodeLocalHandle,
     RatchetSeedReport, RegionFlush, RegisterRequestEndpointError,
     RemoteControlAuthorizationPersistence, RemoteControlAuthorizationSeedReport,
-    RemoteControlHandle, RemoteControlTargetHandle, RequestOptions, RequestPathError,
+    RemoteControlHandle, RemoteControlInterfaceWatch, RemoteControlTargetHandle,
+    RemoteControlWatchOpenError, RemoteControlWatchReadError, RequestOptions, RequestPathError,
     ResourceAdmissionPeer, ResourceOfferAdmission, ResourceOfferMonitor, ResourceProgress,
     ResourceReceipt, ResourceReceiveError, ResourceSendError, ResponseSendError, RouteSeedProgress,
     RouteSeedReport, RuntimeRequestHandlerError, SaveOnLearn, SaveOnLearnWiring,
-    SegmentCompression, SharedInstanceIdentityError, StreamId, TunnelSeedReport,
-    AUTO_COMPRESS_MAX_LEN,
+    SegmentCompression, SharedInstanceIdentityError, StreamId, StreamReaderRegistrationError,
+    TunnelSeedReport, AUTO_COMPRESS_MAX_LEN,
 };
 #[cfg(feature = "rnx")]
 pub use process_commands::ProcessCommands;

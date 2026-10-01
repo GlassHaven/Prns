@@ -587,9 +587,26 @@ where
     Ok(())
 }
 
-#[allow(clippy::expect_used)]
 pub fn assemble_node<'a, D, St, R, F, I, S, P, C>(
     recipe: PrnsNodeRecipe<'a, D, St, R, F, I, S, P, C>,
+) -> (AssembledNode<St, R, F, S, C>, I, P)
+where
+    D: IntoIterator<Item = PreConfiguredDestination<'a>>,
+    R: RequestEndpointSet<St>,
+    F: FnMut(PrnsEvent<'_>, &St),
+    S: StorageLayout,
+    C: super::super::remote_control::RemoteControlHostControls,
+{
+    assemble_node_with_interface_watch(
+        recipe,
+        crate::remote_control::RemoteControlInterfaceWatchSupport::Unavailable,
+    )
+}
+
+#[allow(clippy::expect_used)]
+pub fn assemble_node_with_interface_watch<'a, D, St, R, F, I, S, P, C>(
+    recipe: PrnsNodeRecipe<'a, D, St, R, F, I, S, P, C>,
+    interface_watch: crate::remote_control::RemoteControlInterfaceWatchSupport,
 ) -> (AssembledNode<St, R, F, S, C>, I, P)
 where
     D: IntoIterator<Item = PreConfiguredDestination<'a>>,
@@ -610,7 +627,8 @@ where
         on_event,
     } = recipe;
 
-    let (remote_control, controls) = remote_control.into_parts();
+    let (remote_control, controls) =
+        remote_control.into_parts_with_interface_watch(interface_watch);
     let mut engine = EngineState::<S>::default();
     let remote_control = configure_remote_control_service(&mut engine, remote_control)
         .expect("the RemoteControl service fits the node storage");
@@ -776,6 +794,31 @@ mod tests {
             )),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn watch_capability_requires_the_runtime_producer() {
+        let setup = || {
+            super::super::super::RemoteControlNodeSetup::new(
+                RemoteControlService::with_capabilities(
+                    remote_control_identity_secrets(0x31, 0x32),
+                    RemoteControlInitialControllerGrants::Nobody,
+                    RemoteControlSelfAnnouncement::Unavailable,
+                    crate::remote_control::RemoteControlCapabilities::describe_only()
+                        .with_request(RemoteControlRequestKind::WatchInterfaces),
+                ),
+            )
+        };
+        let (portable_service, _) = setup().into_parts();
+        assert!(!portable_service
+            .available_requests()
+            .supports(RemoteControlRequestKind::WatchInterfaces));
+        let (tokio_service, _) = setup().into_parts_with_interface_watch(
+            crate::remote_control::RemoteControlInterfaceWatchSupport::RuntimeSnapshots,
+        );
+        assert!(tokio_service
+            .available_requests()
+            .supports(RemoteControlRequestKind::WatchInterfaces));
     }
 
     fn remote_control_controller(fill: u8) -> RemoteControlControllerIdentity {

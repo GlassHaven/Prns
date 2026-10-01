@@ -71,6 +71,7 @@ pub use remote_control::{
     RemoteControlSetInterfacePower, RemoteControlSetInterfaceWifiStation,
     RemoteControlSetStationUplink, RemoteControlSetSystemPower, RemoteControlSleepRadios,
     RemoteControlStageWifiCredentials, RemoteControlSupportedHost, RemoteControlWakeRadios,
+    RemoteControlWatchInterfaces,
 };
 pub use remote_control_authorizations::{
     RemoteControlAuthorizationRestoreError, RemoteControlAuthorizationRestoreOutcome,
@@ -114,7 +115,7 @@ pub use remote_control_target_connection::{
 
 #[doc(hidden)]
 pub mod placement {
-    pub use super::node::assemble_node_in_place;
+    pub use super::node::{assemble_node_in_place, assemble_node_with_interface_watch};
     pub use super::remote_control::{
         admit_remote_control_request, admit_verified_remote_control_request,
         dispatch_admitted_remote_control_request, dispatch_remote_control_request,

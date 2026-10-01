@@ -433,6 +433,7 @@ fn protocol_discriminants_are_stable_typed_values() {
             RemoteControlRequestKind::InventoryInterfaceDiscoveryGroups,
             RemoteControlRequestKind::ReplaceInterfaceDiscoveryGroups,
             RemoteControlRequestKind::AppMessage,
+            RemoteControlRequestKind::WatchInterfaces,
         ],
     );
     assert_eq!(
@@ -469,6 +470,7 @@ fn protocol_discriminants_are_stable_typed_values() {
             RemoteControlResponseKind::InventoryInterfaceDiscoveryGroups,
             RemoteControlResponseKind::ReplaceInterfaceDiscoveryGroups,
             RemoteControlResponseKind::AppMessage,
+            RemoteControlResponseKind::WatchInterfaces,
             RemoteControlResponseKind::ProtocolError,
         ],
     );
@@ -1845,15 +1847,55 @@ fn bounded_app_message_round_trips_at_both_limits() {
 }
 
 #[test]
+fn watch_interfaces_requires_a_canonical_stream_id() {
+    use crate::routing::links::channel::byte_stream::StreamId;
+
+    let stream_id = StreamId::new(0x3fff).unwrap();
+    let request = RemoteControlRequest::WatchInterfaces { stream_id };
+    let response = RemoteControlResponse::WatchInterfaces { stream_id };
+    let mut request_bytes = [0; RemoteControlRequest::MAX_ENCODED_LEN];
+    let request_len = request.write_into(&mut request_bytes).unwrap();
+    assert_eq!(request_len, 4);
+    assert_eq!(
+        RemoteControlRequest::parse(&request_bytes[..request_len]),
+        Ok(request)
+    );
+    let mut response_bytes = [0; RemoteControlResponse::MAX_ENCODED_LEN];
+    let response_len = response.write_into(&mut response_bytes).unwrap();
+    assert_eq!(response_len, 4);
+    assert_eq!(
+        RemoteControlResponse::parse(&response_bytes[..response_len]),
+        Ok(response)
+    );
+
+    for invalid_body in [&[0x40, 0x00][..], &[0x3f][..], &[0x00, 0x01, 0x00][..]] {
+        let mut frame = [
+            RemoteControlProtocolVersion::V1.wire_value(),
+            RemoteControlRequestKind::WatchInterfaces.wire_value(),
+            0,
+            0,
+            0,
+        ];
+        frame[2..2 + invalid_body.len()].copy_from_slice(invalid_body);
+        assert!(RemoteControlRequest::parse(&frame[..2 + invalid_body.len()]).is_err());
+        frame[1] = RemoteControlResponseKind::WatchInterfaces.wire_value();
+        assert!(RemoteControlResponse::parse(&frame[..2 + invalid_body.len()]).is_err());
+    }
+}
+
+#[test]
 fn installed_capabilities_intersect_service_and_provider() {
     assert!(!RemoteControlRequestSet::all_operator().supports(RemoteControlRequestKind::AppMessage));
+    assert!(!RemoteControlRequestSet::all_operator()
+        .supports(RemoteControlRequestKind::WatchInterfaces));
     let secrets =
         RemoteControlNodeIdentitySecrets::generate_with_runtime_entropy(&mut runtime_entropy(0x39))
             .unwrap();
     let configured = RemoteControlCapabilities::describe_only()
         .with_request(RemoteControlRequestKind::DescribeBuild)
         .with_request(RemoteControlRequestKind::InventoryInterfaces)
-        .with_request(RemoteControlRequestKind::AppMessage);
+        .with_request(RemoteControlRequestKind::AppMessage)
+        .with_request(RemoteControlRequestKind::WatchInterfaces);
     let service = RemoteControlService::with_capabilities(
         secrets,
         RemoteControlInitialControllerGrants::Nobody,
@@ -1862,13 +1904,15 @@ fn installed_capabilities_intersect_service_and_provider() {
     );
     let mut host = RemoteControlRequestSet::only(RemoteControlRequestKind::DescribeBuild);
     host.insert(RemoteControlRequestKind::InventoryInterfacePeers);
-    let installed = service.with_installed_controls(host, false);
+    let installed =
+        service.with_installed_controls(host, RemoteControlAppMessageSupport::Unavailable);
     let available = installed.available_requests();
     assert!(available.supports(RemoteControlRequestKind::Describe));
     assert!(available.supports(RemoteControlRequestKind::DescribeBuild));
     assert!(!available.supports(RemoteControlRequestKind::InventoryInterfaces));
     assert!(!available.supports(RemoteControlRequestKind::InventoryInterfacePeers));
     assert!(!available.supports(RemoteControlRequestKind::AppMessage));
+    assert!(!available.supports(RemoteControlRequestKind::WatchInterfaces));
     let app_only = RemoteControlService::with_capabilities(
         RemoteControlNodeIdentitySecrets::generate_with_runtime_entropy(&mut runtime_entropy(0x3a))
             .unwrap(),
@@ -1876,13 +1920,56 @@ fn installed_capabilities_intersect_service_and_provider() {
         RemoteControlSelfAnnouncement::Unavailable,
         configured,
     )
-    .with_installed_controls(RemoteControlRequestSet::empty(), true);
+    .with_installed_controls(
+        RemoteControlRequestSet::empty(),
+        RemoteControlAppMessageSupport::InstalledHandler,
+    );
     assert!(app_only
         .available_requests()
         .supports(RemoteControlRequestKind::AppMessage));
     assert!(!app_only
         .available_requests()
         .supports(RemoteControlRequestKind::DescribeBuild));
+    assert!(!app_only
+        .available_requests()
+        .supports(RemoteControlRequestKind::WatchInterfaces));
+    let watch_only = RemoteControlService::with_capabilities(
+        RemoteControlNodeIdentitySecrets::generate_with_runtime_entropy(&mut runtime_entropy(0x3b))
+            .unwrap(),
+        RemoteControlInitialControllerGrants::Nobody,
+        RemoteControlSelfAnnouncement::Unavailable,
+        configured,
+    )
+    .with_installed_providers(
+        RemoteControlRequestSet::empty(),
+        RemoteControlAppMessageSupport::Unavailable,
+        RemoteControlInterfaceWatchSupport::RuntimeSnapshots,
+    );
+    assert!(watch_only
+        .available_requests()
+        .supports(RemoteControlRequestKind::WatchInterfaces));
+    assert!(!watch_only
+        .available_requests()
+        .supports(RemoteControlRequestKind::AppMessage));
+}
+
+#[test]
+fn installed_runtime_producer_cannot_enable_an_unconfigured_watch() {
+    let service = RemoteControlService::with_capabilities(
+        RemoteControlNodeIdentitySecrets::generate_with_runtime_entropy(&mut runtime_entropy(0x3b))
+            .unwrap(),
+        RemoteControlInitialControllerGrants::Nobody,
+        RemoteControlSelfAnnouncement::Unavailable,
+        RemoteControlCapabilities::describe_only(),
+    )
+    .with_installed_providers(
+        RemoteControlRequestSet::empty(),
+        RemoteControlAppMessageSupport::Unavailable,
+        RemoteControlInterfaceWatchSupport::RuntimeSnapshots,
+    );
+    assert!(!service
+        .available_requests()
+        .supports(RemoteControlRequestKind::WatchInterfaces));
 }
 
 proptest! {

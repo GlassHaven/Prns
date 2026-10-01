@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use personal_hopspot_headless::control::{
-    app_operator_requests, operator_requests, public_identity,
+    app_operator_requests, operator_requests, public_identity, watch_operator_requests,
 };
 use personal_rns::identity::PublicIdentityMaterial;
 use personal_rns::interfaces::{ConnectionState, InterfaceId};
@@ -14,8 +14,11 @@ use personal_rns::remote_control::{
     RemoteControlAppMessage, RemoteControlControllerAuthority, RemoteControlInterfaceConfigOutcome,
     RemoteControlInterfaceContinuation, RemoteControlInterfacePage,
     RemoteControlInterfacePeersOutcome, RemoteControlPeerContinuation, RemoteControlPeerPage,
+    RemoteControlStreamEvent,
 };
-use personal_rns::runtime::{RemoteControlIdentityDirectory, RemoteControlTargetAccessControl};
+use personal_rns::runtime::{
+    RemoteControlIdentityDirectory, RemoteControlTargetAccessControl, StreamId,
+};
 use serde_json::json;
 
 #[derive(Parser)]
@@ -54,6 +57,7 @@ enum Action {
     Config,
     Peers,
     AppMessage,
+    Watch,
 }
 
 fn interface_id(value: &str) -> Result<InterfaceId, String> {
@@ -90,6 +94,12 @@ enum Error {
     Message(String),
     #[error("remote inventory exceeded 256 pages")]
     Pagination,
+    #[error("invalid stream ID: {0:?}")]
+    StreamId(personal_rns::routing::links::channel::byte_stream::StreamIdError),
+    #[error("watch admission: {0}")]
+    WatchOpen(personal_rns::runtime::RemoteControlWatchOpenError),
+    #[error("watch stream: {0}")]
+    WatchRead(personal_rns::runtime::RemoteControlWatchReadError),
     #[error("controller node stopped: {0:?}")]
     Node(Result<(), personal_rns::runtime::NodeRunError>),
 }
@@ -136,10 +146,10 @@ async fn run(options: Options) -> Result<(), Error> {
     let grant = RemoteControlTargetAccess::new(
         target,
         RemoteControlControllerAuthority::Operator,
-        if matches!(action, Action::AppMessage) {
-            app_operator_requests()
-        } else {
-            operator_requests()
+        match action {
+            Action::AppMessage => app_operator_requests(),
+            Action::Watch => watch_operator_requests(),
+            _ => operator_requests(),
         },
     )
     .map_err(Error::Grant)?;
@@ -212,7 +222,7 @@ async fn run(options: Options) -> Result<(), Error> {
             }
             Action::Interfaces => {
                 let mut page = RemoteControlInterfacePage::First;
-                let mut complete = false;
+                let mut completion = Err(Error::Pagination);
                 for index in 0..256 {
                     stage.set("interface inventory");
                     let (inventory, rtt) = connection
@@ -232,7 +242,7 @@ async fn run(options: Options) -> Result<(), Error> {
                     );
                     match inventory.continuation() {
                         RemoteControlInterfaceContinuation::Complete => {
-                            complete = true;
+                            completion = Ok(());
                             break;
                         }
                         RemoteControlInterfaceContinuation::More(cursor) => {
@@ -240,9 +250,7 @@ async fn run(options: Options) -> Result<(), Error> {
                         }
                     }
                 }
-                if !complete {
-                    return Err(Error::Pagination);
-                }
+                completion?;
             }
             Action::Config => {
                 let id = interface_id.ok_or(Error::MissingInterface)?;
@@ -269,7 +277,7 @@ async fn run(options: Options) -> Result<(), Error> {
             Action::Peers => {
                 let id = interface_id.ok_or(Error::MissingInterface)?;
                 let mut page = RemoteControlPeerPage::First;
-                let mut complete = false;
+                let mut completion = Err(Error::Pagination);
                 for index in 0..256 {
                     stage.set("interface peers");
                     let (outcome, rtt) = connection
@@ -281,7 +289,7 @@ async fn run(options: Options) -> Result<(), Error> {
                             "{}",
                             json!({"event":"interface_peers","id":hex::encode(id.as_bytes()),"status":"unknown_interface"})
                         );
-                        complete = true;
+                        completion = Ok(());
                         break;
                     };
                     let entries = peers.peers.iter().map(|peer| json!({
@@ -297,7 +305,7 @@ async fn run(options: Options) -> Result<(), Error> {
                     );
                     match peers.continuation() {
                         RemoteControlPeerContinuation::Complete => {
-                            complete = true;
+                            completion = Ok(());
                             break;
                         }
                         RemoteControlPeerContinuation::More(cursor) => {
@@ -305,9 +313,7 @@ async fn run(options: Options) -> Result<(), Error> {
                         }
                     }
                 }
-                if !complete {
-                    return Err(Error::Pagination);
-                }
+                completion?;
             }
             Action::AppMessage => {
                 let bytes = hex::decode(message_hex.as_deref().unwrap_or("0101"))
@@ -323,6 +329,49 @@ async fn run(options: Options) -> Result<(), Error> {
                     "{}",
                     json!({"event":"app_message","request_hex":hex::encode(bytes),"response_hex":hex::encode(response.as_slice()),"rtt":format!("{rtt:?}")})
                 );
+            }
+            Action::Watch => {
+                stage.set("interface watch admission");
+                let stream_id = StreamId::new(0x3201).map_err(Error::StreamId)?;
+                let (mut reader, rtt) = connection
+                    .watch_interfaces(stream_id)
+                    .await
+                    .map_err(Error::WatchOpen)?;
+                println!(
+                    "{}",
+                    json!({"event":"watch_admitted","stream_id":stream_id.get(),"rtt":format!("{rtt:?}")})
+                );
+                stage.set("interface watch stream");
+                let deadline = std::time::Instant::now() + Duration::from_secs(12);
+                loop {
+                    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                    if remaining.is_zero() {
+                        break;
+                    }
+                    match tokio::time::timeout(remaining, reader.next_event()).await {
+                        Ok(Ok(event)) => {
+                            let sequence = event.sequence();
+                            let (kind, interface_id) = match event {
+                                RemoteControlStreamEvent::InterfaceChanged {
+                                    interface, ..
+                                } => ("interface_changed", Some(hex::encode(interface.as_bytes()))),
+                                RemoteControlStreamEvent::PeersChanged { interface, .. } => {
+                                    ("peers_changed", Some(hex::encode(interface.as_bytes())))
+                                }
+                                RemoteControlStreamEvent::ResyncRequired { .. } => {
+                                    ("resync_required", None)
+                                }
+                                RemoteControlStreamEvent::Heartbeat { .. } => ("heartbeat", None),
+                            };
+                            println!(
+                                "{}",
+                                json!({"event":"interface_watch","sequence":sequence,"kind":kind,"interface_id":interface_id})
+                            );
+                        }
+                        Ok(Err(error)) => return Err(Error::WatchRead(error)),
+                        Err(_) => break,
+                    }
+                }
             }
         }
         connection.close();

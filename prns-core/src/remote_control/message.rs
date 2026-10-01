@@ -1,6 +1,7 @@
 use crate::capabilities::power::PowerSnapshot;
 use crate::identity::{IdentityHash, IDENTITY_PUBLIC_KEY_LEN};
 use crate::interfaces::{InterfaceId, InterfaceMode, INTERFACE_ID_LEN};
+use crate::routing::links::channel::byte_stream::StreamId;
 use crate::wire::TRUNCATED_HASH_BYTE_LEN;
 
 use super::inventory::{
@@ -30,9 +31,9 @@ const MESSAGE_HEADER_ENCODED_LEN: usize = 2;
 const DESCRIPTION_COUNT_ENCODED_LEN: usize = 1;
 const PROTOCOL_ERROR_KIND_ENCODED_LEN: usize = 1;
 const PROTOCOL_ERROR_DETAIL_ENCODED_LEN: usize = 1;
-// V1 request kinds occupy the contiguous wire range 0x01..=0x1f. Unknown values are rejected
-// before a request can enter this typed set, so four bytes represent the complete domain.
-const REQUEST_KIND_BITMAP_LEN: usize = 4;
+// V1 request kinds occupy the contiguous wire range 0x01..=0x20. Unknown values are rejected
+// before a request can enter this typed set, so five bytes represent the complete domain.
+const REQUEST_KIND_BITMAP_LEN: usize = 5;
 pub const REMOTE_CONTROL_APP_MESSAGE_CAP: usize = 96;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemoteControlAppMessageError {
@@ -126,6 +127,7 @@ prns_macros::iterable_enum! {
         InventoryInterfaceDiscoveryGroups = 0x1D,
         ReplaceInterfaceDiscoveryGroups = 0x1E,
         AppMessage = 0x1F,
+        WatchInterfaces = 0x20,
     }
 }
 
@@ -154,6 +156,7 @@ impl RemoteControlRequestKind {
             Self::Describe
                 | Self::AnnounceSelf
                 | Self::AppMessage
+                | Self::WatchInterfaces
                 | Self::InventoryControllers
                 | Self::AuthorizeController
                 | Self::RevokeController
@@ -269,6 +272,8 @@ impl RemoteControlRequestKind {
                 REMOTE_CONTROL_APP_MESSAGE_CAP,
                 RemoteControlProtocolError::MAX_ENCODED_BODY_LEN,
             )),
+            Self::WatchInterfaces => MESSAGE_HEADER_ENCODED_LEN
+                .saturating_add(maximum(2, RemoteControlProtocolError::MAX_ENCODED_BODY_LEN)),
         }
     }
 }
@@ -320,6 +325,7 @@ prns_macros::iterable_enum! {
         InventoryInterfaceDiscoveryGroups = 0x1D,
         ReplaceInterfaceDiscoveryGroups = 0x1E,
         AppMessage = 0x1F,
+        WatchInterfaces = 0x20,
         ProtocolError = 0xFF,
     }
 }
@@ -396,6 +402,9 @@ pub enum RemoteControlRequest {
     Describe,
     AnnounceSelf,
     AppMessage(RemoteControlAppMessage),
+    WatchInterfaces {
+        stream_id: StreamId,
+    },
     InventoryInterfaces {
         page: RemoteControlInterfacePage,
     },
@@ -500,6 +509,7 @@ impl RemoteControlRequest {
             Self::Describe => RemoteControlRequestKind::Describe,
             Self::AnnounceSelf => RemoteControlRequestKind::AnnounceSelf,
             Self::AppMessage(_) => RemoteControlRequestKind::AppMessage,
+            Self::WatchInterfaces { .. } => RemoteControlRequestKind::WatchInterfaces,
             Self::InventoryInterfaces { .. } => RemoteControlRequestKind::InventoryInterfaces,
             Self::SetInterfacePower { .. } => RemoteControlRequestKind::SetInterfacePower,
             Self::SetInterfaceMode { .. } => RemoteControlRequestKind::SetInterfaceMode,
@@ -556,6 +566,7 @@ impl RemoteControlRequest {
             | Self::WakeRadios
             | Self::InspectWifiTransaction => MESSAGE_HEADER_ENCODED_LEN,
             Self::AppMessage(payload) => MESSAGE_HEADER_ENCODED_LEN.saturating_add(payload.len()),
+            Self::WatchInterfaces { .. } => MESSAGE_HEADER_ENCODED_LEN.saturating_add(2),
             Self::SetSystemPower { .. }
             | Self::SetGnssPower { .. }
             | Self::SetDisplayVisibility { .. }
@@ -632,6 +643,9 @@ impl RemoteControlRequest {
             RemoteControlRequestKind::AppMessage => RemoteControlAppMessage::from_slice(body)
                 .map(Self::AppMessage)
                 .map_err(|_| RemoteControlRequestParseError::Malformed),
+            RemoteControlRequestKind::WatchInterfaces => parse_stream_id(body)
+                .map(|stream_id| Self::WatchInterfaces { stream_id })
+                .ok_or(RemoteControlRequestParseError::Malformed),
             RemoteControlRequestKind::InventoryInterfaces => {
                 RemoteControlInterfacePage::parse(body)
                     .map(|page| Self::InventoryInterfaces { page })
@@ -720,6 +734,9 @@ impl RemoteControlRequest {
             | Self::WakeRadios => {}
             Self::InspectWifiTransaction => {}
             Self::AppMessage(payload) => body.copy_from_slice(payload.as_slice()),
+            Self::WatchInterfaces { stream_id } => {
+                body.copy_from_slice(&stream_id.get().to_be_bytes())
+            }
             Self::InventoryInterfaces { page } => page.write_into(body)?,
             Self::InventoryControllers { page } => page.write_into(body)?,
             Self::SetInterfacePower { id, power } => {
@@ -1431,7 +1448,13 @@ impl RemoteControlRequestSet {
         let mut supported = Self::empty();
         for kind in RemoteControlRequestKind::ALL {
             // Application payloads always require an explicit grant, even for an operator.
-            if !kind.requires_administrator() && kind != RemoteControlRequestKind::AppMessage {
+            if !kind.requires_administrator()
+                && !matches!(
+                    kind,
+                    RemoteControlRequestKind::AppMessage
+                        | RemoteControlRequestKind::WatchInterfaces
+                )
+            {
                 let _inserted = supported.insert(kind);
             }
         }
@@ -1607,6 +1630,7 @@ pub enum RemoteControlResponse {
     Describe(RemoteControlDescription),
     AnnounceSelf(RemoteControlAnnounceSelfOutcome),
     AppMessage(RemoteControlAppMessage),
+    WatchInterfaces { stream_id: StreamId },
     InventoryInterfaces(RemoteControlInterfaceInventory),
     SetInterfacePower(RemoteControlPowerOutcome),
     SetInterfaceMode(RemoteControlModeOutcome),
@@ -1691,6 +1715,7 @@ impl RemoteControlResponse {
             Self::Describe(_) => RemoteControlResponseKind::Describe,
             Self::AnnounceSelf(_) => RemoteControlResponseKind::AnnounceSelf,
             Self::AppMessage(_) => RemoteControlResponseKind::AppMessage,
+            Self::WatchInterfaces { .. } => RemoteControlResponseKind::WatchInterfaces,
             Self::InventoryInterfaces(_) => RemoteControlResponseKind::InventoryInterfaces,
             Self::SetInterfacePower(_) => RemoteControlResponseKind::SetInterfacePower,
             Self::SetInterfaceMode(_) => RemoteControlResponseKind::SetInterfaceMode,
@@ -1737,6 +1762,7 @@ impl RemoteControlResponse {
             }
             Self::AnnounceSelf(outcome) => outcome.encoded_len(),
             Self::AppMessage(payload) => payload.len(),
+            Self::WatchInterfaces { .. } => 2,
             Self::InventoryInterfaces(inventory) => inventory.encoded_body_len(),
             Self::SetInterfacePower(_) => RemoteControlPowerOutcome::ENCODED_LEN,
             Self::SetInterfaceMode(_) => RemoteControlModeOutcome::ENCODED_LEN,
@@ -1792,6 +1818,9 @@ impl RemoteControlResponse {
             RemoteControlResponseKind::AppMessage => RemoteControlAppMessage::from_slice(body)
                 .map(Self::AppMessage)
                 .map_err(|_| RemoteControlResponseParseError::Malformed),
+            RemoteControlResponseKind::WatchInterfaces => parse_stream_id(body)
+                .map(|stream_id| Self::WatchInterfaces { stream_id })
+                .ok_or(RemoteControlResponseParseError::Malformed),
             RemoteControlResponseKind::InventoryInterfaces => {
                 RemoteControlInterfaceInventory::parse_body(body).map(Self::InventoryInterfaces)
             }
@@ -1909,6 +1938,9 @@ impl RemoteControlResponse {
             Self::Describe(description) => write_description(description, body),
             Self::AnnounceSelf(outcome) => write_announce_self_outcome(*outcome, body),
             Self::AppMessage(payload) => body.copy_from_slice(payload.as_slice()),
+            Self::WatchInterfaces { stream_id } => {
+                body.copy_from_slice(&stream_id.get().to_be_bytes())
+            }
             Self::InventoryInterfaces(inventory) => inventory.write_body(body)?,
             Self::SetInterfacePower(outcome) => write_power_outcome(*outcome, body),
             Self::SetInterfaceMode(outcome) => write_mode_outcome(*outcome, body),
@@ -1948,6 +1980,11 @@ impl RemoteControlResponse {
         }
         Ok(encoded_len)
     }
+}
+
+fn parse_stream_id(body: &[u8]) -> Option<StreamId> {
+    let bytes: [u8; 2] = body.try_into().ok()?;
+    StreamId::new(u16::from_be_bytes(bytes)).ok()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
