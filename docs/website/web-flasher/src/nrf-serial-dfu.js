@@ -210,7 +210,7 @@ async function requestManagedBootloader(
     if (error?.name === "NotFoundError") {
       throw new FlashBridgeError(
         "permission_denied",
-        "No exact Personal Hopspot WebUSB device was selected.",
+        "No exact Personal Hopspot WebUSB device was selected. If the picker is empty, Hopspot may not have started its USB interface; use manual recovery to expose the stock bootloader.",
         { cause: error },
       );
     }

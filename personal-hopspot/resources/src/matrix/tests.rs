@@ -116,7 +116,7 @@ fn canonical_matrix_has_all_unique_profile_bound_targets() -> Result<(), Box<dyn
                 "t1000-e",
                 "t1000-e",
                 "thumbv7em-none-eabihf",
-                "thumbv7em-rust-lld",
+                "thumbv7em-serial-dfu-rust-lld",
                 TargetPlatform::Nrf52840
             ),
             (

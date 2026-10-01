@@ -173,3 +173,25 @@ The build and automated checks above preceded the physical round trip. The
 tracker is now restored to Meshtastic. Software recovery passed physical
 qualification; the held-button route still needs physical qualification. The
 new firmware and site changes have not been published.
+
+### Packaged developer build failure
+
+The first local developer flasher built a different application from the
+physically qualified UF2. After its serial DFU installation on 2026-10-01,
+Hopspot did not enumerate on USB and the recovery picker was empty. The tracker
+returned to the stock bootloader after the user followed a held-button recovery
+prompt. Its readback matched all 484,184 installed application bytes at
+`0x27000`, SHA-256
+`b9c68540040d65369215c8df3cd0d5462bc1589910aae954a5069284b887c057`.
+Reinstalling the earlier qualified UF2 restored the exact Hopspot USB identity
+without another physical action. The failing local candidate was withdrawn.
+
+The packaged build had applied additional Thumb compiler settings:
+`--icf=all`, machine outlining, and the compact SHA-2 backend. The developer UF2
+recipe did not apply them. Nordic serial DFU builds now use the explicit
+`thumbv7em-serial-dfu-rust-lld` adapter with baseline compiler settings, matching
+the developer UF2 recipe. Resource reports select that same adapter so their
+compiler evidence describes the transferred image. The failure has not been traced to one
+compiler setting; the developer version metadata also differed. A replacement candidate
+must pass both installation and recovery through the full flasher page before
+handoff; the earlier UF2 result alone does not qualify a rebuilt DFU image.
