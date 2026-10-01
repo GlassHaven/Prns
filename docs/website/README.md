@@ -59,6 +59,13 @@ The tests verify canonical benchmark-results inclusion and link rewriting,
 generated benchmark routes, the flash catalog contract, and the platform
 claims the site is allowed to make.
 
+The T1000-E flasher also offers **Switch firmware → Enter recovery mode**
+without preparing an install. It requests the stock UF2 drive from compatible
+Hopspot firmware, reports acknowledgement without claiming drive enumeration,
+and provides manual recovery and Meshtastic restore instructions. See
+[T1000-E recovery](../../personal-hopspot/embedded/nrf52840/RECOVERY.md) for
+firmware compatibility, the USB contract, and physical qualification limits.
+
 ## Static production build
 
 The production site uses Dioxus fullstack static-site generation. The server

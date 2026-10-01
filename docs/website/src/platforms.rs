@@ -106,6 +106,16 @@ pub enum PreparationProfile {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub struct NrfManagedApplicationIdentity {
+    pub vendor_id: u16,
+    pub product_id: u16,
+    pub manufacturer: &'static str,
+    pub product: &'static str,
+    pub serial_number: &'static str,
+    pub interface_number: u8,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BoardFlashTarget {
     EspSerial {
         expected_chip: &'static str,
@@ -122,6 +132,7 @@ pub enum BoardFlashTarget {
         recovery_mount_label: &'static str,
         recovery_board_id_match_kind: Uf2BoardIdMatchKind,
         recovery_board_id: &'static str,
+        managed_application: NrfManagedApplicationIdentity,
     },
 }
 

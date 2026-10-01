@@ -361,6 +361,46 @@ function validUsbIdentity(value, vendorId, productId) {
     && value.productId === productId;
 }
 
+const BOOTLOADER_ENTRY_REQUEST = 0x50;
+const UF2_HAND_OFF_REQUEST = 0x55;
+const PRNS_CONTROL_VALUE = 0x5052;
+const PRNS_CONTROL_INDEX = 0x4e53;
+
+function validManagedApplication(managed, request) {
+  return Boolean(managed)
+    && typeof managed === "object"
+    && !Array.isArray(managed)
+    && Object.keys(managed).sort().join(",")
+      === "index,interfaceNumber,manufacturer,product,request,serialNumber,usb,value"
+    && validUsbIdentity(managed.usb, 0x1209, 0x0001)
+    && managed.manufacturer === "Stay Personal"
+    && managed.product === "Personal Hopspot (T1000-E)"
+    && managed.serialNumber === "PERSONAL-RNS-T1000E-HOP"
+    && managed.interfaceNumber === 0
+    && managed.request === request
+    && managed.value === PRNS_CONTROL_VALUE
+    && managed.index === PRNS_CONTROL_INDEX;
+}
+
+export function validateUf2HandOffRequest(request) {
+  if (!request || request.schema !== BRIDGE_SCHEMA) {
+    throw new FlashBridgeError("invalid_request", "The hand-off request schema is unsupported.");
+  }
+  if (request.boardSlug !== "t1000-e") {
+    throw new FlashBridgeError("invalid_request", "Recovery entry supports only T1000-E.");
+  }
+  if (
+    Object.keys(request).sort().join(",") !== "boardSlug,managedApplication,schema"
+    || !validManagedApplication(request.managedApplication, UF2_HAND_OFF_REQUEST)
+  ) {
+    throw new FlashBridgeError(
+      "invalid_request",
+      "The UF2 hand-off identity is not the exact Personal Hopspot contract.",
+    );
+  }
+  return request;
+}
+
 function validNrfSerialDfu(value, filters) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   if (
@@ -372,22 +412,7 @@ function validNrfSerialDfu(value, filters) {
     || value.transferBaudRate !== 115_200
   ) return false;
 
-  const managed = value.managedApplication;
-  if (
-    !managed
-    || typeof managed !== "object"
-    || Array.isArray(managed)
-    || Object.keys(managed).sort().join(",")
-      !== "index,interfaceNumber,manufacturer,product,request,serialNumber,usb,value"
-    || !validUsbIdentity(managed.usb, 0x1209, 0x0001)
-    || managed.manufacturer !== "Stay Personal"
-    || managed.product !== "Personal Hopspot (T1000-E)"
-    || managed.serialNumber !== "PERSONAL-RNS-T1000E-HOP"
-    || managed.interfaceNumber !== 0
-    || managed.request !== 0x50
-    || managed.value !== 0x5052
-    || managed.index !== 0x4e53
-  ) return false;
+  if (!validManagedApplication(value.managedApplication, BOOTLOADER_ENTRY_REQUEST)) return false;
 
   const compatibility = value.compatibility;
   if (

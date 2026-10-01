@@ -1,4 +1,20 @@
 use personal_rns::usb_auto::WebUsbBootloaderEntry;
+#[cfg(feature = "board-t1000e")]
+use personal_rns::usb_auto::WebUsbBootloaderMode;
+
+#[cfg(feature = "board-t1000e")]
+pub(crate) fn enter_t1000e_bootloader(mode: WebUsbBootloaderMode) -> ! {
+    const ADAFRUIT_SERIAL_ONLY_DFU_GPREGRET: u8 = 0x4e;
+    const ADAFRUIT_UF2_DFU_GPREGRET: u8 = 0x57;
+    let magic = match mode {
+        WebUsbBootloaderMode::PrnsFlasher => ADAFRUIT_SERIAL_ONLY_DFU_GPREGRET,
+        WebUsbBootloaderMode::Uf2HandOff => ADAFRUIT_UF2_DFU_GPREGRET,
+    };
+    embassy_nrf::pac::POWER
+        .gpregret()
+        .write(|register| register.set_gpregret(magic));
+    cortex_m::peripheral::SCB::sys_reset()
+}
 
 #[cfg(any(
     feature = "board-t096",
@@ -9,78 +25,46 @@ use personal_rns::usb_auto::WebUsbBootloaderEntry;
     feature = "board-rak4631"
 ))]
 mod request {
-    use core::sync::atomic::{AtomicBool, Ordering};
-
+    use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+    use embassy_sync::signal::Signal;
     use embassy_time::{Duration, Timer};
+    use personal_rns::usb_auto::WebUsbBootloaderMode;
 
-    const REQUEST_POLL_INTERVAL: Duration = Duration::from_millis(25);
     const CONTROL_RESPONSE_GRACE_PERIOD: Duration = Duration::from_millis(100);
 
-    enum ResetPreparation {
-        Ready,
-        #[cfg(any(
-            feature = "board-t096",
-            feature = "board-wio-tracker-l1",
-            feature = "board-mesh-pocket",
-            feature = "board-muzi-base-duo",
-            feature = "board-rak4631"
-        ))]
-        Rejected,
-    }
+    static REQUESTED: Signal<CriticalSectionRawMutex, WebUsbBootloaderMode> = Signal::new();
 
-    static REQUESTED: AtomicBool = AtomicBool::new(false);
-
-    pub fn request() {
-        REQUESTED.store(true, Ordering::SeqCst);
-    }
-
-    pub async fn wait() -> ! {
-        loop {
-            if REQUESTED.swap(false, Ordering::SeqCst) {
-                Timer::after(CONTROL_RESPONSE_GRACE_PERIOD).await;
-                match prepare_bootloader_reset() {
-                    ResetPreparation::Ready => cortex_m::peripheral::SCB::sys_reset(),
-                    #[cfg(any(
-                        feature = "board-t096",
-                        feature = "board-wio-tracker-l1",
-                        feature = "board-mesh-pocket",
-                        feature = "board-muzi-base-duo",
-                        feature = "board-rak4631"
-                    ))]
-                    ResetPreparation::Rejected => {}
-                }
-            }
-            Timer::after(REQUEST_POLL_INTERVAL).await;
-        }
+    pub fn request(mode: WebUsbBootloaderMode) {
+        REQUESTED.signal(mode);
     }
 
     #[cfg(feature = "board-t1000e")]
-    fn prepare_bootloader_reset() -> ResetPreparation {
-        const ADAFRUIT_SERIAL_ONLY_DFU_GPREGRET: u8 = 0x4e;
-        embassy_nrf::pac::POWER
-            .gpregret()
-            .write(|register| register.set_gpregret(ADAFRUIT_SERIAL_ONLY_DFU_GPREGRET));
-        ResetPreparation::Ready
+    pub async fn wait() -> ! {
+        let mode = REQUESTED.wait().await;
+        Timer::after(CONTROL_RESPONSE_GRACE_PERIOD).await;
+        super::enter_t1000e_bootloader(mode)
     }
 
-    #[cfg(any(
-        feature = "board-t096",
-        feature = "board-wio-tracker-l1",
-        feature = "board-mesh-pocket",
-        feature = "board-muzi-base-duo",
-        feature = "board-rak4631"
-    ))]
-    fn prepare_bootloader_reset() -> ResetPreparation {
+    #[cfg(not(feature = "board-t1000e"))]
+    pub async fn wait() -> ! {
+        loop {
+            let _mode = REQUESTED.wait().await;
+            Timer::after(CONTROL_RESPONSE_GRACE_PERIOD).await;
+            if prepare_bootloader_reset().is_ok() {
+                cortex_m::peripheral::SCB::sys_reset();
+            }
+        }
+    }
+
+    #[cfg(not(feature = "board-t1000e"))]
+    fn prepare_bootloader_reset() -> Result<(), nrf_softdevice::RawError> {
         const ADAFRUIT_UF2_DFU_GPREGRET: u32 = 0x57;
         // SAFETY: The enabled S140 SoftDevice owns POWER. This synchronous SVC is the Nordic API
         // for setting GPREGRET while the SoftDevice is active; register 0 and the one-byte UF2
         // bootloader request are valid inputs.
         let result =
             unsafe { nrf_softdevice::raw::sd_power_gpregret_set(0, ADAFRUIT_UF2_DFU_GPREGRET) };
-        match nrf_softdevice::RawError::convert(result) {
-            Ok(()) => ResetPreparation::Ready,
-            Err(_) => ResetPreparation::Rejected,
-        }
+        nrf_softdevice::RawError::convert(result)
     }
 }
 

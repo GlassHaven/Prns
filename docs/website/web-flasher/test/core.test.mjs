@@ -13,6 +13,7 @@ import {
   recoveryGuidance,
   sha256Hex,
   validateUf2Artifact,
+  validateUf2HandOffRequest,
   validateRequest,
 } from "../src/core.js";
 import { testingContract } from "../src/contract.js";
@@ -111,6 +112,33 @@ test("ESP serial filters are explicit, bounded, and unique", () => {
     const value = request();
     value.serialFilters = serialFilters;
     assert.throws(() => validateRequest(value), /serial device filter/);
+  }
+});
+
+test("UF2 hand-off request is the exact Personal Hopspot identity with the hand-off verb", () => {
+  const handOff = () => ({
+    schema: 1,
+    boardSlug: "t1000-e",
+    managedApplication: { ...nrfRequest().nrfSerialDfu.managedApplication, request: 0x55 },
+  });
+  assert.equal(validateUf2HandOffRequest(handOff()).boardSlug, "t1000-e");
+
+  for (const mutate of [
+    (candidate) => { candidate.schema = 2; },
+    (candidate) => { candidate.boardSlug = "T1000 E"; },
+    (candidate) => { candidate.boardSlug = "t-echo"; },
+    (candidate) => { candidate.parts = []; },
+    (candidate) => { candidate.managedApplication.request = 0x50; },
+    (candidate) => { candidate.managedApplication.value = 0x5053; },
+    (candidate) => { candidate.managedApplication.product = "T1000-E"; },
+    (candidate) => { delete candidate.managedApplication.serialNumber; },
+  ]) {
+    const candidate = handOff();
+    mutate(candidate);
+    assert.throws(
+      () => validateUf2HandOffRequest(candidate),
+      /unsupported|supports only T1000-E|invalid|exact Personal Hopspot/,
+    );
   }
 });
 

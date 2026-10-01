@@ -52,6 +52,8 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
     let mut web_usb = use_signal(|| WebUsbCapability::Checking);
     let mut nrf_entry = use_signal(|| NrfSerialDfuEntry::ManagedApplication);
     let mut nrf_recovery = use_signal(|| false);
+    let mut hand_off_active = use_signal(|| false);
+    let mut hand_off_status = use_signal(String::new);
     let mut uf2_identity = use_signal(|| None::<prns_flash_manifest::Uf2BootloaderIdentity>);
     let mut uf2_identity_status = use_signal(|| {
         "Select INFO_UF2.TXT from the mounted bootloader drive to detect its SoftDevice foundation."
@@ -96,7 +98,7 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
         }
     });
 
-    let busy = preparation_active() || bridge::is_busy(phase());
+    let busy = preparation_active() || hand_off_active() || bridge::is_busy(phase());
     let device_operation_active = busy && !preparation_active();
     let nrf_recovery_selected = is_nrf && nrf_recovery();
     let direct_serial_selected = flash_target.uses_web_serial() && !nrf_recovery_selected;
@@ -122,6 +124,14 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
             ..
         } if nrf_recovery_selected => Some(recovery_mount_label),
         _ => None,
+    };
+    let nrf_hand_off = match flash_target {
+        BoardFlashTarget::NrfSerialDfu {
+            recovery_mount_label,
+            managed_application,
+            ..
+        } => Some((recovery_mount_label, managed_application)),
+        BoardFlashTarget::EspSerial { .. } | BoardFlashTarget::Uf2MassStorage { .. } => None,
     };
     let destructive_action_permitted = destructive_confirmation().permits(install_mode());
     let can_prepare = confirmed()
@@ -393,6 +403,60 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
                                 strong { class: "block text-paper", "Use recovery UF2 fallback" }
                                 span { class: "mt-1 block text-xs text-mid",
                                     "Keeps the verified recovery route available without weakening or silently replacing direct DFU."
+                                }
+                            }
+                        }
+                        if let Some((recovery_mount_label, managed_application)) = nrf_hand_off {
+                            div { class: "mt-3 rounded-lg border border-line/60 bg-surface/40 p-4 text-sm text-soft",
+                                strong { class: "block text-paper", "Switch firmware" }
+                                p { class: "mt-1 text-xs text-mid",
+                                    "Running Personal Hopspot? Enter recovery mode to make the {recovery_mount_label} drive available, then install firmware made for the T1000-E. This button does not erase or install firmware and does not require preparing a Hopspot release. It requires a Hopspot release with recovery entry support."
+                                }
+                                if web_usb() == WebUsbCapability::Unavailable {
+                                    p { class: "mt-1 text-xs text-mid",
+                                        "Use current desktop Chrome or Edge for the recovery button, or follow the manual instructions below."
+                                    }
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: "flash-primary-action mt-3",
+                                    disabled: busy || hand_off_active() || web_usb() != WebUsbCapability::Supported,
+                                    onclick: {
+                                        let event_state = state.clone();
+                                        move |_| {
+                                            invalidate_preparation(event_state.clone(), "Recovery entry selected. Prepare a release again before installing Hopspot.");
+                                            let request = bridge::Uf2HandOffRequest::new(target.slug, managed_application);
+                                            hand_off_active.set(true);
+                                            hand_off_status.set("Select your Personal Hopspot tracker in the USB picker…".to_string());
+                                            spawn(async move {
+                                                let outcome = bridge::hand_off_to_uf2(request).await;
+                                                hand_off_status.set(match outcome {
+                                                    Ok(()) => format!("Recovery request accepted. Look for the {recovery_mount_label} drive and confirm its INFO_UF2.TXT identifies the T1000-E before copying firmware."),
+                                                    Err(message) => message,
+                                                });
+                                                hand_off_active.set(false);
+                                            });
+                                        }
+                                    },
+                                    "Enter recovery mode"
+                                }
+                                if !hand_off_status().is_empty() {
+                                    p { class: "mt-2 text-xs text-mid", role: "status", "aria-live": "polite", "{hand_off_status}" }
+                                }
+                                details { class: "mt-3 text-xs text-mid",
+                                    summary { class: "cursor-pointer text-paper", "Manual recovery and returning to Meshtastic" }
+                                    p { class: "mt-2",
+                                        "On Hopspot firmware with startup recovery: leave the USB end connected to your computer, remove the magnetic connector, hold the upper button near the lanyard, and reconnect once. Keep holding through the hard reset and startup until the drive appears (allow at least 6 seconds). The startup check runs before storage and radio initialization."
+                                    }
+                                    p { class: "mt-2",
+                                        "For older firmware or an unresponsive app: hold the same button and quickly connect, disconnect, and reconnect the magnetic connector. Seeed notes that this timing can take several attempts. Confirm the drive appears; a green light alone does not confirm recovery."
+                                    }
+                                    p { class: "mt-2",
+                                        "To return to Meshtastic, follow its nRF52 erase and install guide, use the erase utility matching the SoftDevice version in INFO_UF2.TXT, then install the T1000-E UF2. Erasing removes device settings."
+                                    }
+                                    a { href: "https://meshtastic.org/docs/getting-started/flashing-firmware/nrf52/nrf52-erase/", target: "_blank", rel: "noopener noreferrer", class: "mt-2 inline-block underline", "Meshtastic erase and install guide" }
+                                    span { " · " }
+                                    a { href: "https://wiki.seeedstudio.com/sensecap_t1000_e/", target: "_blank", rel: "noopener noreferrer", class: "underline", "Seeed button and recovery guide" }
                                 }
                             }
                         }
@@ -788,7 +852,7 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
                     },
                     "{action_label}"
                 }
-                if busy {
+                if busy && !hand_off_active() {
                     if phase() == BridgePhase::AwaitingBootloaderPort {
                         button {
                             r#type: "button",

@@ -11,6 +11,7 @@ import {
   safeFailure,
   sha256Hex,
   validateUf2Artifact,
+  validateUf2HandOffRequest,
   validateRequest,
 } from "./core.js";
 import { BRIDGE_SCHEMA, BridgeEventSequence, RESPONSE_LIMITS } from "./contract.js";
@@ -18,6 +19,7 @@ import {
   cancelNrfBootloaderSelection,
   continueNrfBootloaderSelection as continuePendingNrfBootloaderSelection,
   createNrfDfuSession,
+  requestUf2HandOff,
   runNrfSerialDfu,
 } from "./nrf-serial-dfu.js";
 
@@ -624,6 +626,36 @@ export function clearPrepared() {
 
 export function continueNrfBootloaderSelection() {
   return continuePendingNrfBootloaderSelection();
+}
+
+export async function handOffToUf2(request, dependencies = {}) {
+  if (active) {
+    return { status: "error", code: "busy", message: "A device operation is already active." };
+  }
+  const environment = dependencies.environment ?? globalThis;
+  active = true;
+  preparationGeneration += 1;
+  discardPreparingRequest();
+  discardPrepared();
+  cancelRequested = false;
+  try {
+    assertHostedEnvironment(environment);
+    validateUf2HandOffRequest(request);
+    const usb = dependencies.usb ?? environment.navigator?.usb;
+    if (!usb?.requestDevice) {
+      throw new FlashBridgeError(
+        "unsupported_browser",
+        "Recovery entry requires WebUSB. Use current desktop Chrome or Edge, or the manual instructions.",
+      );
+    }
+    await requestUf2HandOff(usb, request.managedApplication, () => cancelRequested);
+    return { status: "requested" };
+  } catch (error) {
+    const failure = safeFailure(error);
+    return { status: "error", code: failure.code, message: failure.message };
+  } finally {
+    active = false;
+  }
 }
 
 async function flashNrfSerialDfu(events, dependencies, environment) {

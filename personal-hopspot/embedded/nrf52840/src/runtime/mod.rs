@@ -31,7 +31,7 @@ mod bluetooth_gatt_server;
     feature = "board-muzi-base-duo",
     feature = "board-rak4631"
 ))]
-mod bootloader_entry;
+pub(crate) mod bootloader_entry;
 mod entropy;
 #[cfg(any(feature = "board-t-echo", feature = "board-mesh-pocket"))]
 mod firmware;

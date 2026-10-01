@@ -10,7 +10,7 @@ use ::embassy_usb::{
 };
 use prns_core::interfaces::usb_auto::{
     BOOTLOADER_ENTRY_CONTROL_INDEX, BOOTLOADER_ENTRY_CONTROL_REQUEST,
-    BOOTLOADER_ENTRY_CONTROL_VALUE,
+    BOOTLOADER_ENTRY_CONTROL_VALUE, UF2_HAND_OFF_CONTROL_REQUEST,
 };
 
 pub const WEBUSB_AUTO_PACKET_SIZE: u16 = 64;
@@ -47,10 +47,19 @@ impl WebUsbAutoState {
     }
 }
 
+/// The bootloader transport requested by a validated USB control transfer.
+#[derive(Debug, PartialEq, Eq)]
+pub enum WebUsbBootloaderMode {
+    /// Enters the transport used by the Hopspot updater.
+    PrnsFlasher,
+    /// Makes the stock UF2 drive available for switching firmware.
+    Uf2HandOff,
+}
+
 #[derive(Clone, Copy)]
 pub enum WebUsbBootloaderEntry {
     Unsupported,
-    Supported { request: fn() },
+    Supported { request: fn(WebUsbBootloaderMode) },
 }
 
 struct WebUsbAutoControl {
@@ -64,28 +73,33 @@ impl Handler for WebUsbAutoControl {
     }
 
     fn control_out(&mut self, request: Request, data: &[u8]) -> Option<OutResponse> {
-        if !is_bootloader_entry_request(request, data) {
-            return None;
-        }
+        let mode = bootloader_mode(request, data)?;
         match self.bootloader_entry {
             WebUsbBootloaderEntry::Unsupported => Some(OutResponse::Rejected),
             WebUsbBootloaderEntry::Supported { request } => {
-                request();
+                request(mode);
                 Some(OutResponse::Accepted)
             }
         }
     }
 }
 
-fn is_bootloader_entry_request(request: Request, data: &[u8]) -> bool {
-    request.direction == Direction::Out
+fn bootloader_mode(request: Request, data: &[u8]) -> Option<WebUsbBootloaderMode> {
+    let carries_prns_signature = request.direction == Direction::Out
         && request.request_type == RequestType::Vendor
         && request.recipient == Recipient::Device
-        && request.request == BOOTLOADER_ENTRY_CONTROL_REQUEST
         && request.value == BOOTLOADER_ENTRY_CONTROL_VALUE
         && request.index == BOOTLOADER_ENTRY_CONTROL_INDEX
         && request.length == 0
-        && data.is_empty()
+        && data.is_empty();
+    if !carries_prns_signature {
+        return None;
+    }
+    match request.request {
+        BOOTLOADER_ENTRY_CONTROL_REQUEST => Some(WebUsbBootloaderMode::PrnsFlasher),
+        UF2_HAND_OFF_CONTROL_REQUEST => Some(WebUsbBootloaderMode::Uf2HandOff),
+        _ => None,
+    }
 }
 
 pub struct WebUsbAutoClass<'d, D: UsbDriver<'d>> {
@@ -222,12 +236,57 @@ mod tests {
     #[test]
     fn bootloader_entry_requires_the_exact_control_contract() {
         let request = bootloader_entry_request();
-        assert!(is_bootloader_entry_request(request, &[]));
+        assert_eq!(
+            bootloader_mode(request, &[]),
+            Some(WebUsbBootloaderMode::PrnsFlasher)
+        );
 
         let mut wrong_value = request;
         wrong_value.value ^= 1;
-        assert!(!is_bootloader_entry_request(wrong_value, &[]));
-        assert!(!is_bootloader_entry_request(request, &[0]));
+        assert_eq!(bootloader_mode(wrong_value, &[]), None);
+        assert_eq!(bootloader_mode(request, &[0]), None);
+
+        let mut unknown_verb = request;
+        unknown_verb.request = 0x51;
+        assert_eq!(bootloader_mode(unknown_verb, &[]), None);
+    }
+
+    #[test]
+    fn uf2_hand_off_shares_the_signature_and_differs_only_in_verb() {
+        let mut request = bootloader_entry_request();
+        request.request = UF2_HAND_OFF_CONTROL_REQUEST;
+        assert_eq!(
+            bootloader_mode(request, &[]),
+            Some(WebUsbBootloaderMode::Uf2HandOff)
+        );
+
+        let mut wrong_index = request;
+        wrong_index.index ^= 1;
+        assert_eq!(bootloader_mode(wrong_index, &[]), None);
+    }
+
+    #[test]
+    fn neither_reset_mode_accepts_non_vendor_or_nonempty_control_transfers() {
+        for verb in [
+            BOOTLOADER_ENTRY_CONTROL_REQUEST,
+            UF2_HAND_OFF_CONTROL_REQUEST,
+        ] {
+            let mut request = bootloader_entry_request();
+            request.request = verb;
+            let mut invalid = request;
+            invalid.direction = Direction::In;
+            assert_eq!(bootloader_mode(invalid, &[]), None);
+            invalid = request;
+            invalid.request_type = RequestType::Standard;
+            assert_eq!(bootloader_mode(invalid, &[]), None);
+            invalid = request;
+            invalid.recipient = Recipient::Interface;
+            assert_eq!(bootloader_mode(invalid, &[]), None);
+            invalid = request;
+            invalid.length = 1;
+            assert_eq!(bootloader_mode(invalid, &[]), None);
+            assert_eq!(bootloader_mode(request, &[0]), None);
+        }
     }
 
     #[test]

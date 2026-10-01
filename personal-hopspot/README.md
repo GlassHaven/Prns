@@ -1,5 +1,9 @@
 # Personal Hopspot
 
+For T1000-E users switching back to Meshtastic or another application, see
+[firmware recovery](embedded/nrf52840/RECOVERY.md). Compatible Hopspot firmware
+supports recovery entry from the web flasher and a held-button startup path.
+
 Personal Hopspot is one Reticulum-based node application across desktop, mobile,
 and embedded platforms. It provides a status and control surface where the
 platform has a display or interactive shell.

@@ -1,3 +1,8 @@
+use prns_core::interfaces::usb_auto::{
+    BOOTLOADER_ENTRY_CONTROL_INDEX, BOOTLOADER_ENTRY_CONTROL_REQUEST,
+    BOOTLOADER_ENTRY_CONTROL_VALUE, UF2_HAND_OFF_CONTROL_REQUEST,
+};
+
 use crate::{
     FlashPart, FlashPartKind, NrfDfuApplicationVersion, NrfDfuBankLayout, ReleaseChannel,
     SourceArchiveIdentity, TargetManifest, Transport,
@@ -358,6 +363,42 @@ impl UsbVidPid {
 
     pub const fn product_id(self) -> u16 {
         self.product_id
+    }
+}
+
+/// A PRNS vendor control request with fixed signature values and no data stage.
+#[derive(Clone, Copy)]
+pub struct WebUsbControlRequest {
+    request: u8,
+    value: u16,
+    index: u16,
+}
+
+impl WebUsbControlRequest {
+    /// Enters the transport used by the Hopspot updater.
+    pub const BOOTLOADER_ENTRY: Self = Self {
+        request: BOOTLOADER_ENTRY_CONTROL_REQUEST,
+        value: BOOTLOADER_ENTRY_CONTROL_VALUE,
+        index: BOOTLOADER_ENTRY_CONTROL_INDEX,
+    };
+
+    /// Requests the stock bootloader's UF2 drive for switching firmware.
+    pub const UF2_HAND_OFF: Self = Self {
+        request: UF2_HAND_OFF_CONTROL_REQUEST,
+        value: BOOTLOADER_ENTRY_CONTROL_VALUE,
+        index: BOOTLOADER_ENTRY_CONTROL_INDEX,
+    };
+
+    pub const fn request(self) -> u8 {
+        self.request
+    }
+
+    pub const fn value(self) -> u16 {
+        self.value
+    }
+
+    pub const fn index(self) -> u16 {
+        self.index
     }
 }
 
