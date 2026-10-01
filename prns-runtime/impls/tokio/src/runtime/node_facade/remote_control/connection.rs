@@ -14,9 +14,9 @@ use crate::wire::DestinationHash;
 use prns_core::capabilities::power::PowerSnapshot;
 use prns_core::interfaces::InterfaceMode;
 use prns_core::remote_control::{
-    RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome, RemoteControlBuildVersion,
-    RemoteControlControllerIdentity, RemoteControlControllerInventory, RemoteControlControllerPage,
-    RemoteControlDescription, RemoteControlDiscoveryGroups,
+    RemoteControlAppMessage, RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome,
+    RemoteControlBuildVersion, RemoteControlControllerIdentity, RemoteControlControllerInventory,
+    RemoteControlControllerPage, RemoteControlDescription, RemoteControlDiscoveryGroups,
     RemoteControlDiscoveryGroupsInventoryOutcome, RemoteControlDiscoveryGroupsReplaceOutcome,
     RemoteControlDisplayAutoOff, RemoteControlDisplayVisibility, RemoteControlEspRadioMode,
     RemoteControlGnssPower, RemoteControlGroupOutcome, RemoteControlInterfaceConfigOutcome,
@@ -154,6 +154,18 @@ impl RemoteControlTargetHandle<'_> {
             .admit(RemoteControlAnnounceSelf::REQUEST.kind())?;
         self.remote_control
             .announce_self()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn app_message(
+        &self,
+        payload: RemoteControlAppMessage,
+    ) -> Result<(RemoteControlAppMessage, RttMillis), RemoteControlTargetOperationError> {
+        self.connection
+            .admit(crate::remote_control::RemoteControlRequestKind::AppMessage)?;
+        self.remote_control
+            .app_message(payload)
             .await
             .map_err(Into::into)
     }

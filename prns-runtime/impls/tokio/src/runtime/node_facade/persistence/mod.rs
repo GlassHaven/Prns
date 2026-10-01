@@ -170,7 +170,8 @@ impl PrnsNodeHandle {
     }
 }
 
-impl<St, R, F, S: StorageLayout, E: prns_core::entropy::EntropySource> PrnsNode<St, R, F, S, E>
+impl<St, R, F, S: StorageLayout, E: prns_core::entropy::EntropySource, C>
+    PrnsNode<St, R, F, S, E, C>
 where
     R: RequestEndpointSet<St>,
     F: FnMut(PrnsEvent<'_>, &St),

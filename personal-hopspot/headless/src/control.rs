@@ -6,9 +6,12 @@ use personal_rns::remote_control::RemoteControlControllerAuthority;
 #[derive(Debug, clap::Args)]
 pub struct ControlOptions {
     /// Authorized controller public identity (128 hex characters); repeat for more controllers.
-    /// Grants Describe and AnnounceSelf only. No value supplies no initial grants.
+    /// Grants read-only inspection and AnnounceSelf. No value supplies no initial grants.
     #[arg(long, value_parser = controller)]
     pub controller_public_key: Vec<RemoteControlControllerIdentity>,
+    /// Grants read-only inspection, AnnounceSelf and the bounded AppMessage probe.
+    #[arg(long, value_parser = controller)]
+    pub app_controller_public_key: Vec<RemoteControlControllerIdentity>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -22,6 +25,16 @@ pub enum Error {
 pub fn operator_requests() -> RemoteControlRequestSet {
     let mut requests = RemoteControlRequestSet::only(RemoteControlRequestKind::Describe);
     requests.insert(RemoteControlRequestKind::AnnounceSelf);
+    requests.insert(RemoteControlRequestKind::DescribeBuild);
+    requests.insert(RemoteControlRequestKind::InventoryInterfaces);
+    requests.insert(RemoteControlRequestKind::InventoryInterfaceConfig);
+    requests.insert(RemoteControlRequestKind::InventoryInterfacePeers);
+    requests
+}
+
+pub fn app_operator_requests() -> RemoteControlRequestSet {
+    let mut requests = operator_requests();
+    requests.insert(RemoteControlRequestKind::AppMessage);
     requests
 }
 
@@ -38,7 +51,7 @@ fn controller(value: &str) -> Result<RemoteControlControllerIdentity, hex::FromH
 
 impl ControlOptions {
     pub fn grants(&self) -> Result<Vec<RemoteControlControllerGrant>, Error> {
-        let grants = self
+        let mut grants = self
             .controller_public_key
             .iter()
             .map(|controller| {
@@ -50,6 +63,16 @@ impl ControlOptions {
                 .map_err(Error::Permissions)
             })
             .collect::<Result<Vec<_>, _>>()?;
+        for controller in &self.app_controller_public_key {
+            grants.push(
+                RemoteControlControllerGrant::new(
+                    *controller,
+                    RemoteControlControllerAuthority::Operator,
+                    app_operator_requests(),
+                )
+                .map_err(Error::Permissions)?,
+            );
+        }
         if !grants.is_empty() {
             RemoteControlControllerGrants::try_from(grants.as_slice()).map_err(Error::Grants)?;
         }
@@ -85,6 +108,15 @@ mod tests {
             RemoteControlControllerAuthority::Operator
         );
         assert_eq!(grants[0].effective_requests(), operator_requests());
+        assert!(!grants[0]
+            .effective_requests()
+            .supports(RemoteControlRequestKind::AppMessage));
+        let app = Cli::try_parse_from(["host", "--app-controller-public-key", &key]).unwrap();
+        let app_grants = app.control.grants().unwrap();
+        assert_eq!(app_grants[0].effective_requests(), app_operator_requests());
+        assert!(app_grants[0]
+            .effective_requests()
+            .supports(RemoteControlRequestKind::AppMessage));
         let duplicate = Cli::try_parse_from([
             "host",
             "--controller-public-key",

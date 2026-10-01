@@ -341,7 +341,11 @@ pub(super) async fn run_core<B: Esp32S3Board>(
     let remote_control_handle = REMOTE_CONTROL_COMMANDS.handle();
     let recipe = PrnsNodeRecipe {
         transport_identity: Some(transport_secret),
-        remote_control,
+        remote_control: personal_rns::runtime::RemoteControlNodeSetup::new(remote_control)
+            .with_controls(personal_rns::runtime::RemoteControlSupportedHost::new(
+                remote_control_handle,
+                remote_control::capabilities::<B>().requests(),
+            )),
         pre_configured_destinations: destinations.into_preconfigured_destinations(),
         app_state: remote_control_handle,
         storage: EngineStorageType::default(),

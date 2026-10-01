@@ -6,3 +6,4 @@ pub mod halow;
 pub mod auto_wifi;
 
 pub mod control;
+pub mod control_host;

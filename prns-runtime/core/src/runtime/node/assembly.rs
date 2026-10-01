@@ -34,12 +34,18 @@ use super::super::{
 };
 use super::recipe::{PreConfiguredDestination, PrnsNodeRecipe, ServeMyRequestEndpoints};
 
-pub struct AssembledNode<St, R, F, S>
-where
+pub struct AssembledNode<
+    St,
+    R,
+    F,
+    S,
+    Controls = super::super::remote_control::NoRemoteControlHostControls,
+> where
     S: StorageLayout,
 {
     pub engine: EngineState<S>,
     pub remote_control: AssembledRemoteControl,
+    pub controls: Controls,
     pub state: St,
     pub on_event: F,
     pub request_endpoints: PhantomData<R>,
@@ -582,14 +588,15 @@ where
 }
 
 #[allow(clippy::expect_used)]
-pub fn assemble_node<'a, D, St, R, F, I, S, P>(
-    recipe: PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
-) -> (AssembledNode<St, R, F, S>, I, P)
+pub fn assemble_node<'a, D, St, R, F, I, S, P, C>(
+    recipe: PrnsNodeRecipe<'a, D, St, R, F, I, S, P, C>,
+) -> (AssembledNode<St, R, F, S, C>, I, P)
 where
     D: IntoIterator<Item = PreConfiguredDestination<'a>>,
     R: RequestEndpointSet<St>,
     F: FnMut(PrnsEvent<'_>, &St),
     S: StorageLayout,
+    C: super::super::remote_control::RemoteControlHostControls,
 {
     let PrnsNodeRecipe {
         transport_identity,
@@ -603,12 +610,14 @@ where
         on_event,
     } = recipe;
 
+    let (remote_control, controls) = remote_control.into_parts();
     let mut engine = EngineState::<S>::default();
     let remote_control = configure_remote_control_service(&mut engine, remote_control)
         .expect("the RemoteControl service fits the node storage");
     let mut node = AssembledNode {
         engine,
         remote_control,
+        controls,
         state: app_state,
         on_event,
         request_endpoints: PhantomData,
@@ -623,15 +632,16 @@ where
     reason = "every AssembledNode field is initialized before the slot is exposed"
 )]
 #[allow(clippy::expect_used)]
-pub fn assemble_node_in_place<'a, 'slot, D, St, R, F, I, S, P>(
-    slot: &'slot mut MaybeUninit<AssembledNode<St, R, F, S>>,
-    recipe: PrnsNodeRecipe<'a, D, St, R, F, I, S, P>,
-) -> (&'slot mut AssembledNode<St, R, F, S>, I, P)
+pub fn assemble_node_in_place<'a, 'slot, D, St, R, F, I, S, P, C>(
+    slot: &'slot mut MaybeUninit<AssembledNode<St, R, F, S, C>>,
+    recipe: PrnsNodeRecipe<'a, D, St, R, F, I, S, P, C>,
+) -> (&'slot mut AssembledNode<St, R, F, S, C>, I, P)
 where
     D: IntoIterator<Item = PreConfiguredDestination<'a>>,
     R: RequestEndpointSet<St>,
     F: FnMut(PrnsEvent<'_>, &St),
     S: StorageLayout,
+    C: super::super::remote_control::RemoteControlHostControls,
 {
     let PrnsNodeRecipe {
         transport_identity,
@@ -644,6 +654,7 @@ where
         persistence,
         on_event,
     } = recipe;
+    let (remote_control, controls) = remote_control.into_parts();
     let node = slot.as_mut_ptr();
     unsafe {
         let engine =
@@ -653,6 +664,7 @@ where
         let remote_control = configure_remote_control_service(engine, remote_control)
             .expect("the RemoteControl service fits the node storage");
         core::ptr::addr_of_mut!((*node).remote_control).write(remote_control);
+        core::ptr::addr_of_mut!((*node).controls).write(controls);
         core::ptr::addr_of_mut!((*node).state).write(app_state);
         core::ptr::addr_of_mut!((*node).on_event).write(on_event);
         core::ptr::addr_of_mut!((*node).request_endpoints).write(PhantomData);
@@ -663,8 +675,8 @@ where
 }
 
 #[allow(clippy::expect_used)]
-fn configure_assembled_node<'a, D, St, R, F, S>(
-    node: &mut AssembledNode<St, R, F, S>,
+fn configure_assembled_node<'a, D, St, R, F, S, C>(
+    node: &mut AssembledNode<St, R, F, S, C>,
     pre_configured_destinations: D,
     transport_identity: Option<Zeroizing<[u8; IDENTITY_SECRET_KEY_LEN]>>,
 ) where
@@ -1333,7 +1345,7 @@ mod tests {
             &mut slot,
             PrnsNodeRecipe {
                 transport_identity: Some(Zeroizing::new([0x33; IDENTITY_SECRET_KEY_LEN])),
-                remote_control: remote_control_service(),
+                remote_control: remote_control_service().into(),
                 pre_configured_destinations: [PreConfiguredDestination::Plain {
                     app_name: "test",
                     aspects: &["plain"],
@@ -1405,7 +1417,7 @@ mod tests {
             &mut slot,
             PrnsNodeRecipe {
                 transport_identity: None,
-                remote_control: remote_control_service(),
+                remote_control: remote_control_service().into(),
                 pre_configured_destinations: [PreConfiguredDestination::Plain {
                     app_name: "test",
                     aspects: &["plain"],

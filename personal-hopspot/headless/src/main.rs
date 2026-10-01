@@ -7,6 +7,7 @@ use std::time::Duration;
 use clap::Parser;
 use personal_hopspot_core::{node_pages, HopspotDestinationSet, NODE_IDENTITY_STORAGE};
 use personal_rns::prelude::*;
+use personal_rns::remote_control::RemoteControlCapabilities;
 use personal_rns::runtime::{
     load_or_create_identity_secret, IdentitySecretFileError, NodePersistence,
 };
@@ -123,10 +124,21 @@ async fn run(options: Options) -> Result<(), HostError> {
                 .map_err(personal_hopspot_headless::control::Error::Grants)?,
         )
     };
-    let remote_control = RemoteControlService::new(
+    let mut capabilities = RemoteControlCapabilities::describe_only();
+    for kind in [
+        RemoteControlRequestKind::DescribeBuild,
+        RemoteControlRequestKind::InventoryInterfaces,
+        RemoteControlRequestKind::InventoryInterfaceConfig,
+        RemoteControlRequestKind::InventoryInterfacePeers,
+        RemoteControlRequestKind::AppMessage,
+    ] {
+        capabilities = capabilities.with_request(kind);
+    }
+    let remote_control = RemoteControlService::with_capabilities(
         control_secrets,
         controller_grants,
         RemoteControlSelfAnnouncement::Destination(hashes.node_page),
+        capabilities,
     );
     let persistence = NodePersistence::custom_dir(options.state_dir.join("retained"))?;
     let listener = TcpServer::bind(options.listen).await?;
@@ -151,16 +163,19 @@ async fn run(options: Options) -> Result<(), HostError> {
         .as_ref()
         .map(|server| server.local_addr())
         .transpose()?;
-    let node = PrnsNode::new(PrnsNodeRecipe {
+    let node = PrnsNode::new_with_handle(|node_handle| PrnsNodeRecipe {
         transport_identity: Some(identity),
         pre_configured_destinations: destinations.into_preconfigured_destinations(),
-        app_state: personal_rns::runtime::NoRemoteControlHostControls,
+        app_state: (),
         storage: GrowableHeap,
         request_endpoints: node_pages::NodePageRoutes,
-        remote_control,
+        remote_control: RemoteControlNodeSetup::new(remote_control).with_handlers(
+            personal_hopspot_headless::control_host::InspectionHost::new(node_handle),
+            personal_hopspot_headless::control_host::ProbeMessages,
+        ),
         interfaces: ManuallyAttached,
         persistence,
-        on_event: |event, _state: &personal_rns::runtime::NoRemoteControlHostControls| {
+        on_event: |event, _state: &()| {
             if let PrnsEvent::Diagnostic(diagnostic) = event {
                 match diagnostic {
                     Diagnostic::PersistenceRestored { .. }

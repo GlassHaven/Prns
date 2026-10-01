@@ -269,6 +269,14 @@ type S3Node = PrnsNode<
     COMMANDS_CAP,
     LIFECYCLE_CAP,
     COMPLETIONS_CAP,
+    4,
+    { personal_rns::engine::MAX_SEND_REQUEST_DATA_LEN },
+    0,
+    0,
+    personal_rns::runtime::RemoteControlNodeControls<
+        personal_rns::runtime::RemoteControlSupportedHost<RemoteControlHandle>,
+        personal_rns::runtime::NoRemoteControlHostControls,
+    >,
 >;
 type ManifoldLanes = ManifoldLaneSet<Mtx, LANE_COUNT, NOTIFY_CAP>;
 macro_rules! mk_static {

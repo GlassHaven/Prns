@@ -149,6 +149,14 @@ type Node = PrnsNode<
     COMMANDS_CAP,
     LIFECYCLE_CAP,
     COMPLETIONS_CAP,
+    4,
+    { personal_rns::engine::MAX_SEND_REQUEST_DATA_LEN },
+    0,
+    0,
+    personal_rns::runtime::RemoteControlNodeControls<
+        personal_rns::runtime::RemoteControlSupportedHost<AppState>,
+        personal_rns::runtime::NoRemoteControlHostControls,
+    >,
 >;
 type ManifoldLanes = ManifoldLaneSet<Mtx, LANE_COUNT, NOTIFY_CAP>;
 
@@ -455,7 +463,11 @@ pub async fn run(spawner: Spawner) -> ! {
     let app_state = REMOTE_CONTROL_COMMANDS.handle();
     let recipe = PrnsNodeRecipe {
         transport_identity: Some(transport_secret),
-        remote_control,
+        remote_control: personal_rns::runtime::RemoteControlNodeSetup::new(remote_control)
+            .with_controls(personal_rns::runtime::RemoteControlSupportedHost::new(
+                app_state,
+                remote_control::capabilities().requests(),
+            )),
         pre_configured_destinations: hopspot::HopspotDestinationSet::new(
             destination_secret,
             ANNOUNCE_APP_DATA,

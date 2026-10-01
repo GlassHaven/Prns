@@ -1,4 +1,5 @@
 //! Compact interface inventory carried by Remote Control InventoryInterfaces responses.
+use core::num::NonZeroU32;
 
 use super::{
     RemoteControlControllerAuthority, RemoteControlControllerContinuation,
@@ -75,7 +76,7 @@ pub struct RemoteControlInterfaceEntry {
     pub tx_bytes: u64,
     pub rx_bytes: u64,
     pub links: u32,
-    pub rate_bytes_per_sec: u32,
+    pub rate_bytes_per_sec: Option<NonZeroU32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,7 +87,7 @@ pub struct RemoteControlInterfacePeer {
     pub rx_bytes: u64,
     pub links: u32,
     pub destinations: u32,
-    pub rate_bytes_per_sec: u32,
+    pub rate_bytes_per_sec: Option<NonZeroU32>,
     pub radio: RadioIndication,
     pub details: PeerDetails,
 }
@@ -203,7 +204,11 @@ impl RemoteControlInterfaceEntry {
         write_u64_be(rest, &mut offset, self.tx_bytes);
         write_u64_be(rest, &mut offset, self.rx_bytes);
         write_u32_be(rest, &mut offset, self.links);
-        write_u32_be(rest, &mut offset, self.rate_bytes_per_sec);
+        write_u32_be(
+            rest,
+            &mut offset,
+            self.rate_bytes_per_sec.map_or(0, NonZeroU32::get),
+        );
         Ok(Self::ENCODED_LEN)
     }
 
@@ -254,7 +259,7 @@ impl RemoteControlInterfaceEntry {
         let tx_bytes = read_u64_be(rest, &mut offset)?;
         let rx_bytes = read_u64_be(rest, &mut offset)?;
         let links = read_u32_be(rest, &mut offset)?;
-        let rate_bytes_per_sec = read_u32_be(rest, &mut offset)?;
+        let rate_bytes_per_sec = NonZeroU32::new(read_u32_be(rest, &mut offset)?);
         Ok(Self {
             id: InterfaceId::new(id),
             kind,
@@ -1746,7 +1751,12 @@ fn write_peer<'a>(
     let Some((rate_out, rest)) = rest.split_at_mut_checked(4) else {
         return Err(super::RemoteControlMessageWriteError::BufferTooShort);
     };
-    rate_out.copy_from_slice(&peer.rate_bytes_per_sec.to_be_bytes());
+    rate_out.copy_from_slice(
+        &peer
+            .rate_bytes_per_sec
+            .map_or(0, NonZeroU32::get)
+            .to_be_bytes(),
+    );
     let Some((radio_slot, rest)) = rest.split_at_mut_checked(RadioIndication::MAX_ENCODED_LEN)
     else {
         return Err(super::RemoteControlMessageWriteError::BufferTooShort);
@@ -1834,11 +1844,11 @@ fn parse_peer(
                     .try_into()
                     .map_err(|_| super::RemoteControlResponseParseError::Malformed)?,
             ),
-            rate_bytes_per_sec: u32::from_be_bytes(
+            rate_bytes_per_sec: NonZeroU32::new(u32::from_be_bytes(
                 rate_bytes
                     .try_into()
                     .map_err(|_| super::RemoteControlResponseParseError::Malformed)?,
-            ),
+            )),
             radio,
             details,
         },

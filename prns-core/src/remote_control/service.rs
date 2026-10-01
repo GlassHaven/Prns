@@ -147,6 +147,32 @@ pub struct RemoteControlConfiguration<'a> {
 }
 
 impl<'a> RemoteControlService<'a> {
+    /// Advertise host requests only when an installed provider declares them.
+    pub fn with_installed_controls(mut self, host: RemoteControlRequestSet, app: bool) -> Self {
+        if let Self::Available(config) = &mut self {
+            let mut requests = RemoteControlRequestSet::only(RemoteControlRequestKind::Describe);
+            for kind in config.capabilities.requests().iter() {
+                if !kind.handled_by_host() && kind != RemoteControlRequestKind::AppMessage {
+                    requests.insert(kind);
+                }
+            }
+            for kind in host.iter() {
+                if kind.handled_by_host() && config.capabilities.supports(kind) {
+                    requests.insert(kind);
+                }
+            }
+            if app
+                && config
+                    .capabilities
+                    .supports(RemoteControlRequestKind::AppMessage)
+            {
+                requests.insert(RemoteControlRequestKind::AppMessage);
+            }
+            config.capabilities = RemoteControlCapabilities::from_requests(requests)
+                .unwrap_or(RemoteControlCapabilities::describe_only());
+        }
+        self
+    }
     #[must_use]
     pub fn new(
         identity_secrets: RemoteControlNodeIdentitySecrets,

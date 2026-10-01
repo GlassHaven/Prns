@@ -226,15 +226,17 @@ impl ResponseSink for RunnerResponse {
     }
 }
 
-pub(super) async fn run_router<St, R: RequestEndpointSet<St>>(
+pub(super) async fn run_router<St, C, R: RequestEndpointSet<St>>(
     state: &St,
+    controls: &C,
     remote_control: &mut AssembledRemoteControl,
     mut requests: mpsc::Receiver<RunnerRequest>,
     authorization: RemoteControlAuthorizationRuntime<'_>,
     commands: PrnsNodeHandle,
 ) -> Result<(), RemoteControlAuthorizationPersistenceFailure>
 where
-    St: prns_runtime::runtime::RemoteControlHostControls,
+    C: prns_runtime::runtime::RemoteControlHostControls
+        + prns_runtime::runtime::RemoteControlAppMessages<St>,
 {
     let mut in_flight = FuturesUnordered::new();
     let mut response_lanes: std::collections::HashMap<LinkId, Weak<Mutex<()>>> =
@@ -267,8 +269,9 @@ where
                             lane
                         });
                     let request = prepare_request::<St, R>(remote_control, request);
-                    in_flight.push(dispatch_guarded::<St, R>(
+                    in_flight.push(dispatch_guarded::<St, C, R>(
                         state,
+                        controls,
                         &commands,
                         request,
                         response_lane,
@@ -280,19 +283,27 @@ where
     }
 }
 
-async fn dispatch_guarded<St, R: RequestEndpointSet<St>>(
+async fn dispatch_guarded<St, C, R: RequestEndpointSet<St>>(
     state: &St,
+    controls: &C,
     commands: &PrnsNodeHandle,
     request: PreparedRunnerRequest,
     response_lane: Arc<Mutex<()>>,
 ) where
-    St: prns_runtime::runtime::RemoteControlHostControls,
+    C: prns_runtime::runtime::RemoteControlHostControls
+        + prns_runtime::runtime::RemoteControlAppMessages<St>,
 {
     let link_id = request.request.link_id;
-    if AssertUnwindSafe(dispatch::<St, R>(state, commands, request, response_lane))
-        .catch_unwind()
-        .await
-        .is_err()
+    if AssertUnwindSafe(dispatch::<St, C, R>(
+        state,
+        controls,
+        commands,
+        request,
+        response_lane,
+    ))
+    .catch_unwind()
+    .await
+    .is_err()
     {
         commands.close_link(link_id);
     }
@@ -311,13 +322,15 @@ async fn dispatch_guarded<St, R: RequestEndpointSet<St>>(
         )
     )
 )]
-async fn dispatch<St, R: RequestEndpointSet<St>>(
+async fn dispatch<St, C, R: RequestEndpointSet<St>>(
     state: &St,
+    controls: &C,
     commands: &PrnsNodeHandle,
     request: PreparedRunnerRequest,
     response_lane: Arc<Mutex<()>>,
 ) where
-    St: prns_runtime::runtime::RemoteControlHostControls,
+    C: prns_runtime::runtime::RemoteControlHostControls
+        + prns_runtime::runtime::RemoteControlAppMessages<St>,
 {
     let PreparedRunnerRequest { request, route } = request;
     let link_id = request.link_id;
@@ -345,7 +358,7 @@ async fn dispatch<St, R: RequestEndpointSet<St>>(
                 return;
             }
             dispatch_verified_admitted_remote_control_request(
-                state, commands, inbound, &mut body, verified,
+                state, controls, commands, inbound, &mut body, verified,
             )
             .await
         }
@@ -637,7 +650,12 @@ mod tests {
         let handle = PrnsNodeHandle::over(commands);
         let mut remote_control = remote_control();
         let link_id = LinkId::new([0x44; 16]);
-        dispatch_guarded::<crate::runtime::NoRemoteControlHostControls, PanickingRequestEndpointSet>(
+        dispatch_guarded::<
+            crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
+            PanickingRequestEndpointSet,
+        >(
+            &crate::runtime::NoRemoteControlHostControls,
             &crate::runtime::NoRemoteControlHostControls,
             &handle,
             prepare_request::<
@@ -691,8 +709,10 @@ mod tests {
         let mut remote_control = remote_control();
         let dispatched = dispatch_guarded::<
             crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
             PongRequestEndpointSet,
         >(
+            &crate::runtime::NoRemoteControlHostControls,
             &crate::runtime::NoRemoteControlHostControls,
             &handle,
             prepare_request::<crate::runtime::NoRemoteControlHostControls, PongRequestEndpointSet>(
@@ -816,19 +836,23 @@ mod tests {
             persistence_worker.remote_control_authorization_persistence();
 
         {
-            let router =
-                run_router::<crate::runtime::NoRemoteControlHostControls, PongRequestEndpointSet>(
-                    &crate::runtime::NoRemoteControlHostControls,
-                    &mut remote_control,
-                    request_rx,
-                    RemoteControlAuthorizationRuntime {
-                        controller_grants: &mut controller_grants,
-                        target_accesses: &mut target_accesses,
-                        pairing_persistence: &mut pairing_persistence,
-                        persistence: Some(&authorization_persistence),
-                    },
-                    handle.clone(),
-                );
+            let router = run_router::<
+                crate::runtime::NoRemoteControlHostControls,
+                crate::runtime::NoRemoteControlHostControls,
+                PongRequestEndpointSet,
+            >(
+                &crate::runtime::NoRemoteControlHostControls,
+                &crate::runtime::NoRemoteControlHostControls,
+                &mut remote_control,
+                request_rx,
+                RemoteControlAuthorizationRuntime {
+                    controller_grants: &mut controller_grants,
+                    target_accesses: &mut target_accesses,
+                    pairing_persistence: &mut pairing_persistence,
+                    persistence: Some(&authorization_persistence),
+                },
+                handle.clone(),
+            );
             let exercise = async {
                 assert_eq!(
                     setting.await,
@@ -917,19 +941,23 @@ mod tests {
             persistence_worker.remote_control_authorization_persistence();
 
         {
-            let router =
-                run_router::<crate::runtime::NoRemoteControlHostControls, PongRequestEndpointSet>(
-                    &crate::runtime::NoRemoteControlHostControls,
-                    &mut remote_control,
-                    request_rx,
-                    RemoteControlAuthorizationRuntime {
-                        controller_grants: &mut controller_grants,
-                        target_accesses: &mut target_accesses,
-                        pairing_persistence: &mut pairing_persistence,
-                        persistence: Some(&authorization_persistence),
-                    },
-                    handle.clone(),
-                );
+            let router = run_router::<
+                crate::runtime::NoRemoteControlHostControls,
+                crate::runtime::NoRemoteControlHostControls,
+                PongRequestEndpointSet,
+            >(
+                &crate::runtime::NoRemoteControlHostControls,
+                &crate::runtime::NoRemoteControlHostControls,
+                &mut remote_control,
+                request_rx,
+                RemoteControlAuthorizationRuntime {
+                    controller_grants: &mut controller_grants,
+                    target_accesses: &mut target_accesses,
+                    pairing_persistence: &mut pairing_persistence,
+                    persistence: Some(&authorization_persistence),
+                },
+                handle.clone(),
+            );
             let exercise = async {
                 let Some(HostCommand::RespondAny(response)) = command_rx.recv().await else {
                     panic!("Remote Control response command")

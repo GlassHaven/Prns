@@ -432,6 +432,7 @@ fn protocol_discriminants_are_stable_typed_values() {
             RemoteControlRequestKind::InspectWifiTransaction,
             RemoteControlRequestKind::InventoryInterfaceDiscoveryGroups,
             RemoteControlRequestKind::ReplaceInterfaceDiscoveryGroups,
+            RemoteControlRequestKind::AppMessage,
         ],
     );
     assert_eq!(
@@ -467,6 +468,7 @@ fn protocol_discriminants_are_stable_typed_values() {
             RemoteControlResponseKind::InspectWifiTransaction,
             RemoteControlResponseKind::InventoryInterfaceDiscoveryGroups,
             RemoteControlResponseKind::ReplaceInterfaceDiscoveryGroups,
+            RemoteControlResponseKind::AppMessage,
             RemoteControlResponseKind::ProtocolError,
         ],
     );
@@ -1356,7 +1358,7 @@ fn inventory_power_and_sleep_messages_round_trip() {
             tx_bytes: 1,
             rx_bytes: 2,
             links: 3,
-            rate_bytes_per_sec: 4,
+            rate_bytes_per_sec: ::core::num::NonZeroU32::new(4),
         })
         .unwrap();
 
@@ -1540,7 +1542,7 @@ fn inventory_responses_reject_overlong_and_noncanonical_fields() {
         tx_bytes: 1,
         rx_bytes: 2,
         links: 3,
-        rate_bytes_per_sec: 4,
+        rate_bytes_per_sec: ::core::num::NonZeroU32::new(4),
     };
     let mut entry_wire = [0u8; RemoteControlInterfaceEntry::ENCODED_LEN];
     entry.write_into(&mut entry_wire).unwrap();
@@ -1589,7 +1591,7 @@ fn inventory_responses_reject_overlong_and_noncanonical_fields() {
             rx_bytes: 2,
             links: 3,
             destinations: 4,
-            rate_bytes_per_sec: 5,
+            rate_bytes_per_sec: ::core::num::NonZeroU32::new(5),
             radio: RadioIndication::NotRadio,
             details: PeerDetails::NotApplicable,
         })
@@ -1760,6 +1762,127 @@ fn desired_state_and_wifi_transaction_parsers_refuse_noncanonical_values() {
         ]),
         Err(RemoteControlResponseParseError::UnknownWifiTransactionStatus { found: 0xFF }),
     );
+}
+
+#[test]
+fn missing_inventory_rate_round_trips_as_unavailable() {
+    use crate::interfaces::{
+        ConnectionState, InterfaceId, InterfaceKind, InterfaceMode, PeerDetails, RadioIndication,
+        INTERFACE_ID_LEN,
+    };
+    let entry = RemoteControlInterfaceEntry {
+        id: InterfaceId::new([0x02; INTERFACE_ID_LEN]),
+        kind: InterfaceKind::TcpServer,
+        mode: InterfaceMode::PointToPoint,
+        connection: ConnectionState::Connected,
+        enabled: true,
+        tx_bytes: 0,
+        rx_bytes: 0,
+        links: 0,
+        rate_bytes_per_sec: None,
+    };
+    let mut wire = [0u8; RemoteControlInterfaceEntry::ENCODED_LEN];
+    entry.write_into(&mut wire).unwrap();
+    assert_eq!(RemoteControlInterfaceEntry::parse(&wire), Ok(entry));
+
+    let mut page =
+        RemoteControlInterfacePeerPage::empty(InterfaceId::new([0x07; INTERFACE_ID_LEN]));
+    page.push(RemoteControlInterfacePeer {
+        id: InterfaceId::new([0x08; INTERFACE_ID_LEN]),
+        connection: ConnectionState::Connected,
+        tx_bytes: 0,
+        rx_bytes: 0,
+        links: 0,
+        destinations: 0,
+        rate_bytes_per_sec: None,
+        radio: RadioIndication::NotRadio,
+        details: PeerDetails::NotApplicable,
+    })
+    .unwrap();
+    let response = RemoteControlResponse::InventoryInterfacePeers(
+        RemoteControlInterfacePeersOutcome::Page(page),
+    );
+    let mut bytes = [0u8; RemoteControlResponse::MAX_ENCODED_LEN];
+    let count = response.write_into(&mut bytes).unwrap();
+    assert_eq!(
+        RemoteControlResponse::parse(bytes.get(..count).unwrap()),
+        Ok(response)
+    );
+}
+
+#[test]
+fn bounded_app_message_round_trips_at_both_limits() {
+    for size in [0, REMOTE_CONTROL_APP_MESSAGE_CAP] {
+        let source = std::vec![0x5a; size];
+        let message = RemoteControlAppMessage::from_slice(&source).unwrap();
+        for request in [true, false] {
+            let mut bytes = [0u8; RemoteControlRequest::MAX_ENCODED_LEN];
+            if request {
+                let operation = RemoteControlRequest::AppMessage(message.clone());
+                let count = operation.write_into(&mut bytes).unwrap();
+                assert_eq!(
+                    RemoteControlRequest::parse(bytes.get(..count).unwrap()),
+                    Ok(operation)
+                );
+            } else {
+                let reply = RemoteControlResponse::AppMessage(message.clone());
+                let count = reply.write_into(&mut bytes).unwrap();
+                assert_eq!(
+                    RemoteControlResponse::parse(bytes.get(..count).unwrap()),
+                    Ok(reply)
+                );
+            }
+        }
+    }
+    assert!(
+        RemoteControlAppMessage::from_slice(&[0u8; REMOTE_CONTROL_APP_MESSAGE_CAP + 1]).is_err()
+    );
+    let oversized = [0u8; REMOTE_CONTROL_APP_MESSAGE_CAP + 3];
+    let mut request = oversized;
+    request[0] = RemoteControlProtocolVersion::V1.wire_value();
+    request[1] = RemoteControlRequestKind::AppMessage.wire_value();
+    assert!(RemoteControlRequest::parse(&request).is_err());
+}
+
+#[test]
+fn installed_capabilities_intersect_service_and_provider() {
+    assert!(!RemoteControlRequestSet::all_operator().supports(RemoteControlRequestKind::AppMessage));
+    let secrets =
+        RemoteControlNodeIdentitySecrets::generate_with_runtime_entropy(&mut runtime_entropy(0x39))
+            .unwrap();
+    let configured = RemoteControlCapabilities::describe_only()
+        .with_request(RemoteControlRequestKind::DescribeBuild)
+        .with_request(RemoteControlRequestKind::InventoryInterfaces)
+        .with_request(RemoteControlRequestKind::AppMessage);
+    let service = RemoteControlService::with_capabilities(
+        secrets,
+        RemoteControlInitialControllerGrants::Nobody,
+        RemoteControlSelfAnnouncement::Unavailable,
+        configured,
+    );
+    let mut host = RemoteControlRequestSet::only(RemoteControlRequestKind::DescribeBuild);
+    host.insert(RemoteControlRequestKind::InventoryInterfacePeers);
+    let installed = service.with_installed_controls(host, false);
+    let available = installed.available_requests();
+    assert!(available.supports(RemoteControlRequestKind::Describe));
+    assert!(available.supports(RemoteControlRequestKind::DescribeBuild));
+    assert!(!available.supports(RemoteControlRequestKind::InventoryInterfaces));
+    assert!(!available.supports(RemoteControlRequestKind::InventoryInterfacePeers));
+    assert!(!available.supports(RemoteControlRequestKind::AppMessage));
+    let app_only = RemoteControlService::with_capabilities(
+        RemoteControlNodeIdentitySecrets::generate_with_runtime_entropy(&mut runtime_entropy(0x3a))
+            .unwrap(),
+        RemoteControlInitialControllerGrants::Nobody,
+        RemoteControlSelfAnnouncement::Unavailable,
+        configured,
+    )
+    .with_installed_controls(RemoteControlRequestSet::empty(), true);
+    assert!(app_only
+        .available_requests()
+        .supports(RemoteControlRequestKind::AppMessage));
+    assert!(!app_only
+        .available_requests()
+        .supports(RemoteControlRequestKind::DescribeBuild));
 }
 
 proptest! {

@@ -1,4 +1,5 @@
 use core::fmt::Write as _;
+use core::num::NonZeroU32;
 
 use personal_rns::interfaces::bluetooth_auto::BleIdentity;
 use personal_rns::interfaces::lora::RadioProfile;
@@ -282,11 +283,10 @@ fn remote_control_peer_for_supervisor(
     }
 }
 
-fn rate_bytes_per_sec(snapshot: &InterfaceSnapshot) -> u32 {
+fn rate_bytes_per_sec(snapshot: &InterfaceSnapshot) -> Option<NonZeroU32> {
     snapshot
         .transfer_rates
-        .map(|rates| rates.rx_bps.saturating_add(rates.tx_bps) / 8)
-        .unwrap_or(0)
+        .and_then(|rates| NonZeroU32::new(rates.rx_bps.saturating_add(rates.tx_bps) / 8))
 }
 
 #[cfg(test)]

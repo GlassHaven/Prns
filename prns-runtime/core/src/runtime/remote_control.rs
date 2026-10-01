@@ -5,7 +5,7 @@ use crate::engine::{
 use crate::identity::IdentityHash;
 use crate::interfaces::{DiscoveryGroupId, InterfaceId, InterfaceMode};
 use crate::remote_control::{
-    RemoteControlAnnounceSelfOutcome, RemoteControlApplyOutcome,
+    RemoteControlAnnounceSelfOutcome, RemoteControlAppMessage, RemoteControlApplyOutcome,
     RemoteControlAuthorizeControllerOutcome, RemoteControlBuildVersion,
     RemoteControlControllerAuthority, RemoteControlControllerGrant,
     RemoteControlControllerGrantTable, RemoteControlControllerIdentity,
@@ -25,7 +25,6 @@ use crate::remote_control::{
     RemoteControlSystemPower, RemoteControlWifiCredentialRevision, RemoteControlWifiStageOutcome,
     RemoteControlWifiStation, RemoteControlWifiStationOutcome, RemoteControlWifiTransactionStatus,
     RevokeRemoteControlControllerOutcome, SetRemoteControlControllerGrantOutcome,
-    REMOTE_CONTROL_REQUEST_ENDPOINT_ID,
 };
 use crate::routing::links::request::REQUEST_WIRE_OVERHEAD;
 use crate::units::ByteLimit;
@@ -33,8 +32,7 @@ use crate::wire::DestinationHash;
 use prns_core::capabilities::power::PowerSnapshot;
 
 use super::request_endpoints::{
-    Decline, InboundRequest, RequestContext, RequestEndpoint, RequestEndpointPolicy, RespondToken,
-    ResponseSink,
+    Decline, InboundRequest, RequestContext, RespondToken, ResponseSink,
 };
 use super::{
     AnnounceNowError, PrnsNodeApi, RevokeRemoteControlControllerControlError, SendError,
@@ -123,6 +121,34 @@ impl RemoteControlDescribe {
 }
 
 pub struct RemoteControlAnnounceSelf;
+
+pub struct RemoteControlAppMessageExchange;
+
+impl RemoteControlAppMessageExchange {
+    pub const RESPONSE_CAPACITY: usize = 2 + crate::remote_control::REMOTE_CONTROL_APP_MESSAGE_CAP;
+    pub const MAXIMUM_RESPONSE_BYTES: ByteLimit =
+        ByteLimit::Maximum(Self::RESPONSE_CAPACITY as u64);
+
+    pub fn write_request(
+        payload: &RemoteControlAppMessage,
+        out: &mut [u8],
+    ) -> Result<usize, RemoteControlError> {
+        RemoteControlRequest::AppMessage(payload.clone())
+            .write_into(out)
+            .map_err(RemoteControlError::Encode)
+    }
+
+    pub fn parse_response(bytes: &[u8]) -> Result<RemoteControlAppMessage, RemoteControlError> {
+        match RemoteControlResponse::parse(bytes).map_err(RemoteControlError::Response)? {
+            RemoteControlResponse::AppMessage(payload) => Ok(payload),
+            RemoteControlResponse::ProtocolError(error) => Err(RemoteControlError::Remote(error)),
+            response => Err(RemoteControlError::UnexpectedResponse {
+                expected: crate::remote_control::RemoteControlResponseKind::AppMessage,
+                found: response.kind(),
+            }),
+        }
+    }
+}
 
 impl RemoteControlAnnounceSelf {
     pub const REQUEST: RemoteControlRequest = RemoteControlRequest::AnnounceSelf;
@@ -459,6 +485,14 @@ impl RemoteControlHostCommandError {
 /// executor rather than touching peripherals from the request task.
 #[allow(async_fn_in_trait)]
 pub trait RemoteControlHostControls {
+    fn supported_requests(&self) -> RemoteControlRequestSet {
+        RemoteControlRequestSet::empty()
+    }
+
+    fn supports_app_messages(&self) -> bool {
+        false
+    }
+
     async fn execute_remote_control(
         &self,
         command: RemoteControlHostCommand,
@@ -467,6 +501,163 @@ pub trait RemoteControlHostControls {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct NoRemoteControlHostControls;
+
+/// Binds a board's supported subset to its command executor. A shared mailbox may
+/// implement more commands than the concrete board can actually apply.
+pub struct RemoteControlSupportedHost<Host> {
+    host: Host,
+    requests: RemoteControlRequestSet,
+}
+
+impl<Host> RemoteControlSupportedHost<Host> {
+    pub const fn new(host: Host, requests: RemoteControlRequestSet) -> Self {
+        Self { host, requests }
+    }
+}
+
+impl<Host: RemoteControlHostControls> RemoteControlHostControls
+    for RemoteControlSupportedHost<Host>
+{
+    fn supported_requests(&self) -> RemoteControlRequestSet {
+        self.requests
+    }
+    async fn execute_remote_control(
+        &self,
+        command: RemoteControlHostCommand,
+    ) -> Result<RemoteControlHostResponse, RemoteControlHostCommandError> {
+        self.host.execute_remote_control(command).await
+    }
+}
+
+/// Application-defined control payloads are admitted by the PRNS grant before this
+/// handler runs. The application may impose finer policy using `controller`.
+#[allow(async_fn_in_trait)]
+pub trait RemoteControlAppMessages<AppState> {
+    async fn handle_app_message(
+        &self,
+        state: &AppState,
+        controller: IdentityHash,
+        payload: &[u8],
+    ) -> Result<RemoteControlAppMessage, RemoteControlHostCommandError>;
+}
+
+impl<AppState> RemoteControlAppMessages<AppState> for NoRemoteControlHostControls {
+    async fn handle_app_message(
+        &self,
+        _state: &AppState,
+        _controller: IdentityHash,
+        _payload: &[u8],
+    ) -> Result<RemoteControlAppMessage, RemoteControlHostCommandError> {
+        Err(RemoteControlHostCommandError::Unsupported)
+    }
+}
+
+pub struct RemoteControlNodeControls<Host, App> {
+    host: Host,
+    app: App,
+    app_enabled: bool,
+}
+
+impl<Host, App> RemoteControlNodeControls<Host, App> {
+    const fn new(host: Host, app: App, app_enabled: bool) -> Self {
+        Self {
+            host,
+            app,
+            app_enabled,
+        }
+    }
+}
+
+impl<Host: RemoteControlHostControls, App> RemoteControlHostControls
+    for RemoteControlNodeControls<Host, App>
+{
+    fn supported_requests(&self) -> RemoteControlRequestSet {
+        self.host.supported_requests()
+    }
+    fn supports_app_messages(&self) -> bool {
+        self.app_enabled
+    }
+    async fn execute_remote_control(
+        &self,
+        command: RemoteControlHostCommand,
+    ) -> Result<RemoteControlHostResponse, RemoteControlHostCommandError> {
+        self.host.execute_remote_control(command).await
+    }
+}
+
+impl<AppState, Host, App: RemoteControlAppMessages<AppState>> RemoteControlAppMessages<AppState>
+    for RemoteControlNodeControls<Host, App>
+{
+    async fn handle_app_message(
+        &self,
+        state: &AppState,
+        controller: IdentityHash,
+        payload: &[u8],
+    ) -> Result<RemoteControlAppMessage, RemoteControlHostCommandError> {
+        self.app
+            .handle_app_message(state, controller, payload)
+            .await
+    }
+}
+
+/// Runtime-owned Remote Control configuration and host behavior. Application state is
+/// independent and remains available to ordinary request endpoints and event callbacks.
+pub struct RemoteControlNodeSetup<'a, Controls = NoRemoteControlHostControls> {
+    service: crate::remote_control::RemoteControlService<'a>,
+    controls: Controls,
+}
+
+impl<'a> RemoteControlNodeSetup<'a> {
+    pub fn new(service: crate::remote_control::RemoteControlService<'a>) -> Self {
+        Self {
+            service,
+            controls: NoRemoteControlHostControls,
+        }
+    }
+}
+
+impl<'a, Controls> RemoteControlNodeSetup<'a, Controls> {
+    pub fn with_controls<Next>(
+        self,
+        controls: Next,
+    ) -> RemoteControlNodeSetup<'a, RemoteControlNodeControls<Next, NoRemoteControlHostControls>>
+    {
+        RemoteControlNodeSetup {
+            service: self.service,
+            controls: RemoteControlNodeControls::new(controls, NoRemoteControlHostControls, false),
+        }
+    }
+
+    pub fn with_handlers<Host, App>(
+        self,
+        host: Host,
+        app: App,
+    ) -> RemoteControlNodeSetup<'a, RemoteControlNodeControls<Host, App>> {
+        RemoteControlNodeSetup {
+            service: self.service,
+            controls: RemoteControlNodeControls::new(host, app, true),
+        }
+    }
+
+    pub fn into_parts(self) -> (crate::remote_control::RemoteControlService<'a>, Controls)
+    where
+        Controls: RemoteControlHostControls,
+    {
+        (
+            self.service.with_installed_controls(
+                self.controls.supported_requests(),
+                self.controls.supports_app_messages(),
+            ),
+            self.controls,
+        )
+    }
+}
+
+impl<'a> From<crate::remote_control::RemoteControlService<'a>> for RemoteControlNodeSetup<'a> {
+    fn from(service: crate::remote_control::RemoteControlService<'a>) -> Self {
+        Self::new(service)
+    }
+}
 
 impl RemoteControlHostControls for NoRemoteControlHostControls {
     async fn execute_remote_control(
@@ -1240,6 +1431,10 @@ impl RemoteControlRequestEndpoint {
                 };
                 Ok(AdmittedRemoteControlOperation::AnnounceSelf { destination })
             }
+            Ok(RemoteControlRequest::AppMessage(payload)) => {
+                require_available(available_requests, RemoteControlRequestKind::AppMessage)?;
+                Ok(AdmittedRemoteControlOperation::AppMessage(payload))
+            }
             Ok(RemoteControlRequest::InventoryInterfaces { page }) => {
                 require_available(
                     available_requests,
@@ -1490,17 +1685,33 @@ impl RemoteControlRequestEndpoint {
         }
     }
 
-    async fn handle_admitted<AppState>(
+    async fn handle_admitted<AppState, Controls>(
         mut context: RequestContext<'_, AppState>,
+        controls: &Controls,
         node: &impl PrnsNodeApi,
         operation: AdmittedRemoteControlOperation,
     ) -> Result<(), Decline>
     where
-        AppState: RemoteControlHostControls,
+        Controls: RemoteControlHostControls + RemoteControlAppMessages<AppState>,
     {
         let response = match operation {
+            AdmittedRemoteControlOperation::AppMessage(_) => return Err(Decline::Ignore),
             AdmittedRemoteControlOperation::Host(command) => {
-                execute_remote_control_host(context.state, command).await
+                execute_remote_control_host(controls, command).await
+            }
+            AdmittedRemoteControlOperation::AppMessageReady {
+                controller,
+                payload,
+            } => {
+                match controls
+                    .handle_app_message(context.state, controller, payload.as_slice())
+                    .await
+                {
+                    Ok(response) => RemoteControlResponse::AppMessage(response),
+                    Err(error) => RemoteControlResponse::ProtocolError(
+                        error.into_protocol_error(RemoteControlRequestKind::AppMessage),
+                    ),
+                }
             }
             AdmittedRemoteControlOperation::Describe(description) => {
                 RemoteControlResponse::Describe(description)
@@ -1604,31 +1815,16 @@ impl RemoteControlRequestEndpoint {
     }
 }
 
-impl<AppState> RequestEndpoint<AppState> for RemoteControlRequestEndpoint
-where
-    AppState: RemoteControlHostControls,
-{
-    const ENDPOINT_ID: &'static str = REMOTE_CONTROL_REQUEST_ENDPOINT_ID;
-    const POLICY: RequestEndpointPolicy = RequestEndpointPolicy::RequireIdentified;
-
-    async fn handle(
-        context: RequestContext<'_, AppState>,
-        node: &impl PrnsNodeApi,
-    ) -> Result<(), Decline> {
-        let operation = Self::resolve(
-            RemoteControlRequest::parse(context.data),
-            RemoteControlRequestSet::only(RemoteControlRequestKind::Describe),
-            RemoteControlSelfAnnouncement::Unavailable,
-        )?;
-        Self::handle_admitted(context, node, operation).await
-    }
-}
-
 enum AdmittedRemoteControlOperation {
     Host(RemoteControlHostCommand),
     Describe(RemoteControlDescription),
     AnnounceSelf {
         destination: DestinationHash,
+    },
+    AppMessage(RemoteControlAppMessage),
+    AppMessageReady {
+        controller: IdentityHash,
+        payload: RemoteControlAppMessage,
     },
     InventoryControllers {
         page: RemoteControlControllerPage,
@@ -1672,14 +1868,20 @@ enum AdmittedRemoteControlOperation {
 
 impl AdmittedRemoteControlOperation {
     fn prepare_host(self, controller: IdentityHash) -> Self {
+        let self_ = match self {
+            Self::AppMessage(payload) => Self::AppMessageReady {
+                controller,
+                payload,
+            },
+            operation => operation,
+        };
         #[cfg(not(feature = "remote-control-wifi-host"))]
         {
-            let _ = controller;
-            self
+            self_
         }
         #[cfg(feature = "remote-control-wifi-host")]
         {
-            let command = match self {
+            let command = match self_ {
                 Self::StageWifiCredentials { station } => {
                     RemoteControlHostCommand::StageWifiCredentials {
                         controller,
@@ -1930,39 +2132,47 @@ where
     }
 }
 
-pub async fn dispatch_admitted_remote_control_request<'a, AppState>(
+pub async fn dispatch_admitted_remote_control_request<'a, AppState, Controls>(
     state: &'a AppState,
+    controls: &'a Controls,
     node: &impl PrnsNodeApi,
     request: InboundRequest<'a>,
     sink: &'a mut dyn ResponseSink,
     admission: AdmittedRemoteControlRequest,
 ) -> Result<(), Decline>
 where
-    AppState: RemoteControlHostControls,
+    Controls: RemoteControlHostControls + RemoteControlAppMessages<AppState>,
 {
     let verified = verify_admitted_remote_control_request(admission, &request)?;
-    dispatch_verified_admitted_remote_control_request(state, node, request, sink, verified).await
+    dispatch_verified_admitted_remote_control_request(
+        state, controls, node, request, sink, verified,
+    )
+    .await
 }
 
-pub fn dispatch_verified_admitted_remote_control_request<'a, AppState>(
+pub fn dispatch_verified_admitted_remote_control_request<'a, AppState, Controls>(
     state: &'a AppState,
+    controls: &'a Controls,
     node: &'a impl PrnsNodeApi,
     request: InboundRequest<'a>,
     sink: &'a mut dyn ResponseSink,
     verified: VerifiedAdmittedRemoteControlRequest,
 ) -> impl core::future::Future<Output = Result<(), Decline>> + 'a
 where
-    AppState: RemoteControlHostControls,
+    Controls: RemoteControlHostControls + RemoteControlAppMessages<AppState>,
 {
     RemoteControlRequestEndpoint::handle_admitted(
         RequestContext::from_inbound(state, request, sink),
+        controls,
         node,
         verified.operation,
     )
 }
 
-pub async fn dispatch_remote_control_request<'a, AppState, ControllerGrants>(
+#[allow(clippy::too_many_arguments)]
+pub async fn dispatch_remote_control_request<'a, AppState, Controls, ControllerGrants>(
     state: &'a AppState,
+    controls: &'a Controls,
     controller_grants: &mut ControllerGrants,
     supported_requests: RemoteControlRequestSet,
     self_announcement: RemoteControlSelfAnnouncement,
@@ -1971,7 +2181,7 @@ pub async fn dispatch_remote_control_request<'a, AppState, ControllerGrants>(
     sink: &'a mut dyn ResponseSink,
 ) -> Result<(), Decline>
 where
-    AppState: RemoteControlHostControls,
+    Controls: RemoteControlHostControls + RemoteControlAppMessages<AppState>,
     ControllerGrants: RemoteControlControllerGrantTable,
 {
     let admission = admit_remote_control_request(
@@ -1980,7 +2190,7 @@ where
         self_announcement,
         &request,
     )?;
-    dispatch_admitted_remote_control_request(state, node, request, sink, admission).await
+    dispatch_admitted_remote_control_request(state, controls, node, request, sink, admission).await
 }
 
 #[cfg(test)]
@@ -2225,6 +2435,7 @@ mod tests {
         );
         dispatch_remote_control_request(
             &NoRemoteControlHostControls,
+            &NoRemoteControlHostControls,
             controller_grants,
             supported_requests,
             self_announcement,
@@ -2233,6 +2444,108 @@ mod tests {
             sink,
         )
         .await
+    }
+
+    struct RecordingApp(Mutex<std::vec::Vec<(IdentityHash, std::vec::Vec<u8>)>>);
+
+    impl RemoteControlAppMessages<()> for RecordingApp {
+        async fn handle_app_message(
+            &self,
+            _state: &(),
+            controller: IdentityHash,
+            payload: &[u8],
+        ) -> Result<RemoteControlAppMessage, RemoteControlHostCommandError> {
+            self.0.lock().unwrap().push((controller, payload.to_vec()));
+            if payload == [0] {
+                return Err(RemoteControlHostCommandError::ApplyFailed);
+            }
+            RemoteControlAppMessage::from_slice(payload)
+                .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
+        }
+    }
+
+    #[test]
+    fn app_messages_require_admission_and_receive_the_verified_controller() {
+        futures_executor::block_on(async {
+            let allowed = identity(0x71);
+            let denied = identity(0x72);
+            let mut grants = controller_grants_permitting(
+                allowed,
+                RemoteControlRequestSet::only(RemoteControlRequestKind::AppMessage),
+            );
+            let controls = RemoteControlNodeControls::new(
+                NoRemoteControlHostControls,
+                RecordingApp(Mutex::new(std::vec::Vec::new())),
+                true,
+            );
+            let available = RemoteControlRequestSet::only(RemoteControlRequestKind::AppMessage);
+            for (requester, payload, should_respond) in [
+                (Some(denied.identity_hash()), &[1u8, 2][..], false),
+                (None, &[1u8, 2][..], false),
+                (Some(allowed.identity_hash()), &[1u8, 2][..], true),
+                (Some(allowed.identity_hash()), &[0u8][..], true),
+            ] {
+                let request = RemoteControlRequest::AppMessage(
+                    RemoteControlAppMessage::from_slice(payload).unwrap(),
+                );
+                let mut data = [0u8; RemoteControlRequest::MAX_ENCODED_LEN];
+                let len = request.write_into(&mut data).unwrap();
+                let inbound = InboundRequest::new(
+                    DestinationHash::new([0x21; 16]),
+                    LinkId::new([0x43; 16]),
+                    RequestId([0x65; 16]),
+                    requester,
+                    InstantMillis(1_000),
+                    RttMillis::new(20),
+                    &data[..len],
+                );
+                let mut response =
+                    heapless::Vec::<u8, { RemoteControlResponse::MAX_ENCODED_LEN }>::new();
+                let result = dispatch_remote_control_request(
+                    &(),
+                    &controls,
+                    &mut grants,
+                    available,
+                    RemoteControlSelfAnnouncement::Unavailable,
+                    &(),
+                    inbound,
+                    &mut response,
+                )
+                .await;
+                assert_eq!(
+                    result,
+                    if should_respond {
+                        Ok(())
+                    } else {
+                        Err(Decline::Ignore)
+                    }
+                );
+                if should_respond {
+                    assert!(!response.is_empty());
+                    let expected = if payload == [0] {
+                        RemoteControlResponse::ProtocolError(
+                            RemoteControlProtocolError::ApplyFailed {
+                                request: RemoteControlRequestKind::AppMessage,
+                            },
+                        )
+                    } else {
+                        RemoteControlResponse::AppMessage(
+                            RemoteControlAppMessage::from_slice(payload).unwrap(),
+                        )
+                    };
+                    assert_eq!(
+                        RemoteControlResponse::parse(response.as_slice()),
+                        Ok(expected)
+                    );
+                } else {
+                    assert!(response.is_empty());
+                }
+            }
+            let calls = controls.app.0.lock().unwrap();
+            assert_eq!(calls.len(), 2);
+            assert_eq!(calls[0].0, allowed.identity_hash());
+            assert_eq!(calls[0].1, [1, 2]);
+        });
     }
 
     fn describe_request() -> [u8; RemoteControlRequest::Describe.encoded_len()] {
@@ -2669,14 +2982,6 @@ mod tests {
                 );
             }
         });
-    }
-
-    #[test]
-    fn the_endpoint_requires_an_identified_requester_before_access_is_checked() {
-        assert_eq!(
-            <RemoteControlRequestEndpoint as RequestEndpoint<NoRemoteControlHostControls>>::POLICY,
-            RequestEndpointPolicy::RequireIdentified,
-        );
     }
 
     #[test]

@@ -11,27 +11,27 @@ use crate::routing::links::LinkId;
 use crate::runtime::request_endpoints::RequestEndpointId;
 use crate::runtime::{
     RemoteControlActivateWifiCredentials, RemoteControlAnnounceSelf,
-    RemoteControlAuthorizeController, RemoteControlCancelWifiCredentials,
-    RemoteControlConfirmWifiCredentials, RemoteControlDescribe, RemoteControlDescribeBuild,
-    RemoteControlDescribePower, RemoteControlError, RemoteControlInspectWifiTransaction,
-    RemoteControlInventoryControllers, RemoteControlInventoryInterfaceConfig,
-    RemoteControlInventoryInterfaceDiscoveryGroups, RemoteControlInventoryInterfacePeers,
-    RemoteControlInventoryInterfaces, RemoteControlReplaceInterfaceDiscoveryGroups,
-    RemoteControlRevokeController, RemoteControlSetDisplayAutoOff,
-    RemoteControlSetDisplayVisibility, RemoteControlSetEspRadioMode, RemoteControlSetGnssPower,
-    RemoteControlSetInterfaceGroup, RemoteControlSetInterfaceLoRaProfile,
-    RemoteControlSetInterfaceMode, RemoteControlSetInterfacePower,
-    RemoteControlSetInterfaceWifiStation, RemoteControlSetStationUplink,
-    RemoteControlSetSystemPower, RemoteControlSleepRadios, RemoteControlStageWifiCredentials,
-    RemoteControlWakeRadios,
+    RemoteControlAppMessageExchange, RemoteControlAuthorizeController,
+    RemoteControlCancelWifiCredentials, RemoteControlConfirmWifiCredentials, RemoteControlDescribe,
+    RemoteControlDescribeBuild, RemoteControlDescribePower, RemoteControlError,
+    RemoteControlInspectWifiTransaction, RemoteControlInventoryControllers,
+    RemoteControlInventoryInterfaceConfig, RemoteControlInventoryInterfaceDiscoveryGroups,
+    RemoteControlInventoryInterfacePeers, RemoteControlInventoryInterfaces,
+    RemoteControlReplaceInterfaceDiscoveryGroups, RemoteControlRevokeController,
+    RemoteControlSetDisplayAutoOff, RemoteControlSetDisplayVisibility,
+    RemoteControlSetEspRadioMode, RemoteControlSetGnssPower, RemoteControlSetInterfaceGroup,
+    RemoteControlSetInterfaceLoRaProfile, RemoteControlSetInterfaceMode,
+    RemoteControlSetInterfacePower, RemoteControlSetInterfaceWifiStation,
+    RemoteControlSetStationUplink, RemoteControlSetSystemPower, RemoteControlSleepRadios,
+    RemoteControlStageWifiCredentials, RemoteControlWakeRadios,
 };
 use crate::units::RttMillis;
 use prns_core::capabilities::power::PowerSnapshot;
 use prns_core::interfaces::{InterfaceId, InterfaceMode};
 use prns_core::remote_control::{
-    RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome, RemoteControlBuildVersion,
-    RemoteControlControllerIdentity, RemoteControlControllerInventory, RemoteControlControllerPage,
-    RemoteControlDescription, RemoteControlDiscoveryGroups,
+    RemoteControlAppMessage, RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome,
+    RemoteControlBuildVersion, RemoteControlControllerIdentity, RemoteControlControllerInventory,
+    RemoteControlControllerPage, RemoteControlDescription, RemoteControlDiscoveryGroups,
     RemoteControlDiscoveryGroupsInventoryOutcome, RemoteControlDiscoveryGroupsReplaceOutcome,
     RemoteControlDisplayAutoOff, RemoteControlDisplayVisibility, RemoteControlEspRadioMode,
     RemoteControlGnssPower, RemoteControlGroupOutcome, RemoteControlInterfaceConfigOutcome,
@@ -127,6 +127,23 @@ impl<
         const RESPONSE_BYTES: usize,
     > RemoteControlHandle<'_, M, COMMANDS, COMPLETIONS, REQUEST_COMPLETIONS, RESPONSE_BYTES>
 {
+    pub async fn app_message(
+        &self,
+        payload: RemoteControlAppMessage,
+    ) -> Result<(RemoteControlAppMessage, RttMillis), RemoteControlError> {
+        let mut encoded = [0u8; RemoteControlAppMessageExchange::RESPONSE_CAPACITY];
+        let len = RemoteControlAppMessageExchange::write_request(&payload, &mut encoded)?;
+        let (response, rtt) = self.node.request_with_maximum_response_bytes::<{ RemoteControlAppMessageExchange::RESPONSE_CAPACITY }>(
+            self.link_id,
+            RequestEndpointId::of(REMOTE_CONTROL_REQUEST_ENDPOINT_ID),
+            &encoded[..len],
+            RequestResponseTimeout::LinkDefault,
+        ).await.map_err(RemoteControlError::Request)?;
+        Ok((
+            RemoteControlAppMessageExchange::parse_response(response.as_slice())?,
+            rtt,
+        ))
+    }
     remote_control_apply_method!(
         set_system_power,
         RemoteControlSetSystemPower,
