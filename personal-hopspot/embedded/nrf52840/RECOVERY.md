@@ -169,10 +169,10 @@ desktop Chrome with native UI automation completed the hardware check.
   feature and was corrected before compiling that target. Touched Rust files
   were formatted; documentation links and `git diff --check` were clean.
 
-The build and automated checks above preceded the physical round trip. The
-tracker is now restored to Meshtastic. Software recovery passed physical
-qualification; the held-button route still needs physical qualification. The
-new firmware and site changes have not been published.
+The build and automated checks above preceded the first physical round trip,
+which ended with the tracker restored to Meshtastic. Software recovery passed
+physical qualification; the held-button route still needs physical
+qualification. The new firmware and site changes have not been published.
 
 ### Packaged developer build failure
 
@@ -191,7 +191,43 @@ The packaged build had applied additional Thumb compiler settings:
 recipe did not apply them. Nordic serial DFU builds now use the explicit
 `thumbv7em-serial-dfu-rust-lld` adapter with baseline compiler settings, matching
 the developer UF2 recipe. Resource reports select that same adapter so their
-compiler evidence describes the transferred image. The failure has not been traced to one
-compiler setting; the developer version metadata also differed. A replacement candidate
-must pass both installation and recovery through the full flasher page before
-handoff; the earlier UF2 result alone does not qualify a rebuilt DFU image.
+compiler evidence describes the transferred image. The failure has not been
+traced to one compiler setting; the developer version metadata also differed.
+A replacement candidate must pass both installation and recovery through the
+full flasher page before handoff; the earlier UF2 result alone does not qualify
+a rebuilt DFU image.
+
+### Corrected full-page installation and recovery
+
+The replacement local developer flasher from source commit
+`1f08f2ee972c5002b6367805bd3c6f47a928dd4e` passed a physical check in desktop
+Google Chrome on 2026-10-01. Its version was
+`0.3.7-dev.clean.37d7e339a9dae1ab34d85137b378d445519831daaec86a8d556adbc1e862128a`.
+This check used the real T1000-E flasher page, its signature verification,
+production Nordic DFU engine, and native Web Serial and WebUSB pickers:
+
+1. **Prepare and verify release** verified 519,718 bytes: a 519,704-byte
+   application and its 14-byte init packet.
+2. **Connect and update tracker**, using the stock bootloader entry path,
+   completed serial DFU. The application then enumerated with the exact Hopspot
+   USB identity above. The application's SHA-256 was
+   `7792896982d4fd8b43c89149e14b77e517261b51ad0a0ad62863c9ae909b12a4`.
+3. **Enter recovery mode** on the same page found that installed Hopspot,
+   acknowledged the request, and exposed the stock `T1000-E` drive and USB
+   `2886:0057` at the same physical USB location.
+4. `INFO_UF2.TXT` reported the same T1000-E board ID, bootloader
+   `0.9.1-5-g488711a`, and S140 `7.3.0`. All 519,704 application bytes in
+   `CURRENT.UF2` matched the browser's installed application at `0x27000`.
+
+Native UI automation selected and approved both browser pickers. The corrected
+installation and recovery required no physical button presses, cable
+reconnections, or user intervention. The user's earlier physical recovery of
+the failed candidate occurred before this check. The check ended in the stock
+UF2 bootloader with the corrected Hopspot application retained; it did not
+install Meshtastic again or qualify the held-button shortcut.
+
+For this correction, `cargo test --locked -p personal-hopspot-builder -p
+personal-hopspot-resources --quiet` passed 44 builder and 97 resource tests.
+Clippy with warnings denied passed for both packages and all targets, and
+`npm run test:flasher` passed all 82 tests. The local developer site remains
+separate from a published release.
