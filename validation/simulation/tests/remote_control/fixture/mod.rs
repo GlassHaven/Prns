@@ -17,6 +17,7 @@ use prns_simulation::*;
 mod control;
 mod host;
 mod node;
+pub mod persistence;
 mod watch;
 pub use control::encoded;
 pub use node::Node;
@@ -26,7 +27,8 @@ pub mod inventory;
 pub const TARGET: usize = 0;
 pub const CONTROLLER: usize = 1;
 pub const OUTSIDER: usize = 2;
-const NODE_COUNT: usize = 3;
+pub const OPERATOR: usize = 3;
+const NODE_COUNT: usize = 4;
 const MAX_ACTORS: usize = 20;
 const POLL_BUDGET: usize = 8192;
 pub const REQUEST_TIMEOUT_MS: u64 = 50;
@@ -61,6 +63,7 @@ pub struct Lab<'a> {
     pub medium: VirtualMedium,
     pub nodes: Vec<Node>,
     pub calls: Rc<RefCell<Vec<AppInvocation>>>,
+    boot_generations: [u64; NODE_COUNT],
 }
 
 pub fn requests() -> RemoteControlRequestSet {
@@ -94,6 +97,7 @@ pub enum LinkIdentity {
 pub enum ControllerPolicy {
     Granted(RemoteControlRequestSet),
     Nobody,
+    Grants(Vec<RemoteControlControllerGrant>),
 }
 
 pub fn with_lab<R>(
@@ -113,6 +117,16 @@ pub fn with_policy<R>(
     scheduling: ManualTaskScheduling,
     faults: FaultPlan,
     policy: ControllerPolicy,
+    scenario: impl FnOnce(&mut Lab<'_>) -> R,
+) -> (R, Vec<MediumEvent>) {
+    with_storage(scheduling, faults, policy, None, scenario)
+}
+
+pub fn with_storage<R>(
+    scheduling: ManualTaskScheduling,
+    faults: FaultPlan,
+    policy: ControllerPolicy,
+    storage: Option<persistence::Storage>,
     scenario: impl FnOnce(&mut Lab<'_>) -> R,
 ) -> (R, Vec<MediumEvent>) {
     let medium = VirtualMedium::new(
@@ -137,6 +151,7 @@ pub fn with_policy<R>(
         runner: ManualTaskRunner::new_with_scheduling(&mut clock, nonzero(MAX_ACTORS), scheduling),
         medium,
         nodes: Vec::new(),
+        boot_generations: [0; NODE_COUNT],
         calls: Rc::new(RefCell::new(Vec::new())),
     };
     for index in 0..NODE_COUNT {
@@ -146,10 +161,26 @@ pub fn with_policy<R>(
                 TARGET => policy.clone(),
                 _ => ControllerPolicy::Nobody,
             },
+            match index {
+                TARGET => storage.clone(),
+                _ => None,
+            },
         );
     }
-    for index in [CONTROLLER, OUTSIDER] {
+    for index in [CONTROLLER, OUTSIDER, OPERATOR] {
         lab.set_reachability(index, Reachability::Reachable);
+    }
+    if let Some(storage) = storage {
+        let handle = lab.nodes[TARGET].handle.clone();
+        let directory = storage.directory().to_path_buf();
+        let task = lab.insert(async move {
+            handle
+                .flush_to_store(&mut personal_rns::persistence::FileStore::new(directory))
+                .await
+                .expect("persist initial provisioned authority");
+            Event::Done
+        });
+        lab.expect_done(task);
     }
     let result = scenario(&mut lab);
     let nodes = std::mem::take(&mut lab.nodes);
@@ -236,4 +267,29 @@ impl Lab<'_> {
         assert_eq!(*found, task);
         assert!(matches!(event, Event::Done));
     }
+}
+
+pub fn grant(
+    index: usize,
+    authority: RemoteControlControllerAuthority,
+    permitted_requests: RemoteControlRequestSet,
+) -> RemoteControlControllerGrant {
+    RemoteControlControllerGrant::new(
+        *node::secrets(index).identities().controller(),
+        authority,
+        permitted_requests,
+    )
+    .expect("explicit fixture grant")
+}
+
+pub fn management_requests() -> RemoteControlRequestSet {
+    let mut allowed = requests();
+    for kind in [
+        RemoteControlRequestKind::InventoryControllers,
+        RemoteControlRequestKind::AuthorizeController,
+        RemoteControlRequestKind::RevokeController,
+    ] {
+        allowed.insert(kind);
+    }
+    allowed
 }

@@ -1,6 +1,11 @@
 mod authorization;
 mod host;
+mod io;
 pub(crate) use authorization::{AuthorizationOwnerError, AuthorizationTransaction};
+pub use io::{
+    PersistenceIo, PersistenceIoCompletion, PersistenceIoError, PersistenceIoOperation,
+    PersistenceIoTask,
+};
 
 #[cfg(test)]
 mod test_directory;

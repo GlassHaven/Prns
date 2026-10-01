@@ -72,7 +72,8 @@ pub use node_lifecycle::{
 pub use persistence::{
     boot_timeline_origin, wall_clock_timeline_origin, DefaultLocationError,
     DestinationIdentitySeedReport, FlushError, FlushFailurePolicy, FlushMark, FlushReport,
-    NodePersistence, PersistenceEvent, PersistenceFlushStatus, PersistenceIntent,
+    NodePersistence, PersistenceEvent, PersistenceFlushStatus, PersistenceIntent, PersistenceIo,
+    PersistenceIoCompletion, PersistenceIoError, PersistenceIoOperation, PersistenceIoTask,
     PersistenceRestoreReport, PersistenceTrigger, PersistenceWorker, PrepareFlushError,
     PreparedFlush, RatchetSeedReport, RegionFlush, RemoteControlAuthorizationPersistence,
     RemoteControlAuthorizationSeedReport, RouteSeedProgress, RouteSeedReport, SaveOnLearn,

@@ -9,6 +9,7 @@ use crate::persistence::{FileStore, FileStoreError};
 
 pub use super::authorization::RemoteControlAuthorizationPersistence;
 use super::authorization::{AuthorizationOwnerError, AuthorizationRevision, AuthorizationState};
+use super::io::{run_io, NativePersistenceIo, PersistenceIo, PersistenceIoOperation};
 use crate::storage::StorageLayout;
 use crate::wire::DestinationHash;
 
@@ -34,6 +35,7 @@ const SAVE_ON_LEARN_DEBOUNCE: Duration = Duration::from_secs(2);
 mod tests;
 
 pub struct NodePersistence {
+    io: Arc<dyn PersistenceIo>,
     store: FileStore,
     vault: FileVault,
 }
@@ -123,9 +125,16 @@ impl NodePersistence {
         }
         verify_writable(&directory)?;
         Ok(Self {
+            io: Arc::new(NativePersistenceIo),
             store: FileStore::new(&directory),
             vault: FileVault::new(directory),
         })
+    }
+
+    #[must_use]
+    pub fn with_io_driver(mut self, io: impl PersistenceIo + 'static) -> Self {
+        self.io = Arc::new(io);
+        self
     }
 
     #[must_use]
@@ -181,6 +190,7 @@ impl NodePersistence {
     pub fn worker(self, handle: PrnsNodeHandle) -> PersistenceWorker {
         PersistenceWorker {
             handle,
+            io: self.io,
             storage: Arc::new(Mutex::new(WorkerStorage {
                 store: self.store,
                 vault: self.vault,
@@ -374,6 +384,7 @@ impl WorkerStorage {
 }
 
 pub struct PersistenceWorker {
+    io: Arc<dyn PersistenceIo>,
     handle: PrnsNodeHandle,
     storage: Arc<Mutex<WorkerStorage>>,
     flush_interval: Duration,
@@ -389,6 +400,7 @@ impl PersistenceWorker {
     ) -> RemoteControlAuthorizationPersistence {
         RemoteControlAuthorizationPersistence {
             storage: Arc::clone(&self.storage),
+            io: Arc::clone(&self.io),
         }
     }
 
@@ -438,6 +450,7 @@ impl PersistenceWorker {
         let state = flush_state(
             &self.handle,
             &self.storage,
+            &self.io,
             PersistenceTrigger::Startup,
             on_event,
         )
@@ -449,6 +462,7 @@ impl PersistenceWorker {
         let ratchets = flush_all_ratchets(
             &self.handle,
             &self.storage,
+            &self.io,
             PersistenceTrigger::Startup,
             on_event,
         )
@@ -464,6 +478,7 @@ impl PersistenceWorker {
         let Self {
             handle,
             storage,
+            io,
             flush_interval,
             mut rotations,
             mut changes,
@@ -481,17 +496,17 @@ impl PersistenceWorker {
             tokio::select! {
                 biased;
                 () = &mut shutdown => {
-                    let state = flush_state(&handle, &storage, PersistenceTrigger::Shutdown, on_event).await.required();
+                    let state = flush_state(&handle, &storage, &io, PersistenceTrigger::Shutdown, on_event).await.required();
                     if let PersistenceFlushStatus::NodeStopped = state {
                         return state;
                     }
-                    let ratchets = flush_all_ratchets(&handle, &storage, PersistenceTrigger::Shutdown, on_event).await;
+                    let ratchets = flush_all_ratchets(&handle, &storage, &io, PersistenceTrigger::Shutdown, on_event).await;
                     return state.worst(ratchets);
                 }
                 destination = recv_or_pending(rotations.as_mut()), if rotations_open => {
                     match destination {
                         Some(destination) => {
-                            let status = flush_rotated_ratchet(&handle, &storage, destination, on_event).await;
+                            let status = flush_rotated_ratchet(&handle, &storage, &io, destination, on_event).await;
                             if should_exit(status, failure_policy) {
                                 return status;
                             }
@@ -506,7 +521,7 @@ impl PersistenceWorker {
                             if let Some(changes) = changes.as_mut() {
                                 while changes.try_recv().is_ok() {}
                             }
-                            let status = flush_state(&handle, &storage, PersistenceTrigger::RouteChange, on_event).await;
+                            let status = flush_state(&handle, &storage, &io, PersistenceTrigger::RouteChange, on_event).await;
                             if status.should_exit(failure_policy) {
                                 return status.required();
                             }
@@ -515,7 +530,7 @@ impl PersistenceWorker {
                     }
                 }
                 _ = ticker.tick() => {
-                    let status = flush_state(&handle, &storage, PersistenceTrigger::Interval, on_event).await;
+                    let status = flush_state(&handle, &storage, &io, PersistenceTrigger::Interval, on_event).await;
                     if status.should_exit(failure_policy) {
                         return status.required();
                     }
@@ -564,11 +579,12 @@ impl StateFlush {
 async fn flush_state(
     handle: &PrnsNodeHandle,
     storage: &Arc<Mutex<WorkerStorage>>,
+    io: &Arc<dyn PersistenceIo>,
     trigger: PersistenceTrigger,
     on_event: &mut (dyn FnMut(PersistenceEvent<'_>) + Send),
 ) -> StateFlush {
     let revision_storage = Arc::clone(storage);
-    let revision = tokio::task::spawn_blocking(move || {
+    let revision = run_io(io, PersistenceIoOperation::FlushRevision, move || {
         revision_storage
             .lock()
             .unwrap_or_else(|error| error.into_inner())
@@ -608,7 +624,7 @@ async fn flush_state(
         }
     };
     let storage = Arc::clone(storage);
-    let committed = tokio::task::spawn_blocking(move || {
+    let committed = run_io(io, PersistenceIoOperation::FlushCommit, move || {
         let mut storage = match storage.lock() {
             Ok(storage) => storage,
             Err(poisoned) => poisoned.into_inner(),
@@ -652,6 +668,7 @@ async fn flush_state(
 async fn flush_rotated_ratchet(
     handle: &PrnsNodeHandle,
     storage: &Arc<Mutex<WorkerStorage>>,
+    io: &Arc<dyn PersistenceIo>,
     destination: DestinationHash,
     on_event: &mut (dyn FnMut(PersistenceEvent<'_>) + Send),
 ) -> PersistenceFlushStatus {
@@ -669,6 +686,7 @@ async fn flush_rotated_ratchet(
     };
     store_single_ratchet(
         storage,
+        io,
         snapshot,
         PersistenceTrigger::RatchetRotation,
         on_event,
@@ -691,6 +709,7 @@ impl core::fmt::Display for AuthorizationSnapshotFlushError {
 async fn flush_all_ratchets(
     handle: &PrnsNodeHandle,
     storage: &Arc<Mutex<WorkerStorage>>,
+    io: &Arc<dyn PersistenceIo>,
     trigger: PersistenceTrigger,
     on_event: &mut (dyn FnMut(PersistenceEvent<'_>) + Send),
 ) -> PersistenceFlushStatus {
@@ -698,7 +717,7 @@ async fn flush_all_ratchets(
         return PersistenceFlushStatus::NodeStopped;
     };
     let storage = Arc::clone(storage);
-    let committed = tokio::task::spawn_blocking(move || {
+    let committed = run_io(io, PersistenceIoOperation::VaultStore, move || {
         let mut storage = match storage.lock() {
             Ok(storage) => storage,
             Err(poisoned) => poisoned.into_inner(),
@@ -730,12 +749,13 @@ async fn flush_all_ratchets(
 
 async fn store_single_ratchet(
     storage: &Arc<Mutex<WorkerStorage>>,
+    io: &Arc<dyn PersistenceIo>,
     snapshot: SelfRatchetSnapshot,
     trigger: PersistenceTrigger,
     on_event: &mut (dyn FnMut(PersistenceEvent<'_>) + Send),
 ) -> PersistenceFlushStatus {
     let storage = Arc::clone(storage);
-    let committed = tokio::task::spawn_blocking(move || {
+    let committed = run_io(io, PersistenceIoOperation::VaultStore, move || {
         let mut storage = match storage.lock() {
             Ok(storage) => storage,
             Err(poisoned) => poisoned.into_inner(),

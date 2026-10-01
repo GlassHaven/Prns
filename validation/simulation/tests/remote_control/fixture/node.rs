@@ -3,8 +3,8 @@ use personal_rns::engine::InstantMillis;
 use personal_rns::identity::vault::IdentitySecretKey;
 use personal_rns::manifold::tokio::TokioHost;
 use personal_rns::runtime::{
-    CryptoPoolConfig, InterfaceArbitration, InterfaceEventSource, ManuallyAttached, NoPersistence,
-    PrnsNode, PrnsNodeRecipe, RemoteControlNodeSetup, TokioHandleEntropy,
+    CryptoPoolConfig, InterfaceArbitration, InterfaceEventSource, ManuallyAttached, PrnsNode,
+    PrnsNodeRecipe, RemoteControlNodeSetup, TokioHandleEntropy,
 };
 use personal_rns::storage::GrowableHeap;
 use prns_core::entropy::RuntimeEntropy;
@@ -21,7 +21,7 @@ pub struct Node {
     pub(super) shutdown: oneshot::Sender<()>,
 }
 
-fn secrets(node: usize) -> RemoteControlNodeIdentitySecrets {
+pub(super) fn secrets(node: usize) -> RemoteControlNodeIdentitySecrets {
     let base = 0x31 + node as u8 * 2;
     RemoteControlNodeIdentitySecrets::new(
         RemoteControlControllerIdentitySecret::from(IdentitySecretKey::new([base; 64])),
@@ -31,7 +31,14 @@ fn secrets(node: usize) -> RemoteControlNodeIdentitySecrets {
 }
 
 impl Lab<'_> {
-    pub(super) fn start_node(&mut self, index: usize, policy: ControllerPolicy) {
+    pub(super) fn start_node(
+        &mut self,
+        index: usize,
+        policy: ControllerPolicy,
+        storage: Option<persistence::Storage>,
+    ) {
+        let generation = self.boot_generations[index];
+        self.boot_generations[index] = generation.checked_add(1).expect("boot generation");
         let interface = self
             .medium
             .attach(&(index as u64).to_be_bytes())
@@ -48,18 +55,18 @@ impl Lab<'_> {
             .insert(async move {
                 let host_seed = 0x80 + index as u8;
                 let host_stream = RuntimeEntropy::try_new(move |output: &mut [u8]| {
-                    output.fill(host_seed);
+                    fill_seed(output, host_seed, generation);
                     Ok::<(), core::convert::Infallible>(())
                 })
                 .expect("fixed fixture host entropy");
                 let handle_stream = RuntimeEntropy::try_new(move |output: &mut [u8]| {
-                    output.fill(host_seed + 8);
+                    fill_seed(output, host_seed + 8, generation);
                     Ok::<(), core::convert::Infallible>(())
                 })
                 .expect("fixed fixture handle entropy");
                 let entropy =
                     TokioHandleEntropy::from_sources(handle_stream, move |output: &mut [u8]| {
-                        output.fill(host_seed + 16);
+                        fill_seed(output, host_seed + 16, generation);
                         Ok::<(), core::convert::Infallible>(())
                     });
                 let grants = match policy {
@@ -70,6 +77,15 @@ impl Lab<'_> {
                     )
                     .expect("explicit control grant")],
                     ControllerPolicy::Nobody => vec![],
+                    ControllerPolicy::Grants(grants) => grants,
+                };
+                let persistence = match storage {
+                    Some(storage) => PersistenceSelection::Durable(
+                        personal_rns::runtime::NodePersistence::custom_dir(storage.directory())
+                            .expect("fixture persistence")
+                            .with_io_driver(storage.io.clone()),
+                    ),
+                    None => PersistenceSelection::Disabled,
                 };
                 let node = PrnsNode::new_with_entropy_sources(
                     |handle| {
@@ -80,7 +96,7 @@ impl Lab<'_> {
                                     .expect("one controller"),
                             ),
                         };
-                        let mut configured_requests = requests();
+                        let mut configured_requests = management_requests();
                         configured_requests.insert(RemoteControlRequestKind::DescribePower);
                         let capabilities =
                             RemoteControlCapabilities::from_requests(configured_requests)
@@ -103,7 +119,7 @@ impl Lab<'_> {
                             request_endpoints: personal_rns::request_endpoints![],
                             on_event: |_, _: &()| {},
                             interfaces: ManuallyAttached,
-                            persistence: NoPersistence,
+                            persistence,
                         }
                     },
                     TokioHost::with_runtime_entropy(TIMELINE_ORIGIN, host_stream),
@@ -135,5 +151,41 @@ impl Lab<'_> {
             task,
             shutdown,
         });
+    }
+}
+
+enum PersistenceSelection {
+    Disabled,
+    Durable(personal_rns::runtime::NodePersistence),
+}
+
+impl personal_rns::runtime::PersistenceIntent for PersistenceSelection {
+    fn into_node_persistence(self) -> Option<personal_rns::runtime::NodePersistence> {
+        match self {
+            Self::Disabled => None,
+            Self::Durable(persistence) => Some(persistence),
+        }
+    }
+}
+
+fn fill_seed(output: &mut [u8], seed: u8, generation: u64) {
+    let boot = generation.to_be_bytes();
+    for (index, byte) in output.iter_mut().enumerate() {
+        *byte = seed ^ boot[index % boot.len()];
+    }
+}
+
+impl Lab<'_> {
+    pub fn restart_target(&mut self, storage: persistence::Storage) {
+        self.runner
+            .cancel(self.nodes[TARGET].task)
+            .expect("remove old boot");
+        self.start_node(TARGET, ControllerPolicy::Nobody, Some(storage));
+        let last = self.nodes.len() - 1;
+        self.nodes.swap(TARGET, last);
+        self.nodes.pop().expect("discard old handles");
+        for controller in [CONTROLLER, OUTSIDER, OPERATOR] {
+            self.set_reachability(controller, Reachability::Reachable);
+        }
     }
 }

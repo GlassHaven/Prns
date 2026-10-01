@@ -3,6 +3,7 @@ use super::*;
 use crate::engine::InstantMillis;
 use crate::manifold::driver::PersistedStateSnapshot;
 use crate::persistence::FileStore;
+use crate::persistence::PersistedStore;
 use crate::runtime::node_facade::PrnsNodeHandle;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::{mpsc, oneshot};

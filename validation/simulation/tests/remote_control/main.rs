@@ -11,3 +11,5 @@ mod watch;
 mod authorization;
 
 mod faults;
+
+mod durability;

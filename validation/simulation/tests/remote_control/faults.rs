@@ -269,7 +269,7 @@ fn cancellation_drops_the_local_waiter_without_misattributing_an_inflight_respon
                 ],
                 "cancelling a local wait does not withdraw a request already on the wire"
             );
-            assert_eq!(lab.runner.task_count(), 3);
+            assert_eq!(lab.runner.task_count(), lab.nodes.len());
         },
     );
 }

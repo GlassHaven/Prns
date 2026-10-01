@@ -1,9 +1,10 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::persistence::{FileStoreConfirmation, FileStoreError, PersistedStore, SnapshotRegion};
+use crate::persistence::{FileStoreConfirmation, FileStoreError, SnapshotRegion};
 
 use super::host::WorkerStorage;
+use super::io::{run_io, PersistenceIo, PersistenceIoOperation};
 
 #[cfg(test)]
 mod tests;
@@ -74,9 +75,11 @@ impl core::fmt::Display for AuthorizationOwnerError {
 #[derive(Clone)]
 pub struct RemoteControlAuthorizationPersistence {
     pub(super) storage: Arc<Mutex<WorkerStorage>>,
+    pub(super) io: Arc<dyn PersistenceIo>,
 }
 
 pub(crate) struct AuthorizationTransaction {
+    io: Arc<dyn PersistenceIo>,
     storage: Arc<Mutex<WorkerStorage>>,
     owner: Arc<()>,
 }
@@ -89,18 +92,23 @@ impl RemoteControlAuthorizationPersistence {
 
     pub(crate) async fn begin(&self) -> Result<AuthorizationTransaction, AuthorizationOwnerError> {
         let storage = Arc::clone(&self.storage);
-        let owner = tokio::task::spawn_blocking(move || {
-            storage
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .authorization
-                .begin()
-        })
+        let owner = run_io(
+            &self.io,
+            PersistenceIoOperation::AuthorizationBegin,
+            move || {
+                storage
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .authorization
+                    .begin()
+            },
+        )
         .await
         .map_err(|_| AuthorizationOwnerError::Task)??;
         Ok(AuthorizationTransaction {
             storage: Arc::clone(&self.storage),
             owner,
+            io: Arc::clone(&self.io),
         })
     }
 }
@@ -111,11 +119,13 @@ impl AuthorizationTransaction {
         region: SnapshotRegion,
         snapshot: Vec<u8>,
     ) -> Result<Result<(), FileStoreError>, AuthorizationOwnerError> {
+        let write_io = Arc::clone(&self.io);
+        let confirm_io = Arc::clone(&self.io);
         self.store_with(
             region,
             snapshot,
-            |store, region, bytes| store.store(region, bytes),
-            |store, region, bytes| store.confirm_store(region, bytes),
+            move |store, region, bytes| write_io.store_authorization(store, region, bytes),
+            move |store, region, bytes| confirm_io.confirm_authorization(store, region, bytes),
         )
         .await
     }
@@ -144,11 +154,15 @@ impl AuthorizationTransaction {
         let storage = Arc::clone(&self.storage);
         let owner = Arc::clone(&self.owner);
         let candidate = Arc::clone(&snapshot);
-        let result = tokio::task::spawn_blocking(move || {
-            let mut storage = storage.lock().unwrap_or_else(|error| error.into_inner());
-            storage.authorization.check_owner(&owner)?;
-            Ok::<_, AuthorizationOwnerError>(write(&mut storage.store, region, &candidate))
-        })
+        let result = run_io(
+            &self.io,
+            PersistenceIoOperation::AuthorizationStore(region),
+            move || {
+                let mut storage = storage.lock().unwrap_or_else(|error| error.into_inner());
+                storage.authorization.check_owner(&owner)?;
+                Ok::<_, AuthorizationOwnerError>(write(&mut storage.store, region, &candidate))
+            },
+        )
         .await
         .map_err(|_| AuthorizationOwnerError::Task)??;
         match result {
@@ -162,11 +176,15 @@ impl AuthorizationTransaction {
             let owner = Arc::clone(&self.owner);
             let candidate = Arc::clone(&snapshot);
             let confirm = Arc::clone(&confirm);
-            let confirmation = tokio::task::spawn_blocking(move || {
-                let storage = storage.lock().unwrap_or_else(|error| error.into_inner());
-                storage.authorization.check_owner(&owner)?;
-                Ok::<_, AuthorizationOwnerError>(confirm(&storage.store, region, &candidate))
-            })
+            let confirmation = run_io(
+                &self.io,
+                PersistenceIoOperation::AuthorizationConfirm(region),
+                move || {
+                    let storage = storage.lock().unwrap_or_else(|error| error.into_inner());
+                    storage.authorization.check_owner(&owner)?;
+                    Ok::<_, AuthorizationOwnerError>(confirm(&storage.store, region, &candidate))
+                },
+            )
             .await
             .map_err(|_| AuthorizationOwnerError::Task)??;
             match confirmation {
@@ -178,15 +196,20 @@ impl AuthorizationTransaction {
 
     // Dropping an unresolved owner must not permit a stale flush or another transaction.
     pub(crate) async fn finish(self) -> Result<(), AuthorizationOwnerError> {
-        tokio::task::spawn_blocking(move || {
-            let mut storage = self
-                .storage
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
-            storage.authorization.check_owner(&self.owner)?;
-            storage.authorization.owner = None;
-            Ok(())
-        })
+        let io = Arc::clone(&self.io);
+        run_io(
+            &io,
+            PersistenceIoOperation::AuthorizationFinish,
+            move || {
+                let mut storage = self
+                    .storage
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                storage.authorization.check_owner(&self.owner)?;
+                storage.authorization.owner = None;
+                Ok(())
+            },
+        )
         .await
         .map_err(|_| AuthorizationOwnerError::Task)?
     }
