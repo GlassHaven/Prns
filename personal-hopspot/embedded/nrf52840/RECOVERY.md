@@ -16,6 +16,11 @@ connect the tracker, and select **Switch firmware → Enter recovery mode**.
 Choose the Personal Hopspot device in the USB picker. This action works without
 preparing a Hopspot release or downloading firmware.
 
+Chrome requires a button click and approval in its device picker. After approval,
+the software request can enter recovery without pressing the tracker button or
+reconnecting its cable. The flasher provides recovery entry and the Meshtastic
+instructions; it does not install Meshtastic itself.
+
 The browser reports a request acknowledgement. Confirm that the `T1000-E`
 drive actually appears and that `INFO_UF2.TXT` identifies the T1000-E before
 copying firmware. If the request is rejected, use manual recovery; older
@@ -81,12 +86,39 @@ After the matching Meshtastic erase utility and official application UF2 were
 installed, a Meshtastic serial protocol query confirmed firmware
 `2.7.26.54e0d8d` and hardware model `TRACKER_T1000_E`.
 
-That observation establishes recovery for the older installed firmware using
-the stock bootloader. It does not qualify the new software request or startup
-shortcut. Release qualification must observe the drive after each new route
-and verify the replacement application over its own protocol. Automated
-browser tests use simulated USB devices and cannot establish physical reset
-or drive enumeration.
+### Software recovery round trip
+
+Later on 2026-10-01, the same tracker completed the following round trip without
+a physical button press, cable reconnection, or requested user intervention:
+
+1. Meshtastic's `enterDFUMode` admin request entered the stock UF2 bootloader.
+2. The unreleased Hopspot developer UF2 from source commit
+   `fa5f7546b012e3bf0d8c3a3755750d1b1dc4b935` was installed. Its SHA-256 was
+   `6f1aef3bd0df1ae17524bcda1d6e3022d214a53c7005de73b9e553dba97b4991`.
+   The application enumerated with the exact Hopspot USB identity above.
+3. The production `handOffToUf2` JavaScript, bundled from that source and called
+   from a localhost test page in desktop Google Chrome, used real
+   `navigator.usb`. Native UI automation selected the Hopspot device and approved
+   Chrome's picker. The function returned `status: "requested"`.
+4. The stock `T1000-E` drive and USB `2886:0057` appeared at the same physical USB
+   location. `INFO_UF2.TXT` still identified the T1000-E and S140 `7.3.0`.
+   All 2,030 application blocks in its `CURRENT.UF2` readback matched the
+   installed developer UF2 exactly.
+5. The matching official Meshtastic erase utility enumerated, its serial console
+   was opened, and it returned to the stock bootloader. This run did not capture
+   its formatting completion text, so it does not independently qualify erasure.
+6. The official T1000-E Meshtastic UF2 was installed. A serial protocol query
+   confirmed `2.7.26.54e0d8d`, `TRACKER_T1000_E`, and the same node ID and name.
+   Local and module configuration messages matched their pretest values. The
+   bootloader drive was no longer present.
+
+This qualifies the new software recovery request on the attached tracker and
+stock bootloader. It does not qualify the held-button startup shortcut. The
+physical browser check exercised the production JavaScript engine through a
+local test page; it was not a deployment of the public flasher site. Automated
+full-page browser tests use simulated USB devices. The initial headless and
+isolated browser harnesses could not approve the native WebUSB picker; using
+desktop Chrome with native UI automation completed the hardware check.
 
 ## Verification on macOS, 2026-10-01
 
@@ -113,6 +145,7 @@ or drive enumeration.
   feature and was corrected before compiling that target. Touched Rust files
   were formatted; documentation links and `git diff --check` were clean.
 
-No new firmware was installed on the physical tracker during these checks.
-The restored Meshtastic installation remains in place. The new routes are
-pending physical qualification and firmware/site release.
+The build and automated checks above preceded the physical round trip. The
+tracker is now restored to Meshtastic. Software recovery passed physical
+qualification; the held-button route still needs physical qualification. The
+new firmware and site changes have not been published.

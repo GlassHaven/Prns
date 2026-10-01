@@ -47,7 +47,7 @@ const RECOVERY_GUIDANCE = Object.freeze({
   invalid_config: "Correct the local configuration values, then prepare and verify the release again.",
   unsupported_browser: "Open this page over HTTPS in current desktop Chrome, Edge, or Firefox 151 or later, or use the standalone CLI.",
   insecure_context: "Reopen the flasher over HTTPS or localhost before trying again.",
-  permission_denied: "Review the selected board, retry, and choose its serial port in the browser prompt.",
+  permission_denied: "Review the selected board, retry, and choose its USB device or serial port in the browser prompt.",
   bootloader_permission_denied: "The tracker is now in its bootloader. Prepare again, choose the stock/bootloader entry path, and grant that exact serial port.",
   connection_failure: "Disconnect the board, follow its BOOT/RESET preparation steps, reconnect it, and restart the complete operation.",
   ambiguous_device: "Disconnect every other matching tracker or bootloader, then restart the complete operation.",
