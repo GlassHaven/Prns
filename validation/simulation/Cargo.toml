@@ -10,7 +10,7 @@ description = "Deterministic, host-native virtual device validation for Personal
 publish = false
 
 [features]
-controlled-time = ["tokio/test-util"]
+controlled-time = ["tokio/test-util", "prns-runtime-tokio/simulation-control"]
 heap-profile = ["dep:dhat"]
 
 [dependencies]
@@ -19,6 +19,7 @@ personal-rns = { path = "../../personal-rns", default-features = false, features
 tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
+prns-runtime-tokio = { path = "../../prns-runtime/impls/tokio", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 personal-hopspot-core = { path = "../../personal-hopspot/core", default-features = false }

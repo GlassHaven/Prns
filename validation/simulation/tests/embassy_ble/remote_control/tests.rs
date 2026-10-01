@@ -143,6 +143,19 @@ pub fn with_pair<T>(
     scheduling: ManualTaskScheduling,
     scenario: impl FnOnce(&mut Pair<'_, '_>) -> T,
 ) -> (T, Vec<WireValue>, [serde_json::Value; 2]) {
+    with_pair_execution(
+        runtimes,
+        scheduling,
+        std::array::from_fn(|_| personal_rns::runtime::CryptoPoolConfig::Inline),
+        scenario,
+    )
+}
+fn with_pair_execution<T>(
+    runtimes: [Runtime; 2],
+    scheduling: ManualTaskScheduling,
+    crypto: [personal_rns::runtime::CryptoPoolConfig; 2],
+    scenario: impl FnOnce(&mut Pair<'_, '_>) -> T,
+) -> (T, Vec<WireValue>, [serde_json::Value; 2]) {
     let clock = ClockLease::acquire();
     let capture = BleWireCapture::new(NonZeroUsize::new(32768).expect("capture capacity"));
     let lab = VirtualBleLab::with_wire_capture(
@@ -173,14 +186,16 @@ pub fn with_pair<T>(
         Rc::new(RefCell::new(Vec::new())),
         Rc::new(RefCell::new(Vec::new())),
     );
+    let mut crypto = crypto.into_iter();
     let nodes = std::array::from_fn(|index| {
-        node::start(
+        node::start_with_crypto(
             &mut tasks,
             &lab,
             index,
             0,
             storage[index].clone(),
             messages.clone(),
+            crypto.next().expect("one crypto configuration per node"),
         )
     });
     lab.set_reachability(
@@ -290,6 +305,64 @@ pub fn with_pair<T>(
         })
         .collect();
     (result, wire, persistence)
+}
+
+#[test]
+fn controlled_workers_run_real_remote_control_links_across_runtime_pairings() {
+    use personal_rns::runtime::CryptoPoolConfig;
+    use prns_runtime_tokio::runtime::{ControlledCrypto, ControlledCryptoEvent};
+    for runtimes in PAIRS {
+        if runtimes == [Runtime::Embassy, Runtime::Embassy] {
+            continue;
+        }
+        for workers in [1, 4] {
+            let run = || {
+                let controls = runtimes.each_ref().map(|runtime| match runtime {
+                    Runtime::Embassy => None,
+                    Runtime::Tokio => Some(ControlledCrypto::new(
+                        NonZeroUsize::new(workers).expect("workers"),
+                        NonZeroUsize::new(32768).expect("trace"),
+                    )),
+                });
+                let crypto = controls.each_ref().map(|control| match control {
+                    None => CryptoPoolConfig::Inline,
+                    Some(control) => CryptoPoolConfig::Controlled(control.clone()),
+                });
+                let result = with_pair_execution(
+                    runtimes.clone(),
+                    ManualTaskScheduling::Cyclic,
+                    crypto,
+                    |pair| {
+                        let payload =
+                            RemoteControlAppMessage::from_slice(b"real-worker").expect("bounded");
+                        assert_eq!(
+                            pair.exchange(RemoteControlRequest::AppMessage(payload.clone())),
+                            Ok(RemoteControlResponse::AppMessage(payload))
+                        );
+                    },
+                );
+                let traces = controls.map(|control| {
+                    control.map(|control| {
+                        let trace = control.trace().expect("worker trace");
+                        assert!(trace
+                            .iter()
+                            .any(|event| matches!(event, ControlledCryptoEvent::Consumed { .. })));
+                        assert!(matches!(
+                            trace.last(),
+                            Some(ControlledCryptoEvent::Retired { .. })
+                        ));
+                        trace
+                    })
+                });
+                (result, traces)
+            };
+            assert_eq!(
+                run(),
+                run(),
+                "exact controlled replay {runtimes:?}, {workers} workers"
+            );
+        }
+    }
 }
 
 #[test]

@@ -19,6 +19,12 @@ mod tracing_events;
 
 pub use prns_runtime::runtime::*;
 
+#[cfg(feature = "simulation-control")]
+pub use crate::manifold::driver::{
+    ControlledCrypto, ControlledCryptoError, ControlledCryptoEvent, ControlledCryptoSnapshot,
+    ControlledCryptoStep, ControlledJobId, ControlledWorkKind, ControlledWorkerId,
+    CryptoWorkBoundary,
+};
 pub use crate::manifold::driver::{CryptoPoolConfig, CryptoWorkerPlacement, PoolWorkers};
 #[cfg(feature = "scheduler-tuning")]
 pub use crate::manifold::driver::{SchedulerPolicy, SchedulerPolicyError, SchedulerPolicyInput};

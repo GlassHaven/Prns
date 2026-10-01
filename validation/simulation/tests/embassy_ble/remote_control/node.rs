@@ -74,11 +74,34 @@ pub fn start(
     storage: Storage,
     messages: Messages,
 ) -> Node {
+    start_with_crypto(
+        tasks,
+        lab,
+        index,
+        generation,
+        storage,
+        messages,
+        CryptoPoolConfig::Inline,
+    )
+}
+
+pub fn start_with_crypto(
+    tasks: &mut EmbassyTasks<'_>,
+    lab: &VirtualBleLab,
+    index: usize,
+    generation: u64,
+    storage: Storage,
+    messages: Messages,
+    crypto: CryptoPoolConfig,
+) -> Node {
     let address = (index + 1) as u8;
     let logical_start = InstantMillis(1_000_000 + tasks.snapshot().tick.get());
     let observations = messages.1.clone();
     match storage {
         Storage::Tokio(storage) => {
+            if let CryptoPoolConfig::Controlled(control) = &crypto {
+                tasks.register_crypto(control.clone());
+            }
             let wire = WireGate::new();
             let supervisor =
                 prns_interfaces_tokio::bluetooth_auto::BluetoothAuto::<_, MAX_PEERS>::new(
@@ -139,7 +162,7 @@ pub fn start(
                     ),
                     entropy,
                 )
-                .with_crypto_pool(CryptoPoolConfig::Inline)
+                .with_crypto_pool(crypto)
                 .with_interface_arbitration(InterfaceArbitration::RoundRobin {
                     first: InterfaceEventSource::Message,
                 });

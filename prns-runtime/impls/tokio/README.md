@@ -74,3 +74,20 @@ available on supported targets; other hosts, including 32-bit MIPS Linux, use th
 crate's synchronized fallback. Values remain 64-bit and existing memory orderings
 are preserved. The fallback is not guaranteed to be lock-free. Linux hosts do not
 enable interrupt-disabling or single-core assumptions.
+
+## Controlled workers for validation
+
+The nondefault `simulation-control` feature exposes `ControlledCrypto` through
+`CryptoPoolConfig::Controlled`. Ordinary builds contain neither the control
+handle nor worker trace hooks. Validation supplies explicit worker and trace
+budgets; the process-wide crypto environment override cannot replace this mode.
+
+Controlled workers use the production worker selection, admission accounting,
+job/result rings, crypto functions, completion readiness and manifold dispatch.
+Execution and publication can be held separately by work kind. A transition
+executes one real job; native verification/signing batches and actual thread
+handoffs retain their separate worker tests. A retired control cannot attach to
+a replacement node. Queue, computed-result, published-result and trace occupancy
+have finite bounds, and trace overflow fails qualification instead of evicting
+evidence. The simulator interleaves worker transitions with actor polls without
+advancing its clock.
