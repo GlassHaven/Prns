@@ -1,0 +1,87 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use personal_hopspot_core::{
+    remote_control_interface_config_from_snapshots, remote_control_interface_peers_from_snapshots,
+    remote_control_inventory_from_snapshots,
+};
+use personal_rns::identity::IdentityHash;
+use personal_rns::remote_control::*;
+use personal_rns::runtime::{
+    PrnsNodeHandle, RemoteControlAppMessages, RemoteControlHostCommand,
+    RemoteControlHostCommandError, RemoteControlHostControls, RemoteControlHostResponse,
+};
+
+use super::AppInvocation;
+
+pub(super) struct InspectionHost(pub PrnsNodeHandle);
+
+impl RemoteControlHostControls for InspectionHost {
+    fn supported_requests(&self) -> RemoteControlRequestSet {
+        let mut requests = RemoteControlRequestSet::empty();
+        for kind in [
+            RemoteControlRequestKind::DescribeBuild,
+            RemoteControlRequestKind::InventoryInterfaces,
+            RemoteControlRequestKind::InventoryInterfaceConfig,
+            RemoteControlRequestKind::InventoryInterfacePeers,
+        ] {
+            requests.insert(kind);
+        }
+        requests
+    }
+
+    async fn execute_remote_control(
+        &self,
+        command: RemoteControlHostCommand,
+    ) -> Result<RemoteControlHostResponse, RemoteControlHostCommandError> {
+        use RemoteControlHostCommand as Command;
+        use RemoteControlHostResponse as Response;
+        match command {
+            Command::DescribeBuild => Ok(Response::DescribeBuild(
+                RemoteControlBuildVersion::from_text("simulation-v1")
+                    .expect("bounded build version"),
+            )),
+            Command::InventoryInterfaces { page } => {
+                remote_control_inventory_from_snapshots(&self.0.interfaces(), page)
+                    .map(Response::InventoryInterfaces)
+                    .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
+            }
+            Command::InventoryInterfaceConfig { id } => {
+                remote_control_interface_config_from_snapshots(&self.0.interfaces(), id, |_, _| {
+                    Ok(())
+                })
+                .map(Response::InventoryInterfaceConfig)
+                .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
+            }
+            Command::InventoryInterfacePeers { id, page } => {
+                remote_control_interface_peers_from_snapshots(&self.0.interfaces(), id, page)
+                    .map(Response::InventoryInterfacePeers)
+                    .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
+            }
+            _ => Err(RemoteControlHostCommandError::Unsupported),
+        }
+    }
+}
+
+pub(super) struct Messages(pub Rc<RefCell<Vec<AppInvocation>>>);
+
+impl<State> RemoteControlAppMessages<State> for Messages {
+    async fn handle_app_message(
+        &self,
+        _: &State,
+        controller: IdentityHash,
+        payload: &[u8],
+    ) -> Result<RemoteControlAppMessage, RemoteControlHostCommandError> {
+        let mut calls = self.0.borrow_mut();
+        assert!(calls.len() < super::MAX_APP_INVOCATIONS);
+        calls.push(AppInvocation {
+            controller,
+            payload: payload.to_vec(),
+        });
+        if payload.first() == Some(&0xff) {
+            return Err(RemoteControlHostCommandError::ApplyFailed);
+        }
+        RemoteControlAppMessage::from_slice(payload)
+            .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
+    }
+}

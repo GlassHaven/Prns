@@ -27,13 +27,13 @@ stops a watch when its grant is revoked. Pending admissions are reserved before
 waiting for a response lane, so revocation also cancels a watch waiting to start.
 Canceled workers retain capacity until they finish. A blocked write times out
 after two seconds; cleanup gets another two seconds to send EOF, then closes the
-control link if it cannot finish. Node shutdown aborts its remaining workers.
+control link if it cannot finish. An owned watch driver runs alongside request handling; a blocked request operation cannot prevent watch timers from progressing. Node shutdown drops the futures synchronously. A panicking status callback closes its control link and releases the watch lease.
 The runtime cancels watches on link closure, and reconnect starts a new
 subscription. Dropping a reader alone does not unsubscribe; close its control
 link to stop the subscription. Reader overflow and link loss have distinct typed
 errors.
 
-Further qualification needs an end-to-end multi-controller run on the G4 and
+The [deterministic Remote Control campaign](../../../validation/simulation/measurements/remote-control.md) covers real-node admission, inventories, stream sequencing, packet faults and lifecycle checks under manual time. Further qualification needs an end-to-end multi-controller run on the G4 and
 Heltec, including a peer join, a slow reader, and link closure. The producer
 currently uses full resync invalidations; precise `InterfaceChanged` and
 `PeersChanged` events can replace them when a direct change source is available.

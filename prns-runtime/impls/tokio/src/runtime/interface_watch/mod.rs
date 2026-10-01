@@ -1,5 +1,11 @@
+use futures_util::stream::{FuturesUnordered, StreamExt};
+use futures_util::FutureExt;
 use std::collections::HashMap;
+use std::future::{poll_fn, Future};
+use std::panic::AssertUnwindSafe;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::Poll;
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -54,8 +60,15 @@ struct Watch {
     lease: Arc<WatchLease>,
     controller: IdentityHash,
     stop: WatchCancellation,
-    task: tokio::task::JoinHandle<()>,
 }
+
+struct WatchCompletion {
+    link_id: LinkId,
+    stream_id: StreamId,
+    lease: Arc<WatchLease>,
+}
+
+type WatchWorker = Pin<Box<dyn Future<Output = WatchCompletion> + Send>>;
 
 enum WatchCancellation {
     Available(oneshot::Sender<()>),
@@ -74,17 +87,51 @@ impl Watch {
 
 pub(super) struct InterfaceWatchRegistry {
     watches: Mutex<HashMap<(LinkId, StreamId), Watch>>,
+    workers: Mutex<FuturesUnordered<WatchWorker>>,
 }
 
 impl Default for InterfaceWatchRegistry {
     fn default() -> Self {
         Self {
             watches: Mutex::new(HashMap::new()),
+            workers: Mutex::new(FuturesUnordered::new()),
         }
     }
 }
 
 impl InterfaceWatchRegistry {
+    pub(super) async fn run(&self) -> core::convert::Infallible {
+        loop {
+            self.next_completion().await;
+        }
+    }
+
+    pub(super) async fn next_completion(&self) {
+        let completion = poll_fn(|cx| {
+            let mut workers = self
+                .workers
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            // The owned watch driver is the sole poller. Release the lock after each poll.
+            match workers.poll_next_unpin(cx) {
+                Poll::Ready(Some(completion)) => Poll::Ready(completion),
+                Poll::Ready(None) | Poll::Pending => Poll::Pending,
+            }
+        })
+        .await;
+        let mut watches = self
+            .watches
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let key = (completion.link_id, completion.stream_id);
+        if watches
+            .get(&key)
+            .is_some_and(|watch| Arc::ptr_eq(&watch.lease, &completion.lease))
+        {
+            watches.remove(&key);
+        }
+    }
+
     pub(super) fn admission(&self, reservation: &WatchReservation) -> WatchAdmission {
         let watches = self
             .watches
@@ -111,7 +158,6 @@ impl InterfaceWatchRegistry {
             .watches
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        watches.retain(|_, watch| !watch.task.is_finished());
         if watches.contains_key(&(link_id, stream_id)) {
             return Err(WatchReserveFailure::Duplicate);
         }
@@ -121,15 +167,26 @@ impl InterfaceWatchRegistry {
         let lease = Arc::new(WatchLease);
         let (start, ready) = oneshot::channel();
         let (stop, mut cancellation) = oneshot::channel();
-        let task = tokio::spawn(async move {
-            tokio::select! {
-                biased;
-                _ = &mut cancellation => {},
-                started = ready => {
-                    if started.is_ok() {
-                        run_watch(node, link_id, stream_id, cancellation).await;
+        let worker_lease = lease.clone();
+        let worker = Box::pin(async move {
+            let watched = async {
+                tokio::select! {
+                    biased;
+                    _ = &mut cancellation => {},
+                    started = ready => {
+                        if started.is_ok() {
+                            run_watch(&node, link_id, stream_id, cancellation).await;
+                        }
                     }
                 }
+            };
+            if AssertUnwindSafe(watched).catch_unwind().await.is_err() {
+                node.close_link(link_id);
+            }
+            WatchCompletion {
+                link_id,
+                stream_id,
+                lease: worker_lease,
             }
         });
         watches.insert(
@@ -138,9 +195,12 @@ impl InterfaceWatchRegistry {
                 lease: lease.clone(),
                 controller,
                 stop: WatchCancellation::Available(stop),
-                task,
             },
         );
+        self.workers
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .push(worker);
         Ok(WatchReservation {
             link_id,
             stream_id,
@@ -196,20 +256,6 @@ impl InterfaceWatchRegistry {
             }) {
                 watch.stop();
             }
-        }
-    }
-}
-
-impl Drop for InterfaceWatchRegistry {
-    fn drop(&mut self) {
-        // Node shutdown cannot await stream cleanup. Abort instead of detaching workers.
-        for watch in self
-            .watches
-            .get_mut()
-            .unwrap_or_else(|error| error.into_inner())
-            .values_mut()
-        {
-            watch.task.abort();
         }
     }
 }
@@ -287,13 +333,13 @@ async fn send_event(
 }
 
 async fn run_watch(
-    node: PrnsNodeHandle,
+    node: &PrnsNodeHandle,
     link_id: LinkId,
     stream_id: StreamId,
     mut cancellation: oneshot::Receiver<()>,
 ) {
     let mut writer = node.byte_stream_writer(link_id, stream_id);
-    let result = run_watch_events(&node, &mut writer, &mut cancellation).await;
+    let result = run_watch_events(node, &mut writer, &mut cancellation).await;
     if let Err(_error) = result {
         #[cfg(feature = "tracing")]
         tracing::debug!(target: "prns.runtime", event = "interface_watch_stopped", ?link_id, ?stream_id, error = %_error);
@@ -353,169 +399,4 @@ async fn run_watch_events(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::engine::{
-        DeliveryEvidence, DeliveryProof, PacketReceiptDelivered, PrnsCommand, Settlement,
-    };
-    use crate::manifold::driver::HostCommand;
-    use crate::remote_control::FixedRemoteControlControllerGrantTable;
-    use crate::routing::dedup::PacketHash;
-    use crate::routing::links::channel::byte_stream::parse;
-    use crate::units::RttMillis;
-    use tokio::sync::mpsc;
-
-    #[tokio::test]
-    async fn revoked_pending_watch_cannot_start_and_old_reservation_cannot_cancel_its_replacement()
-    {
-        let (commands, mut receiver) = mpsc::unbounded_channel();
-        let node = PrnsNodeHandle::over(commands);
-        let watches = InterfaceWatchRegistry::default();
-        let link_id = LinkId::new([7; 16]);
-        let stream_id = StreamId::new(3).unwrap();
-        let controller = IdentityHash::new([8; 16]);
-        let original = watches
-            .reserve(node.clone(), link_id, stream_id, controller)
-            .unwrap();
-        watches.reconcile_grants(&FixedRemoteControlControllerGrantTable::<8>::default());
-        tokio::task::yield_now().await;
-        let replacement = watches
-            .reserve(node, link_id, stream_id, controller)
-            .unwrap();
-        assert!(matches!(
-            watches.admission(&original),
-            WatchAdmission::Withdrawn
-        ));
-        watches.cancel(&original);
-        assert!(matches!(
-            watches.admission(&replacement),
-            WatchAdmission::Admitted
-        ));
-        original.start();
-        tokio::task::yield_now().await;
-        assert!(matches!(
-            receiver.try_recv(),
-            Err(mpsc::error::TryRecvError::Empty)
-        ));
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn blocked_writer_finishes_within_the_cleanup_deadline() {
-        let (commands, mut receiver) = mpsc::unbounded_channel();
-        let node = PrnsNodeHandle::over(commands);
-        let watches = InterfaceWatchRegistry::default();
-        let link_id = LinkId::new([7; 16]);
-        let stream_id = StreamId::new(3).unwrap();
-        watches
-            .reserve(node, link_id, stream_id, IdentityHash::new([8; 16]))
-            .unwrap()
-            .start();
-        let initial = receiver.recv().await.unwrap(); // Keep the settlement pending.
-        watches.cancel_link(link_id);
-        tokio::task::yield_now().await;
-        tokio::time::advance(WATCH_WRITE_DEADLINE).await;
-        tokio::task::yield_now().await;
-        assert!(watches
-            .watches
-            .lock()
-            .unwrap()
-            .values()
-            .all(|watch| watch.task.is_finished()));
-        assert!(matches!(
-            receiver.recv().await,
-            Some(HostCommand::Engine(crate::engine::IssuedCommand {
-                command: PrnsCommand::CloseLink(_),
-                ..
-            }))
-        ));
-        drop(initial);
-    }
-
-    #[tokio::test]
-    async fn watch_registry_bounds_subscriptions_and_releases_revoked_slots() {
-        let (commands, _receiver) = mpsc::unbounded_channel();
-        let node = PrnsNodeHandle::over(commands);
-        let watches = InterfaceWatchRegistry::default();
-        let link_id = LinkId::new([7; 16]);
-        let controller = IdentityHash::new([8; 16]);
-        let mut reservations = Vec::new();
-        for index in 0..MAX_INTERFACE_WATCHES {
-            let stream_id = StreamId::new(index as u16).unwrap();
-            reservations.push(
-                watches
-                    .reserve(node.clone(), link_id, stream_id, controller)
-                    .unwrap(),
-            );
-        }
-        assert!(matches!(
-            watches.reserve(node.clone(), link_id, StreamId::new(0).unwrap(), controller),
-            Err(WatchReserveFailure::Duplicate),
-        ));
-        assert!(matches!(
-            watches.reserve(node.clone(), link_id, StreamId::new(9).unwrap(), controller),
-            Err(WatchReserveFailure::Full),
-        ));
-        let grants = FixedRemoteControlControllerGrantTable::<8>::default();
-        watches.reconcile_grants(&grants);
-        // Retiring workers still occupy capacity until they actually stop.
-        assert!(matches!(
-            watches.reserve(node.clone(), link_id, StreamId::new(9).unwrap(), controller),
-            Err(WatchReserveFailure::Full)
-        ));
-        tokio::task::yield_now().await;
-        let replacement = watches
-            .reserve(node.clone(), link_id, StreamId::new(9).unwrap(), controller)
-            .unwrap();
-        watches.cancel_link(link_id);
-        let another_link = LinkId::new([9; 16]);
-        assert!(watches
-            .reserve(node, another_link, StreamId::new(9).unwrap(), controller)
-            .is_ok());
-        drop(replacement);
-        drop(reservations);
-    }
-
-    #[tokio::test]
-    async fn closing_a_link_ends_its_watch_stream() {
-        let (commands, mut receiver) = mpsc::unbounded_channel();
-        let node = PrnsNodeHandle::over(commands);
-        let watches = InterfaceWatchRegistry::default();
-        let link_id = LinkId::new([0x41; 16]);
-        let stream_id = StreamId::new(0x123).unwrap();
-        watches
-            .reserve(node, link_id, stream_id, IdentityHash::new([0x42; 16]))
-            .unwrap()
-            .start();
-        let Some(HostCommand::AwaitedEngine { issued, completion }) =
-            tokio::time::timeout(Duration::from_secs(1), receiver.recv())
-                .await
-                .unwrap()
-        else {
-            panic!("initial stream event");
-        };
-        let PrnsCommand::SendToChannel(initial) = issued.command else {
-            panic!("initial stream frame");
-        };
-        assert!(!parse(initial.body.as_slice()).unwrap().header.eof);
-        completion
-            .send(Settlement::SendToChannel(Ok(PacketReceiptDelivered {
-                rtt: RttMillis::new(0),
-                evidence: DeliveryEvidence::Proof(DeliveryProof::Implicit(PacketHash::new(
-                    [0; 32],
-                ))),
-            })))
-            .unwrap();
-        watches.cancel_link(link_id);
-        let Some(HostCommand::AwaitedEngine { issued, .. }) =
-            tokio::time::timeout(Duration::from_secs(1), receiver.recv())
-                .await
-                .unwrap()
-        else {
-            panic!("watch stream closes with EOF");
-        };
-        let PrnsCommand::SendToChannel(closing) = issued.command else {
-            panic!("stream close frame");
-        };
-        assert!(parse(closing.body.as_slice()).unwrap().header.eof);
-    }
-}
+mod tests;

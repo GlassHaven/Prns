@@ -62,6 +62,11 @@ This is a current-status guide, not another chronological list of test slices.
   A 128-waiter clock test crosses the previous limit; 8/16-node fleets prove
   concurrent exact response deadlines and successful traffic after expiry.
 
+- Remote Control now has a [dedicated campaign](measurements/remote-control.md)
+  with fixed identities and all three entropy sources. Real Tokio nodes replay
+  authenticated requests and bounded watches through generated packet faults.
+  Live durable grant changes still need a controlled storage adapter.
+
 ## Input audit
 
 | Input | Owner and current behavior | Replay implication |

@@ -3498,6 +3498,7 @@ dependencies = [
  "embassy-time-driver",
  "embassy-time-queue-utils",
  "embedded-storage-async",
+ "personal-hopspot-core",
  "personal-rns",
  "prns-core",
  "prns-interfaces-embassy",

@@ -25,6 +25,9 @@ The [queued-owner campaign](measurements/queued-persistence-cuts.md) adds torn
 append and compaction recovery through real admission and completion handling.
 The [grant-storage campaign](measurements/grant-persistence-cuts.md) checks whole
 authorization-table recovery across interrupted permission changes and revocation.
+The [Remote Control campaign](measurements/remote-control.md) runs real Tokio
+nodes with fixed entropy and manual time through authenticated inspection, app
+messages, concurrent authorization boundaries and bounded interface watches.
 
 The medium intentionally makes its limits and faults explicit:
 
