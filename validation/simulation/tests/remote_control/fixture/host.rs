@@ -63,7 +63,17 @@ impl RemoteControlHostControls for InspectionHost {
     }
 }
 
-pub(super) struct Messages(pub Rc<RefCell<Vec<AppInvocation>>>);
+pub(super) struct MessageGate {
+    pub controller: IdentityHash,
+    pub payload: Vec<u8>,
+    pub release: tokio::sync::oneshot::Receiver<()>,
+}
+
+pub(super) struct Messages {
+    pub calls: Rc<RefCell<Vec<AppInvocation>>>,
+    pub gates: Rc<RefCell<Vec<MessageGate>>>,
+    pub max_invocations: usize,
+}
 
 impl<State> RemoteControlAppMessages<State> for Messages {
     async fn handle_app_message(
@@ -72,12 +82,26 @@ impl<State> RemoteControlAppMessages<State> for Messages {
         controller: IdentityHash,
         payload: &[u8],
     ) -> Result<RemoteControlAppMessage, RemoteControlHostCommandError> {
-        let mut calls = self.0.borrow_mut();
-        assert!(calls.len() < super::MAX_APP_INVOCATIONS);
-        calls.push(AppInvocation {
-            controller,
-            payload: payload.to_vec(),
-        });
+        {
+            let mut calls = self.calls.borrow_mut();
+            assert!(calls.len() < self.max_invocations);
+            calls.push(AppInvocation {
+                controller,
+                payload: payload.to_vec(),
+            });
+        }
+        let gate = {
+            let mut gates = self.gates.borrow_mut();
+            gates
+                .iter()
+                .position(|gate| gate.controller == controller && gate.payload == payload)
+                .map(|index| gates.remove(index))
+        };
+        if let Some(gate) = gate {
+            gate.release
+                .await
+                .map_err(|_| RemoteControlHostCommandError::ApplyFailed)?;
+        }
         if payload.first() == Some(&0xff) {
             return Err(RemoteControlHostCommandError::ApplyFailed);
         }

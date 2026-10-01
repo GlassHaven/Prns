@@ -48,6 +48,8 @@ impl Lab<'_> {
         let identity = *secrets.identities().controller();
         let target = RemoteControlTargetIdentity::new(*secrets.identities().target().public_keys());
         let calls = self.calls.clone();
+        let gates = self.app_gates.clone();
+        let max_invocations = self.budgets.app_invocations;
         let (ready, mut ready_rx) = oneshot::channel();
         let (shutdown, stopping) = oneshot::channel();
         let task = self
@@ -110,7 +112,14 @@ impl Lab<'_> {
                                     capabilities,
                                 ),
                             )
-                            .with_handlers(host::InspectionHost(handle), host::Messages(calls)),
+                            .with_handlers(
+                                host::InspectionHost(handle),
+                                host::Messages {
+                                    calls,
+                                    gates,
+                                    max_invocations,
+                                },
+                            ),
                             transport_identity: None,
                             pre_configured_destinations: []
                                 as [personal_rns::runtime::PreConfiguredDestination<'static>; 0],

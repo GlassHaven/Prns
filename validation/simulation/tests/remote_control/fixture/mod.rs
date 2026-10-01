@@ -64,6 +64,8 @@ pub struct Lab<'a> {
     pub nodes: Vec<Node>,
     pub calls: Rc<RefCell<Vec<AppInvocation>>>,
     boot_generations: [u64; NODE_COUNT],
+    app_gates: Rc<RefCell<Vec<host::MessageGate>>>,
+    budgets: FixtureBudgets,
 }
 
 pub fn requests() -> RemoteControlRequestSet {
@@ -129,15 +131,66 @@ pub fn with_storage<R>(
     storage: Option<persistence::Storage>,
     scenario: impl FnOnce(&mut Lab<'_>) -> R,
 ) -> (R, Vec<MediumEvent>) {
+    with_budgets(
+        scheduling,
+        faults,
+        policy,
+        storage,
+        FixtureBudgets::standard(),
+        scenario,
+    )
+}
+
+#[derive(Clone)]
+pub struct FixtureBudgets {
+    pub actors: usize,
+    pub polls: usize,
+    pub trace: usize,
+    pub receive_frames: usize,
+    pub pending_deliveries: usize,
+    pub app_invocations: usize,
+}
+
+impl FixtureBudgets {
+    pub fn standard() -> Self {
+        Self {
+            actors: MAX_ACTORS,
+            polls: POLL_BUDGET,
+            trace: TRACE_CAPACITY,
+            receive_frames: RECEIVE_FRAME_CAPACITY,
+            pending_deliveries: PENDING_DELIVERY_CAPACITY,
+            app_invocations: MAX_APP_INVOCATIONS,
+        }
+    }
+    pub fn pressure() -> Self {
+        Self {
+            actors: 1536,
+            polls: 262144,
+            trace: 262144,
+            receive_frames: 2048,
+            pending_deliveries: 4096,
+            app_invocations: 1536,
+        }
+    }
+}
+
+pub fn with_budgets<R>(
+    scheduling: ManualTaskScheduling,
+    faults: FaultPlan,
+    policy: ControllerPolicy,
+    storage: Option<persistence::Storage>,
+    budgets: FixtureBudgets,
+    scenario: impl FnOnce(&mut Lab<'_>) -> R,
+) -> (R, Vec<MediumEvent>) {
     let medium = VirtualMedium::new(
         VirtualMediumConfig::new(
             TopologyConfig::Explicit {
                 max_neighbors: nonzero(NODE_COUNT - 1),
             },
             NODE_COUNT,
-            RECEIVE_FRAME_CAPACITY,
-            PENDING_DELIVERY_CAPACITY,
-            TRACE_CAPACITY,
+            budgets.receive_frames,
+            budgets.pending_deliveries,
+            budgets.trace,
             faults,
         )
         .expect("bounded control medium"),
@@ -148,10 +201,16 @@ pub fn with_storage<R>(
     )
     .expect("manual control clock");
     let mut lab = Lab {
-        runner: ManualTaskRunner::new_with_scheduling(&mut clock, nonzero(MAX_ACTORS), scheduling),
+        runner: ManualTaskRunner::new_with_scheduling(
+            &mut clock,
+            nonzero(budgets.actors),
+            scheduling,
+        ),
         medium,
         nodes: Vec::new(),
         boot_generations: [0; NODE_COUNT],
+        app_gates: Rc::new(RefCell::new(Vec::new())),
+        budgets,
         calls: Rc::new(RefCell::new(Vec::new())),
     };
     for index in 0..NODE_COUNT {
@@ -227,14 +286,17 @@ pub fn with_storage<R>(
 impl Lab<'_> {
     pub fn settle(&mut self) -> Vec<(ManualTaskId, Event)> {
         let mut completed = Vec::new();
-        for _ in 0..POLL_BUDGET {
+        for _ in 0..self.budgets.polls {
             match self.runner.poll_next().expect("manual control poll") {
                 ManualTaskPoll::Idle => return completed,
                 ManualTaskPoll::Pending { .. } => {}
                 ManualTaskPoll::Completed { task, output } => completed.push((task, output)),
             }
         }
-        unreachable!("control scenario exceeded {POLL_BUDGET} actor polls");
+        unreachable!(
+            "control scenario exceeded {} actor polls",
+            self.budgets.polls
+        );
     }
     pub fn insert(&mut self, future: impl Future<Output = Event> + 'static) -> ManualTaskId {
         self.runner.insert(future).expect("bounded operation actor")
@@ -292,4 +354,21 @@ pub fn management_requests() -> RemoteControlRequestSet {
         allowed.insert(kind);
     }
     allowed
+}
+
+impl Lab<'_> {
+    pub fn gate_app(&self, controller: usize, payload: &[u8]) -> tokio::sync::oneshot::Sender<()> {
+        let (release, ready) = tokio::sync::oneshot::channel();
+        let mut gates = self.app_gates.borrow_mut();
+        assert!(
+            gates.len() < self.budgets.app_invocations,
+            "bounded app gates"
+        );
+        gates.push(host::MessageGate {
+            controller: self.nodes[controller].identity.identity_hash(),
+            payload: payload.to_vec(),
+            release: ready,
+        });
+        release
+    }
 }

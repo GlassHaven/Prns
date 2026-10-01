@@ -6,7 +6,15 @@ impl Lab<'_> {
         link: LinkId,
         stream_id: personal_rns::runtime::StreamId,
     ) -> RemoteControlInterfaceWatch {
-        let handle = self.nodes[CONTROLLER].handle.clone();
+        self.watch_from(CONTROLLER, link, stream_id)
+    }
+    pub fn watch_from(
+        &mut self,
+        controller: usize,
+        link: LinkId,
+        stream_id: personal_rns::runtime::StreamId,
+    ) -> RemoteControlInterfaceWatch {
+        let handle = self.nodes[controller].handle.clone();
         let task = self.insert(async move {
             let (watch, _) = handle
                 .remote_control(link)

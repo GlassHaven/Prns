@@ -13,3 +13,9 @@ mod authorization;
 mod faults;
 
 mod durability;
+
+mod authority;
+
+mod revocation;
+
+mod pressure;

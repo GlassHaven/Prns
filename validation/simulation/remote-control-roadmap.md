@@ -30,3 +30,4 @@ For each milestone run focused simulator/owner regressions before broader checks
 - Baseline committed; implementation started.
 - Milestone 1 foundation: shared injectable persistence execution, four-node fixture, explicit boot entropy generations, real snapshot restore, and initial commit/rollback/confirmation/cancellation cases implemented. Targeted tests and strict lints passed; see [authority qualification](measurements/remote-control-authority.md).
 - Milestone 1 complete. Milestones 2–8 remain open until their acceptance evidence is recorded.
+- Milestone 2 Tokio management/recovery qualification complete; runtime parity remains in milestone 7. Milestones 3/4 now cover admitted app work, permission-only watch cancellation/reconnect, whole-node heartbeat progress, exact router capacity and two-controller reader isolation. Pending watch response-lane races and further lifecycle/pressure combinations remain open.

@@ -21,3 +21,15 @@ cargo clippy --locked -p prns-simulation --features controlled-time --test remot
 ```
 
 The remaining roadmap milestones are not yet qualified. No hardware or other-platform result is implied.
+
+## Management, revocation and pressure
+
+The target now passes 31 tests. Added full-node cases exercise remote revoke/regrant and capability changes under three replayed actor seeds, protected administrator identities, exact capacity exhaustion, unknown revocation, interrupted boots at authorization begin/store/confirm/finish, lost committed-success responses, and terminal rollback failure followed by two successful restores. Failed rollback produces the existing typed node failure; it does not continue serving uncertain authority.
+
+Revocation preserves the agreed admission boundary: an app operation already admitted completes, while later work produces neither a response packet nor another handler invocation. Removing only watch permission ends the watch while inspection remains usable. Regrant and reconnect recover sequence 1 and capacity. An ended stream retains its reader registration until link closure; these cases do not invent same-link unsubscription. An actual full node awaiting gated authorization storage continues watch heartbeats, then resumes ordinary requests after settlement.
+
+Two trusted identities saturate 256 active handlers and 1,024 queued requests. Two additional requests expire without executing. Every successful response is compared with its originating actor's complete payload and verified handler identity, then both controllers successfully send fresh requests. A separate 34-heartbeat case overflows one unread 32-chunk reader while another controller continues receiving; the failed reader reports the typed overflow source and reconnects successfully. `personal-rns` now reexports that already-public Tokio failure type so facade consumers can inspect it without string matching.
+
+Pressure cases explicitly use larger fixture actor/frame/trace budgets. The long heartbeat case initially exhausted the baseline trace budget; the corrected test retains the whole trace rather than accepting eviction. No production capacity, quota, wire protocol or scheduling policy changed. Pending watch-response-lane races and broader combined lifecycle permutations remain for subsequent qualification.
+
+The 31-test target and its strict clippy command passed on macOS arm64. The previous native library/persistence results still apply because this slice changes tests and a type reexport only; those libraries were not retested after the reexport.
