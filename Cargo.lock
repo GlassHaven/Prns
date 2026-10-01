@@ -3505,6 +3505,8 @@ dependencies = [
  "prns-interfaces-tokio",
  "prns-runtime",
  "prns-runtime-embassy",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

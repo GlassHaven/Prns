@@ -27,7 +27,13 @@ For each milestone run focused simulator/owner regressions before broader checks
 
 ## Progress
 
-- Baseline committed; implementation started.
-- Milestone 1 foundation: shared injectable persistence execution, four-node fixture, explicit boot entropy generations, real snapshot restore, and initial commit/rollback/confirmation/cancellation cases implemented. Targeted tests and strict lints passed; see [authority qualification](measurements/remote-control-authority.md).
-- Milestone 1 complete. Milestones 2–8 remain open until their acceptance evidence is recorded.
-- Milestone 2 Tokio management/recovery qualification complete; runtime parity remains in milestone 7. Milestones 3/4 now cover admitted app work, permission-only watch cancellation/reconnect, whole-node heartbeat progress, exact router capacity and two-controller reader isolation. Pending watch response-lane races and further lifecycle/pressure combinations remain open.
+1. Complete: shared controlled persistence execution, real storage, four-node authority fixture and explicit graceful/abrupt lifecycle.
+2. Complete: local/remote authority, publication/rollback/cancellation, exact capacity, lost replies and repeated restore, plus native journal byte-cut evidence.
+3. Complete: admitted unary work, reserved/active watch revocation, same-link/stream-ID replacement behind a real Resource response lane, rapid regrant and lifecycle owner regressions.
+4. Complete: two-controller response/identity isolation, exact router/watch/reader pressure, independent watch progress, deadlines and recovery.
+5. Complete: production approval/rejection/expiry, invitation and identity failures, concurrent/replayed requests, lost completion, independent persistence cuts, pinned keys and stale boot work.
+6. Complete: live page churn, configuration/peer refetch, coalesced invalidation, explicit sequence-gap workflow, reader overflow and reconnect.
+7. Complete: all four runtime pairings with real FileStore/flash-journal owners, coordinated clocks, accurate capability differences and exact within-pair replay in isolated processes.
+8. Complete: typed bounded corpora, independent ledger, two-run replay, versioned retained artifacts, standalone replay/reduction and registered routine/extended lanes. All 96 routine and 1,024 extended cases passed, two fresh fixtures each.
+
+See [campaign qualification](measurements/remote-control-campaigns.md) for coverage boundaries, narrow production fixes, commands and final evidence. No hardware or other-platform result is implied.

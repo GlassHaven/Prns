@@ -160,6 +160,19 @@ fn a_slow_watch_reader_overflows_explicitly_while_another_controller_keeps_recei
                 initial.expect("replacement initial"),
                 RemoteControlStreamEvent::ResyncRequired { sequence: 1 }
             );
+            assert!(
+                matches!(
+                    lab.exchange(
+                        OPERATOR,
+                        fresh,
+                        RemoteControlRequest::InventoryInterfaces {
+                            page: RemoteControlInterfacePage::First
+                        }
+                    ),
+                    RemoteControlResponse::InventoryInterfaces(_)
+                ),
+                "inventory refetch succeeds after reader overflow and reconnect"
+            );
             drop(healthy);
             for (controller, link) in [(CONTROLLER, admin), (OPERATOR, fresh)] {
                 assert!(lab.nodes[controller].handle.close_link(link));

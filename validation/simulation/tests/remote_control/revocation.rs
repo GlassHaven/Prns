@@ -235,3 +235,68 @@ fn whole_node_watch_driver_keeps_heartbeats_live_while_authorization_io_holds_ad
         },
     );
 }
+
+#[test]
+fn repeated_full_revocation_and_regrant_do_not_let_old_watch_cleanup_retire_fresh_subscriptions() {
+    with_storage(
+        ManualTaskScheduling::Cyclic,
+        FaultPlan::none(),
+        durability::policy(),
+        Some(Storage::new()),
+        |lab| {
+            for _ in 0..3 {
+                let link = lab.link(OPERATOR);
+                let id = StreamId::new(7).expect("reused watch ID");
+                let watch = lab.watch_from(OPERATOR, link, id);
+                let read = lab.read_watch(watch);
+                let (old, initial) = watch_result(read, lab.settle());
+                assert_eq!(
+                    initial.expect("initial"),
+                    RemoteControlStreamEvent::ResyncRequired { sequence: 1 }
+                );
+                let target = lab.nodes[TARGET].handle.clone();
+                let identity = lab.nodes[OPERATOR].identity;
+                let mutation = lab.insert(async move {
+                    assert!(matches!(
+                        target.revoke_remote_control_controller(identity).await,
+                        Ok(RevokeRemoteControlControllerOutcome::Revoked { .. })
+                    ));
+                    let grant = RemoteControlControllerGrant::new(
+                        identity,
+                        RemoteControlControllerAuthority::Operator,
+                        requests(),
+                    )
+                    .expect("same identity");
+                    target
+                        .set_remote_control_controller_grant(grant)
+                        .await
+                        .expect("immediate regrant");
+                    Event::Done
+                });
+                lab.expect_done(mutation);
+                let read = lab.read_watch(old);
+                let (_, ended) = watch_result(read, lab.settle());
+                assert!(ended.is_err(), "regrant does not revive the revoked lease");
+                assert!(lab.nodes[OPERATOR].handle.close_link(link));
+                assert!(lab.settle().is_empty());
+                let fresh = lab.link(OPERATOR);
+                let watch = lab.watch_from(OPERATOR, fresh, id);
+                let read = lab.read_watch(watch);
+                let (watch, initial) = watch_result(read, lab.settle());
+                assert_eq!(
+                    initial.expect("replacement"),
+                    RemoteControlStreamEvent::ResyncRequired { sequence: 1 }
+                );
+                let read = lab.read_watch(watch);
+                assert!(lab.settle().is_empty());
+                let (_, heartbeat) = watch_result(read, lab.advance(5_000));
+                assert_eq!(
+                    heartbeat.expect("replacement remains live"),
+                    RemoteControlStreamEvent::Heartbeat { sequence: 2 }
+                );
+                assert!(lab.nodes[OPERATOR].handle.close_link(fresh));
+                assert!(lab.settle().is_empty());
+            }
+        },
+    );
+}

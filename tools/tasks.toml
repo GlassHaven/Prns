@@ -1113,3 +1113,23 @@ reason = "Cargo package metadata for the post-bootstrap cargo-tools forwarding a
 [[internal]]
 path = "tools/repo/cargo-tools-command/src/main.rs"
 reason = "Thin Cargo adapter that forwards arguments to the canonical tools/prns task registry."
+
+[[task]]
+id = "repo.simulation.remote-control.replay"
+summary = "Replay one versioned Remote Control simulator case twice in a fresh process."
+domain = "repo"
+effect = "workspace-write"
+platforms = ["any"]
+audience = ["developer", "ci"]
+entrypoint = ["python", "tools/repo/remote-control-simulation.py", "--mode", "replay"]
+requires = ["cargo", "python"]
+
+[[task]]
+id = "repo.simulation.remote-control.reduce"
+summary = "Reduce a Remote Control failure artifact while preserving its failure class."
+domain = "repo"
+effect = "workspace-write"
+platforms = ["any"]
+audience = ["developer", "ci"]
+entrypoint = ["python", "tools/repo/remote-control-simulation.py", "--mode", "reduce"]
+requires = ["cargo", "python"]

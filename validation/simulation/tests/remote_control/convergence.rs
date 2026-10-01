@@ -235,3 +235,62 @@ fn coalesced_watch_invalidation_refetches_configuration_and_peer_state_after_rec
         assert!(lab.settle().is_empty());
     });
 }
+
+#[test]
+fn detected_sequence_gap_triggers_refetch_then_reconnect_starts_a_fresh_sequence() {
+    use tokio::io::AsyncWriteExt;
+    with_lab(ManualTaskScheduling::Cyclic, FaultPlan::none(), |lab| {
+        let link = lab.link(CONTROLLER);
+        let stream = StreamId::new(6).expect("stream ID");
+        let watch = lab.watch(link, stream);
+        let read = lab.read_watch(watch);
+        let (watch, initial) = watch_result(read, lab.settle());
+        assert_eq!(
+            initial.expect("initial resync"),
+            RemoteControlStreamEvent::ResyncRequired { sequence: 1 }
+        );
+        let attached = lab.nodes[TARGET].handle.add_interface(IdleInterface {
+            tag: b"after-gap".to_vec(),
+        });
+        assert!(lab.settle().is_empty());
+        let mut bytes = [0; REMOTE_CONTROL_STREAM_EVENT_LEN];
+        RemoteControlStreamEvent::ResyncRequired { sequence: 3 }
+            .write_into(&mut bytes)
+            .expect("gap frame");
+        let mut writer = lab.nodes[TARGET].handle.byte_stream_writer(link, stream);
+        let inject = lab.insert(async move {
+            writer
+                .write_all(&bytes)
+                .await
+                .expect("authorized test producer");
+            Event::Done
+        });
+        lab.expect_done(inject);
+        let read = lab.read_watch(watch);
+        let (watch, gap) = watch_result(read, lab.settle());
+        assert!(matches!(
+            gap,
+            Err(
+                personal_rns::runtime::RemoteControlWatchReadError::SequenceGap {
+                    expected: 2,
+                    found: 3
+                }
+            )
+        ));
+        assert!(interfaces(lab, link).contains(&attached.id()));
+        drop(watch);
+        assert!(lab.nodes[CONTROLLER].handle.close_link(link));
+        assert!(lab.settle().is_empty());
+        let link = lab.link(CONTROLLER);
+        let watch = lab.watch(link, stream);
+        let read = lab.read_watch(watch);
+        let (_, fresh) = watch_result(read, lab.settle());
+        assert_eq!(
+            fresh.expect("new resync"),
+            RemoteControlStreamEvent::ResyncRequired { sequence: 1 }
+        );
+        assert!(interfaces(lab, link).contains(&attached.id()));
+        attached.teardown();
+        assert!(lab.settle().is_empty());
+    });
+}

@@ -16,6 +16,7 @@ use prns_simulation::*;
 
 mod control;
 mod host;
+pub use host::resource_body;
 mod node;
 pub mod pairing;
 pub mod persistence;

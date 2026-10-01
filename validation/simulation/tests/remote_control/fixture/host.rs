@@ -113,3 +113,24 @@ impl<State> RemoteControlAppMessages<State> for Messages {
             .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
     }
 }
+
+pub fn resource_body() -> [u8; 1024] {
+    let mut state = 0x5eed_u64;
+    std::array::from_fn(|_| {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        state.wrapping_mul(0x2545f4914f6cdd1d) as u8
+    })
+}
+pub struct LargeResponse;
+impl personal_rns::runtime::request_endpoints::RequestEndpoint<()> for LargeResponse {
+    const ENDPOINT_ID: &'static str = "/qualification-resource";
+    const POLICY: personal_rns::runtime::request_endpoints::RequestEndpointPolicy = personal_rns::runtime::request_endpoints::RequestEndpointPolicy::AllowRemoteControlControllers;
+    async fn handle(
+        mut context: personal_rns::runtime::request_endpoints::RequestContext<'_, ()>,
+        _: &impl personal_rns::runtime::PrnsNodeApi,
+    ) -> Result<(), personal_rns::runtime::request_endpoints::Decline> {
+        context.respond_resource(resource_body())
+    }
+}

@@ -20,7 +20,7 @@ cargo clippy --locked --manifest-path prns-runtime/impls/tokio/Cargo.toml --lib 
 cargo clippy --locked -p prns-simulation --features controlled-time --test remote_control -- -D warnings
 ```
 
-The remaining roadmap milestones are not yet qualified. No hardware or other-platform result is implied.
+At this foundation checkpoint, the remaining roadmap milestones were not yet qualified. The completed evidence is recorded in [campaign qualification](remote-control-campaigns.md); no hardware or other-platform result is implied.
 
 ## Management, revocation and pressure
 
@@ -30,7 +30,7 @@ Revocation preserves the agreed admission boundary: an app operation already adm
 
 Two trusted identities saturate 256 active handlers and 1,024 queued requests. Two additional requests expire without executing. Every successful response is compared with its originating actor's complete payload and verified handler identity, then both controllers successfully send fresh requests. A separate 34-heartbeat case overflows one unread 32-chunk reader while another controller continues receiving; the failed reader reports the typed overflow source and reconnects successfully. `personal-rns` now reexports that already-public Tokio failure type so facade consumers can inspect it without string matching.
 
-Pressure cases explicitly use larger fixture actor/frame/trace budgets. The long heartbeat case initially exhausted the baseline trace budget; the corrected test retains the whole trace rather than accepting eviction. No production capacity, quota, wire protocol or scheduling policy changed. Pending watch-response-lane races and broader combined lifecycle permutations remain for subsequent qualification.
+Pressure cases explicitly use larger fixture actor/frame/trace budgets. The long heartbeat case initially exhausted the baseline trace budget; the corrected test retains the whole trace rather than accepting eviction. No production capacity, quota, wire protocol or scheduling policy changed. Pending watch-response-lane races and combined lifecycle permutations were still open at this checkpoint; the completed whole-node case is documented in [campaign qualification](remote-control-campaigns.md).
 
 The 31-test target and its strict clippy command passed on macOS arm64. The previous native library/persistence results still apply because this slice changes tests and a type reexport only; those libraries were not retested after the reexport.
 

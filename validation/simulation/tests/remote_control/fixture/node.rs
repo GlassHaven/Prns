@@ -62,6 +62,7 @@ impl Lab<'_> {
         let endpoint = interface.endpoint_id();
         let identity = *secrets.identities().controller();
         let target = RemoteControlTargetIdentity::new(*secrets.identities().target().public_keys());
+        let target_destination = target.endpoint().destination_hash();
         let calls = self.calls.clone();
         let gates = self.app_gates.clone();
         let max_invocations = self.budgets.app_invocations;
@@ -105,7 +106,7 @@ impl Lab<'_> {
                     ),
                     None => PersistenceSelection::Disabled,
                 };
-                let node = PrnsNode::new_with_entropy_sources(
+                let mut node = PrnsNode::new_with_entropy_sources(
                     |handle| {
                         let initial = match grants.as_slice() {
                             [] => RemoteControlInitialControllerGrants::Nobody,
@@ -141,7 +142,9 @@ impl Lab<'_> {
                                 as [personal_rns::runtime::PreConfiguredDestination<'static>; 0],
                             app_state: (),
                             storage: GrowableHeap,
-                            request_endpoints: personal_rns::request_endpoints![],
+                            request_endpoints: personal_rns::request_endpoints![
+                                host::LargeResponse
+                            ],
                             on_event: move |event, _: &()| {
                                 pairing::observe(&pairing, index, generation, event)
                             },
@@ -158,6 +161,8 @@ impl Lab<'_> {
                 });
                 let handle = node.handle();
                 let _attached = handle.add_interface(interface);
+                node.register_request_route::<host::LargeResponse>(&target_destination)
+                    .expect("test Resource endpoint");
                 assert!(ready.send(handle).is_ok(), "fixture ready receiver");
                 Event::Stopped {
                     node: index,

@@ -20,6 +20,7 @@ mod clock;
 mod contracts;
 #[cfg(feature = "heap-profile")]
 mod heap;
+mod remote_control;
 mod replay;
 #[path = "../support/ble_selection.rs"]
 mod selection;
