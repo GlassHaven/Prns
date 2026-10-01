@@ -56,6 +56,30 @@ the official **T1000-E** application UF2. Erase removes device settings. Do not
 substitute a UF2 for a different board. The Hopspot flasher links this guide;
 third-party firmware is obtained from its own publisher.
 
+## Local developer flasher
+
+Build and serve the real flasher with a locally signed T1000-E candidate:
+
+```console
+./tools/prns run device.hopspot.dev-flasher.serve -- t1000-e --port 8765
+```
+
+Open `http://127.0.0.1:8765/flash/t1000-e/` in desktop Chrome. The page marks the
+candidate as local developer firmware and verifies its signatures and artifact
+hashes before device access.
+
+For the first installation from the tested Meshtastic application, enter the
+stock serial DFU bootloader first. That application enumerates as USB
+`239a:8029`; the flasher's stock serial DFU entry expects `2886:0057` and does
+not issue Meshtastic admin messages. Meshtastic's `enterDFUMode` admin request
+over serial was verified to enter this stock bootloader without physical button
+presses or cable reconnections. Select the **Seeed/Meshtastic firmware or
+bootloader** entry path after the stock bootloader appears, prepare the
+candidate, and choose **Connect and update tracker**.
+
+After installing Hopspot with recovery support, **Enter recovery mode** on the
+same page provides the direct software path back to the stock UF2 drive.
+
 ## USB contract
 
 The application identifies itself as USB `1209:0001`, manufacturer
