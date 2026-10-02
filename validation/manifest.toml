@@ -95,6 +95,7 @@ cargo_manifests = [
     "personal-hopspot/embedded/nrf52840/vendor/nrf-softdevice/nrf-softdevice-s140-v6/Cargo.toml",
     "personal-hopspot/embedded/nrf52840/vendor/nrf-softdevice/nrf-softdevice-s140-v7/Cargo.toml",
     "personal-hopspot/flasher/Cargo.toml",
+    "personal-hopspot/appliance/Cargo.toml",
     "personal-hopspot/headless/Cargo.toml",
     "personal-hopspot/memory/Cargo.toml",
     "personal-hopspot/mobile/android/rust/Cargo.toml",
@@ -510,6 +511,17 @@ timeout_seconds = 3600
 command = ["bash", "validation/hardening/geiger.sh", "--entrypoints"]
 inputs = ["validation/hardening/geiger.sh"]
 artifacts = "validation-artifacts/results/unsafe-entrypoints"
+
+[[suite]]
+id = "hopspot-appliance-recovery"
+domain = "native"
+tiers = ["pr", "release", "scheduled"]
+platform = "any"
+toolchain = "stable"
+timeout_seconds = 300
+command = ["cargo", "test", "--locked", "-p", "personal-hopspot-appliance", "--all-targets"]
+inputs = ["personal-hopspot/appliance", "Cargo.toml", "Cargo.lock"]
+artifacts = "validation-artifacts/results/hopspot-appliance-recovery"
 
 [[suite]]
 id = "root-tests"

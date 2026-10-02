@@ -6,9 +6,11 @@ connection; a subsequent [three-node native mesh qualification](qualification/ha
 also passed basic transfers and application rejoin. The optional WebSocket build
 passed [real browser access through HaLoW](qualification/websocket-halow-2026-09-29.md). Sustained load and forced
 multi-radio-hop behavior remain unqualified. Separate radio
-experiments measured group delivery and unicast throughput. Persistent installation,
-firmware replacement, and physical restore remain unqualified. This is a development
-procedure, not a shipping board entry.
+experiments measured group delivery and unicast throughput. The
+[application slot manager](../../appliance/README.md) supplies persistent procd
+startup, separate private state, signed compressed slots and bounded trial/rollback.
+Firmware replacement and physical power-loss restore remain unqualified. This
+is a development procedure, not a shipping board entry.
 
 ## Observed platform
 
@@ -128,11 +130,14 @@ failure. Keep identities and configuration outside replaceable application
 versions. Interrupted uploads must never become the active executable. Avoid
 an endless supervisor restart loop on a corrupt identity or full filesystem.
 
-Before a persistent G4 service ships, qualify OpenWrt procd stop/start ordering,
-least-privilege execution, log bounds, route/state growth, flash write frequency,
-power loss during state saves, failed updates, low-space rollback, and a real
-reboot with identity retention. The current program deliberately reuses the
-runtime's persistence; it does not by itself qualify the complete storage stack.
+The slot manager owns application activation; headless owns identities and
+retained state. Use a pinned controller to verify build/interface snapshots, an
+authenticated app message and the exact node page before confirming a candidate.
+Least privilege, log/state growth, power loss during state saves and interrupted
+flash writes remain qualification gates. Reboot can interrupt the host's Ethernet
+DHCP lease: retain a reviewed static management fallback or allow bounded lease
+recovery, while keeping the actual internet interface separate. Do not interpret
+that management delay as application startup time.
 
 ## What a firmware flasher still needs
 

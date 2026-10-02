@@ -6,12 +6,15 @@ and follow a guided Ethernet/SSH installation. Keep the vendor operating system,
 Morse firmware, regulatory configuration and calibration. These are application
 targets, separate from firmware-upgrade targets.
 
-This is an implementation specification for the next installation slice, not a
-qualified persistent installer. The [initial desk qualification](qualification/halow-appliance-2026-10-01.md)
+The [application slot manager](../../appliance/README.md) implements the first
+activation and supervised-service slice. It is not a public installer. The
+[initial desk qualification](qualification/halow-appliance-2026-10-01.md)
 records working transport/control behavior and the recovery gap found on hardware.
 The [recovery qualification](qualification/halow-recovery-2026-10-02.md) closes
 that demonstrated binding/discovery gap on all three boards, with bounded retry
-and retained identities. Persistent activation and power-loss recovery remain gates.
+and retained identities. The [persistent service qualification](qualification/halow-service-2026-10-02.md)
+adds real reboot, retained control and exact pages on all three, plus G4
+crash-driven rollback. Physical power-loss recovery remains a gate.
 
 ## Compatibility and budgets
 
@@ -23,11 +26,12 @@ and retained identities. Persistent activation and power-loss recovery remain ga
 | Vendor image | OpenWrt 1.1 Morse-2.6.13 | OpenWrt 23.05.5, 2.8.5-20250924 |
 | Writable overlay available at inspection | 5,336 KiB | 5,288 / 5,272 KiB |
 | Recovery-qualified application | 3,636,552 bytes | Same executable and hash |
+| Cold-boot corrected application / gzip | 3,631,976 / 1,507,694 bytes | Same |
 | Earlier candidate gzip, level 9 | 1,501,636 bytes | 3,620,680-byte candidate; unpacking tested on G4 only |
 
-Two copies of that earlier compressed candidate total 3,003,272 bytes. This makes compressed flash
-slots with RAM expansion a promising storage design; two unpacked executables
-do not fit these overlays. Do not assume a newer application or another vendor
+Two compressed slots with RAM expansion now passed service/reboot qualification;
+two unpacked executables do not fit these overlays. The final slot manager is
+measured separately in the service report. Do not assume a newer application or another vendor
 image has the same budget. The overlay must also accommodate private state,
 configuration, update metadata and filesystem overhead. Updates need staging
 headroom in RAM and explicit low-space refusal before writing flash.
@@ -89,7 +93,8 @@ between appliances.
 The Linux supervisor now retires packet bindings on device down/delete or lost
 link notifications and reopens the named device with bounded jittered backoff.
 It retains the configured parent interface ID and reconstructs its child lanes.
-A missing device leaves wired management available; `Connected` describes a
+A missing device at cold boot or during operation leaves wired management available;
+application readiness no longer waits for a broadcast radio child. `Connected` describes a
 packet binding, not mesh association or successful delivery. Keep route recovery
 separate: configured gateways can rediscover unavailable routes without wiping
 retained state. Applications still handle typed operation timeouts and explicit
@@ -137,13 +142,15 @@ must not become the installer endpoint.
   retry; Ethernet capture did not establish the radio/firmware loss mechanism.
   Extend this bounded desk check with repeated service/radio lifecycle and longer
   resource monitoring before calling the persistent appliance qualified.
-- Exercise procd start/stop, radio readiness, signal ordering and bounded crash
-  retries. [OpenWrt's procd service documentation](https://openwrt.org/docs/techref/procd)
-  supplies the integration foundation; a service file alone is not qualification.
-- Test real reboot and interrupted activation/update at each transaction stage,
-  low space, corrupt candidate/identity, identity retention and rollback to the
-  previous signed version. Confirm flash persistence budgets and write frequency;
-  do not discard authorization snapshots merely to avoid route writes.
+- Procd start/stop, real reboot, pinned identities/retained grants and exact wired
+  pages passed on all three. G4 trial exhaustion/rollback and bounded corrupt-identity
+  crash termination passed. Cut-point tests run on macOS and all three actual MIPS
+  filesystems. The temporary qualification loader trusts a separate lab signer;
+  the shipping manager rejects that signer. No public release signing was performed.
+- Qualify physical interrupted flash/power-loss recovery, sustained state growth,
+  persistent regional mesh/rate configuration and management recovery. The service
+  reboot checks retained vendor radio settings; they are not an over-air mesh-boot
+  test. Do not discard authorization snapshots merely to avoid route writes.
 - Qualify least privilege, bounded logs/state, sustained actual PRNS Resource
   throughput, longer desk runs, physical forced multi-hop and field range.
   Vendor LED/button polling remains active in the latest desk checks; replacing
