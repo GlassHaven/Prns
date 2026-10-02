@@ -1,6 +1,7 @@
 use super::fixture::*;
 use personal_rns::wifi_halow::Destination;
 use prns_simulation::halow::*;
+mod boot;
 mod broadcast;
 mod cancellation;
 mod control;

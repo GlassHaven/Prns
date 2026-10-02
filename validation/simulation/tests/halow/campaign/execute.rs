@@ -32,20 +32,11 @@ pub fn run(case: &Case) -> Report {
     let mut observations = serde_json::Value::Null;
     let result = catch_unwind(AssertUnwindSafe(|| {
         let persistence = match case.scenario {
-            Scenario::Recovery(workloads::recovery::Recovery::RetainedRestart(_)) => {
-                fixture::Persistence::Retained(
-                    (0..fixture::NODE_COUNT)
-                        .map(|_| fixture::RetainedState::new())
-                        .collect(),
-                )
-            }
+            Scenario::Recovery(recovery) => recovery.persistence(),
             _ => fixture::Persistence::Disabled,
         };
         let bindings = match case.scenario {
-            Scenario::Recovery(
-                workloads::recovery::Recovery::RetiredPageRoute
-                | workloads::recovery::Recovery::ManagedBinding(_),
-            ) => fixture::Bindings::ManagedTarget(fixture::DeviceControl::new()),
+            Scenario::Recovery(recovery) => recovery.bindings(),
             _ => fixture::Bindings::Explicit,
         };
         fixture::with_fixture(

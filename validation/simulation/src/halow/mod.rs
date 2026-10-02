@@ -51,6 +51,7 @@ pub enum ReceiveBehavior {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathState {
     Reachable,
+    BroadcastOnly,
     Isolated,
 }
 

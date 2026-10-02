@@ -30,6 +30,8 @@ pub enum BindingFault {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Recovery {
+    MissingUnicastPaths,
+    DelayedRadioBoot,
     PageHandshakeLoss,
     RetiredPageRoute,
     AdapterReplacement,
@@ -38,10 +40,44 @@ pub enum Recovery {
     ManagedBinding(BindingFault),
 }
 
-fn gateway(lab: &mut Lab<'_>) {
+impl Recovery {
+    pub fn persistence(self) -> Persistence {
+        match self {
+            Self::DelayedRadioBoot | Self::RetainedRestart(_) => {
+                Persistence::Retained((0..NODE_COUNT).map(|_| RetainedState::new()).collect())
+            }
+            Self::MissingUnicastPaths
+            | Self::PageHandshakeLoss
+            | Self::RetiredPageRoute
+            | Self::AdapterReplacement
+            | Self::FailedHandshake
+            | Self::ManagedBinding(_) => Persistence::Disabled,
+        }
+    }
+
+    pub fn bindings(self) -> Bindings {
+        match self {
+            Self::DelayedRadioBoot => {
+                let device = DeviceControl::new();
+                device.set_presence(Presence::Absent);
+                Bindings::ManagedTarget(device)
+            }
+            Self::RetiredPageRoute | Self::ManagedBinding(_) => {
+                Bindings::ManagedTarget(DeviceControl::new())
+            }
+            Self::MissingUnicastPaths
+            | Self::PageHandshakeLoss
+            | Self::AdapterReplacement
+            | Self::FailedHandshake
+            | Self::RetainedRestart(_) => Bindings::Explicit,
+        }
+    }
+}
+
+pub(super) fn gateway(lab: &mut Lab<'_>) {
     gateway_at(lab, HEALTHY);
 }
-fn gateway_at(lab: &mut Lab<'_>, gateway_node: usize) {
+pub(super) fn gateway_at(lab: &mut Lab<'_>, gateway_node: usize) {
     for attached in lab.wired.drain(..) {
         attached.teardown();
     }
@@ -63,13 +99,17 @@ fn gateway_at(lab: &mut Lab<'_>, gateway_node: usize) {
     }
     let (controller, router) = tokio::io::duplex(8192);
     let client = TcpServerConnection::new(
-        b"lab-client".to_vec(),
+        format!("lab-client-to-{gateway_node}").into_bytes(),
         controller,
         tcp::TCP_BITRATE_ESTIMATE,
     );
     let mut policy = tcp::policy_for_bitrate(tcp::TCP_BITRATE_ESTIMATE);
     policy.mode = InterfaceMode::Gateway;
-    let server = TcpServerConnection::with_policy(b"lab-gateway".to_vec(), router, policy);
+    let server = TcpServerConnection::with_policy(
+        format!("lab-gateway-{gateway_node}").into_bytes(),
+        router,
+        policy,
+    );
     lab.wired
         .push(lab.nodes[PRIMARY].handle.add_interface(client));
     lab.wired
@@ -77,7 +117,7 @@ fn gateway_at(lab: &mut Lab<'_>, gateway_node: usize) {
     assert!(lab.settle().is_empty());
 }
 
-fn discover(lab: &mut Lab<'_>) {
+pub(super) fn discover(lab: &mut Lab<'_>) {
     let handle = lab.nodes[PRIMARY].handle.clone();
     let task = lab.insert(async move {
         Event::Path(
@@ -92,7 +132,7 @@ fn discover(lab: &mut Lab<'_>) {
     result.expect("cold discovery through gateway");
 }
 
-fn announce_page(lab: &mut Lab<'_>, index: usize) {
+pub(super) fn announce_page(lab: &mut Lab<'_>, index: usize) {
     let handle = lab.nodes[index].handle.clone();
     lab.complete(async move {
         handle
@@ -107,7 +147,7 @@ fn announce_page(lab: &mut Lab<'_>, index: usize) {
     assert!(lab.advance(1000).is_empty());
 }
 
-fn connection(
+pub(super) fn connection(
     lab: &mut Lab<'_>,
 ) -> Result<personal_rns::routing::links::LinkId, ConnectRemoteControlTargetError> {
     let handle = lab.nodes[PRIMARY].handle.clone();
@@ -378,6 +418,13 @@ fn a_delayed_old_generation_cannot_admit_an_app_message_after_rebinding() {
 
 pub fn run(lab: &mut Lab<'_>, recovery: Recovery, bindings: &Bindings) {
     match recovery {
+        Recovery::MissingUnicastPaths => super::boot::missing_unicast_paths(lab),
+        Recovery::DelayedRadioBoot => {
+            let Bindings::ManagedTarget(device) = bindings else {
+                panic!("managed cold boot configuration");
+            };
+            super::boot::delayed_radio_boot(lab, device);
+        }
         Recovery::PageHandshakeLoss => page_handshake_loss(lab),
         Recovery::RetiredPageRoute => {
             let Bindings::ManagedTarget(device) = bindings else {
@@ -402,6 +449,8 @@ pub fn run(lab: &mut Lab<'_>, recovery: Recovery, bindings: &Bindings) {
 fn gateway_recovery_matrix_replays_without_control_preannounce() {
     for seed in [0, 1, 42, 0x5eed] {
         for recovery in [
+            Recovery::MissingUnicastPaths,
+            Recovery::DelayedRadioBoot,
             Recovery::PageHandshakeLoss,
             Recovery::RetiredPageRoute,
             Recovery::AdapterReplacement,
@@ -415,18 +464,8 @@ fn gateway_recovery_matrix_replays_without_control_preannounce() {
         ] {
             let replay = || {
                 let medium = medium();
-                let persistence = match recovery {
-                    Recovery::RetainedRestart(_) => Persistence::Retained(
-                        (0..NODE_COUNT).map(|_| RetainedState::new()).collect(),
-                    ),
-                    _ => Persistence::Disabled,
-                };
-                let bindings = match recovery {
-                    Recovery::RetiredPageRoute | Recovery::ManagedBinding(_) => {
-                        Bindings::ManagedTarget(DeviceControl::new())
-                    }
-                    _ => Bindings::Explicit,
-                };
+                let persistence = recovery.persistence();
+                let bindings = recovery.bindings();
                 with_fixture(
                     medium.clone(),
                     seed,
@@ -449,7 +488,7 @@ fn gateway_recovery_matrix_replays_without_control_preannounce() {
     }
 }
 
-fn fetch_page(lab: &mut Lab<'_>, destination_node: usize) {
+pub(super) fn fetch_page(lab: &mut Lab<'_>, destination_node: usize) {
     let handle = lab.nodes[PRIMARY].handle.clone();
     let task = lab.insert(async move {
         let destination = page(destination_node)

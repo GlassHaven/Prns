@@ -2,7 +2,7 @@ use super::backend::{Datagram, RadioControl};
 use super::*;
 use crate::{AdvanceError, AdvanceReport, MediumSchedule, SimulationDurationInTicks};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     sync::{Arc, Mutex, MutexGuard},
 };
 use tokio::sync::{mpsc, watch};
@@ -26,7 +26,7 @@ struct State {
     next_transmission: u64,
     next_delivery: u64,
     radios: BTreeMap<RadioId, Endpoint>,
-    paths: BTreeSet<(RadioId, RadioId)>,
+    paths: BTreeMap<(RadioId, RadioId), PathState>,
     pending: BTreeMap<(SimulationTick, u64), Delivery>,
     faults: Vec<NextDatagramFault>,
     events: Vec<HaLowEvent>,
@@ -86,7 +86,7 @@ impl VirtualHaLowMedium {
                 next_transmission: 0,
                 next_delivery: 0,
                 radios: BTreeMap::new(),
-                paths: BTreeSet::new(),
+                paths: BTreeMap::new(),
                 pending: BTreeMap::new(),
                 faults: Vec::new(),
                 events: Vec::new(),
@@ -133,7 +133,7 @@ impl VirtualHaLowMedium {
         if state.radios.remove(&id).is_none() {
             return;
         }
-        state.paths.retain(|(from, to)| *from != id && *to != id);
+        state.paths.retain(|(from, to), _| *from != id && *to != id);
         state.faults.retain(|fault| fault.from != id);
         state.record(HaLowEvent::Detached { radio: id });
     }
@@ -144,8 +144,10 @@ impl VirtualHaLowMedium {
             "live distinct radio path"
         );
         let changed = match path {
-            PathState::Reachable => state.paths.insert((from, to)),
-            PathState::Isolated => state.paths.remove(&(from, to)),
+            PathState::Reachable | PathState::BroadcastOnly => {
+                state.paths.insert((from, to), path) != Some(path)
+            }
+            PathState::Isolated => state.paths.remove(&(from, to)).is_some(),
         };
         if changed {
             let at = state.now;
@@ -222,13 +224,20 @@ impl VirtualHaLowMedium {
         let recipients: Vec<_> = state
             .radios
             .iter()
-            .filter(|(id, endpoint)| {
-                state.paths.contains(&(from, **id))
-                    && match destination {
-                        Destination::Broadcast => true,
-                        Destination::Peer(peer) => endpoint.mac == peer,
-                    }
-            })
+            .filter(
+                |(id, endpoint)| match (state.paths.get(&(from, **id)), destination) {
+                    (
+                        Some(PathState::Reachable | PathState::BroadcastOnly),
+                        Destination::Broadcast,
+                    ) => true,
+                    (Some(PathState::Reachable), Destination::Peer(peer)) => endpoint.mac == peer,
+                    (
+                        Some(PathState::BroadcastOnly | PathState::Isolated) | None,
+                        Destination::Peer(_),
+                    )
+                    | (Some(PathState::Isolated) | None, Destination::Broadcast) => false,
+                },
+            )
             .map(|(id, _)| *id)
             .collect();
         let ordinal = state.next_transmission;

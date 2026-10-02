@@ -9,6 +9,8 @@ fn cases(seeds: impl IntoIterator<Item = u64>) -> Vec<Case> {
     for seed in seeds {
         use workloads::recovery::{BindingFault, Recovery, RestartedNode};
         for recovery in [
+            Recovery::MissingUnicastPaths,
+            Recovery::DelayedRadioBoot,
             Recovery::PageHandshakeLoss,
             Recovery::RetiredPageRoute,
             Recovery::AdapterReplacement,
@@ -137,5 +139,5 @@ fn case_schema_rejects_unknown_fields_versions_and_unsupported_topologies() {
     case.version = 1;
     case.scenario = Scenario::Lifecycle;
     assert_eq!(case.validate(), Err(case::InputError::Topology));
-    assert_eq!(cases([42]).len(), 34);
+    assert_eq!(cases([42]).len(), 36);
 }

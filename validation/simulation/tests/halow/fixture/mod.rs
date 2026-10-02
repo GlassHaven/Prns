@@ -47,6 +47,11 @@ pub struct AnnounceSeen {
 }
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum Measurement {
+    ColdRadioBoot {
+        wired_boots: u8,
+        rebind_ticks: u64,
+        open_attempts: u64,
+    },
     DeviceRecovery {
         cycles: u8,
         maximum_rebind_ticks: u64,

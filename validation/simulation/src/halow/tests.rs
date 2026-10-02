@@ -71,6 +71,33 @@ async fn directed_paths_broadcast_once_and_preserve_source_mac() {
 }
 
 #[tokio::test]
+async fn broadcast_reception_does_not_prove_a_usable_unicast_path() {
+    let medium = medium(4, 4);
+    let a = medium.attach(mac(1)).expect("a");
+    let b = medium.attach(mac(2)).expect("b");
+    medium.set_path(a.id(), b.id(), PathState::BroadcastOnly);
+    a.send(Destination::Broadcast, b"group")
+        .await
+        .expect("accepted");
+    a.send(Destination::Peer(mac(2)), b"unicast without a kernel path")
+        .await
+        .expect("acceptance is not delivery");
+    let mut bytes = [0; 64];
+    let received = b.receive(&mut bytes).await.expect("group");
+    assert_eq!(
+        (received.source, &bytes[..received.length]),
+        (mac(1), b"group".as_slice())
+    );
+    assert_eq!(medium.snapshot().queued, 0);
+    medium.set_path(a.id(), b.id(), PathState::Reachable);
+    a.send(Destination::Peer(mac(2)), b"path ready")
+        .await
+        .expect("accepted");
+    let received = b.receive(&mut bytes).await.expect("unicast");
+    assert_eq!(&bytes[..received.length], b"path ready");
+}
+
+#[tokio::test]
 async fn delayed_duplicate_reorders_and_cannot_land_on_reused_mac() {
     let medium = medium(4, 4);
     let a = medium.attach(mac(1)).expect("a");
