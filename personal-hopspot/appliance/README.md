@@ -84,3 +84,62 @@ Real power-loss behavior, manager upgrades, anti-downgrade policy, signing-key
 rotation and a browser/local-helper transport remain subsequent gates. The app
 signature authenticates publisher intent; the local journal checksum is not a
 signature or protection against an attacker with root access.
+
+## Persistent radio preparation
+
+`radio-plan --profile PATH` reads a bounded, explicit radio profile and returns
+JSON containing a UCI batch. It does not open application slots, change radio
+settings, commit UCI, or restart services. Supply the manager's normal explicit
+resource arguments. `openwrt/radio-profile.example.json` selects the current
+US-only 924 MHz / 8 MHz, fixed MCS2, long-guard, 18 dBm preset. This is an explicit
+regional selection, not a worldwide default. Other regions and vendor boot
+adapters require qualification before they can produce a plan.
+
+The planner verifies the inspected board's exact `morse.sh` digest, named UCI
+section types, Morse radio type, interface-to-radio binding and absence of
+pending operator UCI changes. It only targets that radio/interface and the mesh
+forwarding policy. Names cannot inject UCI commands; unrelated capabilities and
+the normal Wi-Fi, Ethernet, DHCP and firewall configuration stay outside the
+plan. The profile makes an open mesh, detaches it from IP bridges and disables
+mesh data forwarding and gateway announcements so PRNS owns onward routing. It
+retains proactive HWMP path requests (`mesh_hwmp_rootmode=2`): established mesh
+peers alone did not reliably populate the kernel's unicast paths after cold boot.
+These are 802.11 management frames, separate from application announcements.
+MAC-derived peer identity and cryptographic enrollment remain separate.
+
+The vendor netifd adapter already accepts fixed-rate module options, regenerates
+`/etc/modules.d/morse` and reloads the driver when required. OpenWrt owns boot
+application of those settings; Hopspot owns radio availability and rebinding.
+The qualified older MMRC contract encodes 8 MHz as `fixed_bw=3`, not `8`. The plan
+also disables module power saving and advertises long guard intervals. It does
+not add a radio poller or an automatic application announcement. The Heltec's
+optional multicast-rate-control parameter is not exposed by these boot adapters
+and is deliberately not overridden: group announcements retain vendor group-rate
+behavior, separately from the fixed unicast rate.
+
+Application confirmation does not confirm radio configuration. Guided radio
+activation must first retain private copies of wireless, mesh11sd, system and
+the generated module file, establish wired recovery and arm an independent
+persistent rollback service. Review the returned batch, stage it in a private
+UCI delta directory, inspect the resulting configuration, then commit wireless
+and mesh11sd and bring up only the named radio. Those two commits are not one
+atomic transaction. A recovery lease must cover interruption between them and
+remain available after reboot; a RAM-only watchdog is insufficient. Do not wire
+this planner to an unattended public Apply button before that transaction owner
+and physical power-loss behavior are qualified.
+
+Confirm health through a different live mesh gateway after boot: authenticate
+against the existing pinned target, inspect build/interfaces/config/peers, verify
+an app message and exact page bytes, and read the real Morse channel/rate and
+mesh parameters. Explicit controller announcements may seed discovery. Use the
+actual PHY associated with the Linux device, because module reload can change
+its index. Keep the wired management listener's address family explicit; IPv6
+link-local management needs an IPv6-capable bind and interface scope. Release
+the recovery lease only after these checks, or restore the original vendor
+configuration. The separate qualification service is not a shipping installer.
+
+The [three-board mesh boot qualification](../headless/docs/qualification/halow-mesh-boot-2026-10-02.md)
+records real reboot, over-air snapshots/messages/pages, simulator coverage and
+the lab recovery lease. Its mesh-to-AP restoration needed clean vendor reboots on
+the G4 and second Heltec after matching files and Morse health had already passed. A future radio
+transaction must verify operational recovery and own that restart boundary.

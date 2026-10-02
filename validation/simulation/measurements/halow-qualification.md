@@ -17,7 +17,8 @@ checks the Linux/Morse boundary which this simulator deliberately does not model
 `src/halow` owns a source/destination-aware datagram medium. Broadcast is one
 accepted transmission delivered to reachable neighbors; unicast selects one MAC
 and never falls back to broadcast. Directed paths permit asymmetric connectivity.
-Kernel acceptance and receiver delivery remain distinct. `VirtualHaLowRadio`
+Kernel acceptance and receiver delivery remain distinct. A directed path can also
+permit only broadcast reception, independently of accepted unicast sends. `VirtualHaLowRadio`
 implements the production cancel-safe datagram trait. Stalled or failed sends,
 fatal receive errors, first-frame reception and queue pressure reach the actual
 supervisor and peer tasks.
@@ -108,8 +109,8 @@ Unknown fields, versions and unsupported scenario/topology combinations are
 rejected. Each scenario owns its prerequisites and recovery; there is no generic
 application policy or production development registry.
 
-Routine inputs use seeds `0`, `1`, `42`, `0x5eed`: 136 cases, each run twice.
-Extended inputs use seeds `0..31`: 1,088 cases, each run twice. Comparison includes
+Routine inputs use seeds `0`, `1`, `42`, `0x5eed`: 144 cases, each run twice.
+Extended inputs use seeds `0..31`: 1,152 cases, each run twice. Comparison includes
 every actual datagram byte, source/destination, scheduled copy, delivery outcome,
 radio generation, app invocation, announce observation, semantic operation
 counter and pressure measurement. Wall-time measurements are excluded.
@@ -125,6 +126,8 @@ Extract an artifact's `case` object for standalone replay:
 ./tools/prns run repo.simulation.halow.replay -- --case validation/simulation/cases/halow/chain.json
 ./tools/prns run repo.simulation.halow.replay -- --case validation/simulation/cases/halow/recovery-retired-page.json
 ./tools/prns run repo.simulation.halow.replay -- --case validation/simulation/cases/halow/recovery-link-loss.json
+./tools/prns run repo.simulation.halow.replay -- --case validation/simulation/cases/halow/recovery-delayed-radio-boot.json
+./tools/prns run repo.simulation.halow.replay -- --case validation/simulation/cases/halow/recovery-missing-unicast-paths.json
 python3 validation/run.py run --suite halow-simulation
 python3 validation/run.py run --suite halow-simulation-extended
 python3 validation/run.py run --suite halow-resource-stability
@@ -148,13 +151,41 @@ also changed the production owners and has its own evidence.
 
 ## Gateway and device recovery follow-up
 
-Ten recovery scenarios add a real Tokio TCP Gateway connection, independent page
+Twelve recovery scenarios add a real Tokio TCP Gateway connection, independent page
 and control endpoints, repeated cached discovery, failed handshakes, a retired
 page route, target/gateway/controller retained restarts, and managed missing-device,
 coalesced down/up and fatal-receive faults. Retained cases use the actual file
 store and snapshot decoders. On restart, the recipe provides no new grants:
 authenticated success depends on restored authority and pinned identities.
 Page announces seed neighbors explicitly; no control preannounce is required.
+
+The delayed-radio-boot case starts the actual managed source with no device.
+Two wired boot windows, each beyond the former five-second readiness deadline,
+permit authenticated app messages and the exact page. A restart reloads retained
+grants rather than enrolling the controller again. The later device appearance
+binds within eight simulated seconds; moving wired ingress to another gateway
+then recovers the page and authenticated control over HaLoW. Missing-device retry
+counts are bounded, a healthy binding makes no further open attempts, and all
+ownership drains at shutdown. This is software readiness/recovery coverage; it
+does not simulate OpenWrt UCI commits, boot scripts, PHY rates or power loss.
+
+On 2026-10-02 the updated routine campaign passed all 144 cases twice in
+`routine/run-0014`, and the separate recovery matrix replayed twelve cases across
+four seeds twice. The full HaLoW integration test passed fourteen tests with two
+explicit ignores in 43.25 seconds on macOS arm64. All eight medium owner tests
+and simulator Clippy passed. The expanded 1,152-case campaign has not been rerun
+for these additions; the earlier 1,088-case result belongs to the previous
+scenario set.
+
+The missing-unicast-paths case permits group reception and kernel send acceptance
+while dropping directed frames. Page announcements reach the gateway, but a
+Remote Control path request must fail with its typed timeout. Direct wired
+control and the exact page still work. Restoring directed delivery recovers
+authenticated control and the page without restarting the target. This models
+the observed delivery boundary, not Linux HWMP or Morse firmware internals. The
+fixture gives different physical wired gateways different connection identities;
+reusing one label had incorrectly aliased retained page paths when moving entry.
+Production TCP clients already derive those identities from the actual address.
 
 The retired-page case first routes through a relay, replaces the gateway binding,
 admits a different MAC without refreshing routes, and fetches the exact page by
@@ -182,7 +213,7 @@ deduplication and rate limits. See the hardware report for the owning tests and
 focused mutation findings, including two off-scope missed mutants requiring
 later triage.
 
-Current routine artifacts are `routine/run-0011` (136 cases), expanded artifacts
+Earlier recovery artifacts are `routine/run-0011` (136 cases); expanded artifacts
 are `extended/run-0006` (1,088 cases), each with two complete fresh runs. The
 registered routine suite passed 14 tests with two explicit ignores. The expanded
 campaign passed in 218.63 seconds on macOS arm64. The 32-cycle isolated heap probe
@@ -201,9 +232,17 @@ boundaries separately, with their recorded limits.
 Linux packet-socket rebinding is now automatic and its bounded lifecycle has
 separate physical evidence on the G4 and both Heltecs. The simulator controls
 owned binding generations; actual netlink, device ioctls and AF_PACKET behavior
-remain outside its medium. Persistent installation, update rollback, power loss, region-specific
-radio configuration and long-running device resource limits still need desk
+remain outside its medium. Production install/update orchestration, electrical
+power-loss recovery and long-running device resource limits still need desk
 qualification. A software chain does not establish a forced physical RF chain.
+
+The [persistent mesh boot follow-up](../../../personal-hopspot/headless/docs/qualification/halow-mesh-boot-2026-10-02.md)
+qualified the explicit US radio profile and controller-seeded over-air checks on
+all three boards. It found missing kernel unicast paths despite group reception,
+which the new delivery scenario captures without claiming to simulate HWMP.
+The independent lab rollback restored saved files, but mesh-to-AP transitions on
+the G4 and second Heltec needed clean vendor reboots for operational recovery. Electrical power cuts and
+the public radio transaction remain outside this qualification.
 
 ## Initial verification before recovery follow-up
 

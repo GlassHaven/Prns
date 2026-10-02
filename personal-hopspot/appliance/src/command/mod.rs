@@ -9,7 +9,8 @@ use std::{
 
 use clap::{Parser, Subcommand};
 use personal_hopspot_appliance::{
-    Appliance, Board, Budgets, CandidateId, Error, LaunchBudget, SpaceBudget, UnobservedWrites,
+    Appliance, Board, Budgets, CandidateId, Error, LaunchBudget, RadioProfileError, SpaceBudget,
+    UnobservedWrites,
 };
 use serde::Deserialize;
 
@@ -31,6 +32,10 @@ pub struct Options {
 
 #[derive(Subcommand)]
 enum Action {
+    RadioPlan {
+        #[arg(long)]
+        profile: PathBuf,
+    },
     Status,
     Stage {
         #[arg(long)]
@@ -86,6 +91,14 @@ pub enum CommandError {
     Json(#[from] serde_json::Error),
     #[error("invalid explicit launch configuration")]
     Configuration,
+    #[error(transparent)]
+    RadioProfile(#[from] RadioProfileError),
+    #[error("named radio/interface sections do not match the Morse binding")]
+    RadioBinding,
+    #[error("pending UCI changes must be resolved before radio planning")]
+    PendingUciChanges,
+    #[error("could not inspect vendor UCI configuration")]
+    UciInspection,
     #[error("could not inspect filesystem capacity")]
     Capacity,
     #[cfg(not(unix))]
@@ -98,6 +111,10 @@ pub fn run(options: Options, public_key: &str) -> Result<(), CommandError> {
         return Err(CommandError::Configuration);
     }
     let board = Board::from_vendor_name(&fs::read_to_string("/tmp/sysinfo/board_name")?)?;
+    if let Action::RadioPlan { profile } = &options.action {
+        radio::print_plan(profile, &board)?;
+        return Ok(());
+    }
     let mut appliance = Appliance::open(
         &options.root,
         public_key,
@@ -109,6 +126,7 @@ pub fn run(options: Options, public_key: &str) -> Result<(), CommandError> {
         UnobservedWrites,
     )?;
     match options.action {
+        Action::RadioPlan { .. } => unreachable!("radio planning returned before opening slots"),
         Action::Status => println!("{}", serde_json::to_string(appliance.activation())?),
         Action::Stage {
             package,
@@ -248,6 +266,8 @@ fn filesystem_space(path: &Path, reserve_bytes: u64) -> Result<SpaceBudget, Comm
         reserve_bytes,
     })
 }
+
+mod radio;
 
 #[cfg(test)]
 mod tests;

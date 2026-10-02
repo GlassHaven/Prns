@@ -14,7 +14,9 @@ The [recovery qualification](qualification/halow-recovery-2026-10-02.md) closes
 that demonstrated binding/discovery gap on all three boards, with bounded retry
 and retained identities. The [persistent service qualification](qualification/halow-service-2026-10-02.md)
 adds real reboot, retained control and exact pages on all three, plus G4
-crash-driven rollback. Physical power-loss recovery remains a gate.
+crash-driven rollback. The [mesh boot qualification](qualification/halow-mesh-boot-2026-10-02.md)
+adds the explicit persistent radio profile and over-air checks after verified new
+boot epochs. Physical power-loss recovery remains a gate.
 
 ## Compatibility and budgets
 
@@ -61,6 +63,8 @@ helper present its structured progress rather than reimplementing the transactio
    Preserve Ethernet management. Start a bounded candidate with separate state and
    narrow lab grants. Require a real authenticated control exchange and an exact
    Resource/page exchange; a PID, listening port or mesh association is insufficient.
+   Restoration also needs an operating interface: Morse health and matching
+   configuration files did not prove recovery after a mesh-to-AP transition.
 5. **Activated:** persist a verified version, configuration and supervised launch
    transaction. Keep identity and authorization state outside replaceable slots.
    Resolve radio-device readiness and recreation before claiming appliance readiness.
@@ -78,11 +82,22 @@ an authorization denial.
 ## Radio and controller configuration
 
 The current US lab profile is open 802.11s, 924 MHz center, 8 MHz, MCS2, long guard
-interval, power saving off and mesh forwarding off. Region and legal power are
-required inputs checked against the actual board; the desk run used 18 dBm.
+interval, power saving off and mesh forwarding off. Proactive HWMP path requests
+remain enabled (`mesh_hwmp_rootmode=2`); otherwise one cold-booted board received
+broadcast but had no usable kernel unicast paths. Gate announcements remain off.
+HWMP management traffic is separate from application announcements. Region and
+power need an explicit installation choice; the desk run used 18 dBm. Check the
+regional SKU and operating location before using the US-only plan; its adapter
+fingerprint does not attest regional legality or the whole vendor image.
 Keep the profile fixed and editable. Do not silently apply the US channel to a
 different regional SKU. Vendor `iw` output uses synthetic VHT channel/rate labels;
 validate frequency/width through Morse tooling, without continuous intrusive polling.
+
+The manager's typed, read-only `radio-plan` preflights the exact installed vendor
+boot adapter and named binding before returning a reviewable UCI batch. It does
+not activate the radio or confirm recovery. The
+[radio preparation procedure](../../appliance/README.md#persistent-radio-preparation)
+keeps those operations separate and requires a persistent rollback lease.
 
 Persist one explicit, stable local HaLoW scope across interface renames and
 application updates. Source MAC supplies immediate neighbor identity without a
@@ -117,6 +132,10 @@ That seeds HaLoW neighbors. Subsequent control can route across the radio; cold
 control-endpoint discovery was qualified with these neighbors established. A quiet
 mesh association alone does not populate PRNS MAC peers. Announcements, including
 ordinary relays, use the shared broadcast channel; directed traffic uses unicast.
+Repeat explicit discovery seeding as needed after reboot. Installation verification
+should first reconcile the actual new boot epoch, then check the radio and fetch
+authenticated snapshots and the exact page through another live gateway. An early
+successful response may have come from the process about to reboot.
 
 ## Web-led entry and later automation
 
@@ -148,9 +167,13 @@ must not become the installer endpoint.
   filesystems. The temporary qualification loader trusts a separate lab signer;
   the shipping manager rejects that signer. No public release signing was performed.
 - Qualify physical interrupted flash/power-loss recovery, sustained state growth,
-  persistent regional mesh/rate configuration and management recovery. The service
-  reboot checks retained vendor radio settings; they are not an over-air mesh-boot
-  test. Do not discard authorization snapshots merely to avoid route writes.
+  and a durable radio activation/recovery transaction. The explicit US mesh/rate
+  profile and controller-seeded over-air reboot checks now passed on all three;
+  other regions, vendor adapters and unattended cold discovery remain unqualified.
+  Warm mesh-to-vendor-AP restoration required clean vendor reboots on the G4 and
+  second Heltec. Build that operational recovery boundary into the transaction owner;
+  matching files and a successful firmware health query are insufficient. Do not
+  discard authorization snapshots merely to avoid route writes.
 - Qualify least privilege, bounded logs/state, sustained actual PRNS Resource
   throughput, longer desk runs, physical forced multi-hop and field range.
   Vendor LED/button polling remains active in the latest desk checks; replacing
