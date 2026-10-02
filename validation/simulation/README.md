@@ -31,6 +31,9 @@ attribution, replay/reduction and isolated resource stability checks.
 The [Remote Control campaign](measurements/remote-control.md) runs real Tokio
 nodes with fixed entropy and manual time through authenticated inspection, app
 messages, concurrent authorization boundaries and bounded interface watches.
+The [HaLoW qualification](measurements/halow-qualification.md) runs the native
+supervisor through source-MAC datagrams, broadcast echoes, forced relay paths,
+delivery faults, peer pressure, adapter replacement and concurrent Remote Control.
 
 The medium intentionally makes its limits and faults explicit:
 

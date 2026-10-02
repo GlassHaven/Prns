@@ -2262,3 +2262,36 @@ timeout_seconds = 1800
 command = ["cargo", "test", "--locked", "-p", "prns-simulation", "--features", "controlled-time,heap-profile", "--test", "embassy_ble", "thirty_two_cycles_release_dynamic_owners", "--", "--ignored", "--nocapture"]
 inputs = ["validation/simulation", "personal-rns", "prns-core", "prns-runtime", "prns-interfaces/impls/tokio", "prns-interfaces/impls/embassy", "personal-hopspot/core"]
 artifacts = "validation-artifacts/results/core-work-resource-stability"
+
+[[suite]]
+id = "halow-simulation"
+domain = "integration"
+platform = "any"
+toolchain = "stable"
+tiers = ["pr", "scheduled", "release"]
+timeout_seconds = 600
+command = ["cargo", "test", "--locked", "-p", "prns-simulation", "--features", "controlled-time", "--test", "halow"]
+inputs = ["validation/simulation", "personal-rns", "prns-core", "prns-runtime", "prns-interfaces/impls/tokio", "personal-hopspot/core"]
+artifacts = "validation-artifacts/results/halow-simulation"
+
+[[suite]]
+id = "halow-simulation-extended"
+domain = "integration"
+platform = "any"
+toolchain = "stable"
+tiers = ["scheduled", "release"]
+timeout_seconds = 1800
+command = ["cargo", "test", "--locked", "-p", "prns-simulation", "--features", "controlled-time", "--test", "halow", "extended_halow_campaign", "--", "--ignored", "--nocapture"]
+inputs = ["validation/simulation", "personal-rns", "prns-core", "prns-runtime", "prns-interfaces/impls/tokio", "personal-hopspot/core"]
+artifacts = "validation-artifacts/results/halow-simulation"
+
+[[suite]]
+id = "halow-resource-stability"
+domain = "integration"
+platform = "any"
+toolchain = "stable"
+tiers = ["scheduled", "release"]
+timeout_seconds = 1800
+command = ["cargo", "test", "--locked", "-p", "prns-simulation", "--features", "controlled-time,heap-profile", "--test", "halow", "thirty_two_cycles_release_halow_owners", "--", "--ignored", "--nocapture"]
+inputs = ["validation/simulation", "personal-rns", "prns-core", "prns-runtime", "prns-interfaces/impls/tokio", "personal-hopspot/core"]
+artifacts = "validation-artifacts/results/halow-resource-stability"

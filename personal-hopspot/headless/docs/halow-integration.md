@@ -13,6 +13,11 @@ a forced two-hop route through the real Hopspot nodes and HaLoW supervisors.
 Sustained load and a physically isolated two-radio-hop hardware test remain. See [the qualification report](qualification/halow-three-node-2026-09-29.md)
 and [relay-broadcast follow-up](qualification/halow-relay-broadcast-2026-09-29.md)
 for measurements and limits, and `thinknode-g4.md` for build/recovery procedures.
+The dedicated [HaLoW simulation qualification](../../../validation/simulation/measurements/halow-qualification.md)
+also covers replayable faults, actual peer queue/cap pressure, expiry,
+adapter replacement and Remote Control while Resources overlap. It qualifies
+the software transport; RF, firmware and durable installation still require
+their separate device checks.
 
 ## Product shape
 

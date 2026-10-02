@@ -15,7 +15,7 @@ heap-profile = ["dep:dhat"]
 
 [dependencies]
 dhat = { version = "0.3", optional = true }
-personal-rns = { path = "../../personal-rns", default-features = false, features = ["tokio-host"] }
+personal-rns = { path = "../../personal-rns", default-features = false, features = ["tokio-host", "wifi-halow"] }
 tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
