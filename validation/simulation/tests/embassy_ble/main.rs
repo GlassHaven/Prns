@@ -18,8 +18,10 @@ use prns_simulation::{ManualMedium, ManualTimeDriver, ManualTimeError, Simulatio
 
 mod clock;
 mod contracts;
+mod core_work;
 #[cfg(feature = "heap-profile")]
 mod heap;
+mod node_events;
 mod remote_control;
 mod replay;
 #[path = "../support/ble_selection.rs"]

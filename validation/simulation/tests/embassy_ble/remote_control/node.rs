@@ -2,14 +2,16 @@ use super::adapter::{Handle, Runtime};
 use super::*;
 use crate::clock::EmbassyTasks;
 use crate::fixture::{RadioFixture, RawMutex, MAX_PEERS};
+use crate::node_events::EventLog;
 use crate::wire_gate::{GatedBackend, WireGate};
 use personal_rns::engine::{InstantMillis, IssuedCommand};
 use personal_rns::interfaces::bluetooth_auto::{
     BleIdentity, Endpoint, Esp32Host, LinkCapabilities, BLE_HW_MTU,
 };
 use personal_rns::interfaces::*;
+use personal_rns::runtime::request_endpoints::RequestEndpointSet;
 use personal_rns::runtime::*;
-use personal_rns::storage::GrowableHeap;
+use personal_rns::storage::{GrowableHeap, StorageLayout};
 use prns_core::entropy::{EntropySource, RuntimeEntropy};
 use prns_runtime_embassy::runtime::{
     CompletionPool, EmbassyInterfaceStore, EmbeddedCompactionPolicy, EmbeddedFlashPersistence,
@@ -55,6 +57,7 @@ pub struct Node {
     pub task: ManualTaskId,
     pub wire: WireGate,
     pub inspection: Inspection,
+    pub events: EventLog,
 }
 struct Entropy(u8);
 impl EntropySource for Entropy {
@@ -94,6 +97,51 @@ pub fn start_with_crypto(
     messages: Messages,
     crypto: CryptoPoolConfig,
 ) -> Node {
+    start_with_settings(
+        tasks,
+        lab,
+        index,
+        generation,
+        storage,
+        messages,
+        NodeSettings::<_, _, 0, 2> {
+            crypto,
+            storage: GrowableHeap,
+            destinations: [] as [PreConfiguredDestination<'static>; 0],
+            endpoints: personal_rns::request_endpoints![],
+        },
+    )
+}
+
+pub struct NodeSettings<S, R, const DESTINATIONS: usize, const DEPTH: usize> {
+    pub crypto: CryptoPoolConfig,
+    pub storage: S,
+    pub destinations: [PreConfiguredDestination<'static>; DESTINATIONS],
+    pub endpoints: R,
+}
+
+pub fn start_with_settings<
+    S: StorageLayout + 'static,
+    R: RequestEndpointSet<()> + 'static,
+    const DESTINATIONS: usize,
+    const DEPTH: usize,
+>(
+    tasks: &mut EmbassyTasks<'_>,
+    lab: &VirtualBleLab,
+    index: usize,
+    generation: u64,
+    storage: Storage,
+    messages: Messages,
+    settings: NodeSettings<S, R, DESTINATIONS, DEPTH>,
+) -> Node {
+    let NodeSettings {
+        crypto,
+        storage: engine_storage,
+        destinations,
+        endpoints,
+    } = settings;
+    let events = EventLog::new();
+    let observed_events = events.clone();
     let address = (index + 1) as u8;
     let logical_start = InstantMillis(1_000_000 + tasks.snapshot().tick.get());
     let observations = messages.1.clone();
@@ -142,11 +190,12 @@ pub fn start_with_crypto(
                         ))
                         .with_handlers(Inspection::Tokio(handle), messages),
                         transport_identity: None,
-                        pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
+                        pre_configured_destinations: destinations,
                         app_state: (),
-                        storage: GrowableHeap,
-                        request_endpoints: personal_rns::request_endpoints![],
+                        storage: engine_storage,
+                        request_endpoints: endpoints,
                         on_event: move |event, _: &()| {
+                            observed_events.observe(&event);
                             super::pairing::observe(&observations, index, event)
                         },
                         interfaces: move |handle: &PrnsNodeHandle| {
@@ -177,6 +226,7 @@ pub fn start_with_crypto(
                 task,
                 wire,
                 inspection: Inspection::Tokio(handle),
+                events,
             }
         }
         Storage::Embassy(image) => {
@@ -187,7 +237,7 @@ pub fn start_with_crypto(
                 notify,
                 lifecycle,
                 wire,
-            } = RadioFixture::new(lab, address, Endpoint::Esp32(Esp32Host::Esp32));
+            } = RadioFixture::<DEPTH>::new(lab, address, Endpoint::Esp32(Esp32Host::Esp32));
             let status = supervisor.status();
             let commands = crate::static_storage::allocate(embassy_sync::channel::Channel::<
                 RawMutex,
@@ -221,11 +271,14 @@ pub fn start_with_crypto(
                 ))
                 .with_handlers(Inspection::Embassy { status, store }, messages),
                 transport_identity: None,
-                pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
+                pre_configured_destinations: destinations,
                 app_state: (),
-                storage: GrowableHeap,
-                request_endpoints: personal_rns::request_endpoints![],
-                on_event: move |event, _: &()| super::pairing::observe(&observations, index, event),
+                storage: engine_storage,
+                request_endpoints: endpoints,
+                on_event: move |event, _: &()| {
+                    observed_events.observe(&event);
+                    super::pairing::observe(&observations, index, event)
+                },
                 interfaces: ManuallyAttached,
                 persistence: NoPersistence,
             };
@@ -238,7 +291,7 @@ pub fn start_with_crypto(
                 _,
                 1,
                 MAX_PEERS,
-                2,
+                DEPTH,
                 8,
                 4,
                 8,
@@ -272,13 +325,14 @@ pub fn start_with_crypto(
                 task,
                 wire,
                 inspection: Inspection::Embassy { status, store },
+                events,
             }
         }
     }
 }
 
 #[derive(Clone)]
-pub(super) enum Inspection {
+pub(crate) enum Inspection {
     Tokio(PrnsNodeHandle),
     Embassy {
         status: prns_interfaces_embassy::bluetooth_auto::BluetoothAutoStatus<MAX_PEERS>,
@@ -286,7 +340,7 @@ pub(super) enum Inspection {
     },
 }
 impl Inspection {
-    pub(super) fn snapshots(&self) -> Vec<InterfaceSnapshot> {
+    pub(crate) fn snapshots(&self) -> Vec<InterfaceSnapshot> {
         match self {
             Self::Tokio(handle) => handle.interfaces(),
             Self::Embassy { status, store } => {

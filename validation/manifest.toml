@@ -2240,3 +2240,25 @@ timeout_seconds = 3600
 command = ["cargo", "test", "--locked", "-p", "prns-simulation", "--features", "controlled-time", "--test", "embassy_ble", "extended_remote_control_campaign", "--", "--ignored", "--nocapture"]
 inputs = ["validation/simulation", "personal-rns", "prns-core", "prns-runtime", "prns-interfaces/impls/tokio", "prns-interfaces/impls/embassy", "personal-hopspot/core"]
 artifacts = "validation-artifacts/results/remote-control-simulation"
+
+[[suite]]
+id = "core-work-simulation-extended"
+domain = "integration"
+platform = "any"
+toolchain = "stable"
+tiers = ["scheduled", "release"]
+timeout_seconds = 7200
+command = ["cargo", "test", "--locked", "-p", "prns-simulation", "--features", "controlled-time", "--test", "embassy_ble", "extended_core_work_campaign", "--", "--ignored", "--nocapture"]
+inputs = ["validation/simulation", "personal-rns", "prns-core", "prns-runtime", "prns-interfaces/impls/tokio", "prns-interfaces/impls/embassy", "personal-hopspot/core"]
+artifacts = "validation-artifacts/results/core-work-simulation"
+
+[[suite]]
+id = "core-work-resource-stability"
+domain = "integration"
+platform = "any"
+toolchain = "stable"
+tiers = ["scheduled", "release"]
+timeout_seconds = 1800
+command = ["cargo", "test", "--locked", "-p", "prns-simulation", "--features", "controlled-time,heap-profile", "--test", "embassy_ble", "thirty_two_cycles_release_dynamic_owners", "--", "--ignored", "--nocapture"]
+inputs = ["validation/simulation", "personal-rns", "prns-core", "prns-runtime", "prns-interfaces/impls/tokio", "prns-interfaces/impls/embassy", "personal-hopspot/core"]
+artifacts = "validation-artifacts/results/core-work-resource-stability"

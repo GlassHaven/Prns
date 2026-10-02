@@ -1133,3 +1133,23 @@ platforms = ["any"]
 audience = ["developer", "ci"]
 entrypoint = ["python", "tools/repo/remote-control-simulation.py", "--mode", "reduce"]
 requires = ["cargo", "python"]
+
+[[task]]
+id = "repo.simulation.core-work.replay"
+summary = "Replay a versioned asynchronous core simulator case twice in a fresh process."
+domain = "repo"
+effect = "workspace-write"
+platforms = ["any"]
+audience = ["developer", "ci"]
+entrypoint = ["python", "tools/repo/core-work-simulation.py", "--mode", "replay"]
+requires = ["cargo", "python"]
+
+[[task]]
+id = "repo.simulation.core-work.reduce"
+summary = "Reduce an asynchronous core failure while preserving its diagnostic cause."
+domain = "repo"
+effect = "workspace-write"
+platforms = ["any"]
+audience = ["developer", "ci"]
+entrypoint = ["python", "tools/repo/core-work-simulation.py", "--mode", "reduce"]
+requires = ["cargo", "python"]

@@ -25,7 +25,7 @@ pub(super) const GATT_VALUE_BYTES: usize = 20;
 pub(super) const GATT_QUEUE_DEPTH: usize = 4;
 pub(super) type RawMutex = CriticalSectionRawMutex;
 pub(super) type Lifecycle = Channel<RawMutex, InterfaceLifecycle, 4>;
-pub(super) type Fleet = EmbassyFleet<RawMutex, BLE_HW_MTU, 2, 4>;
+pub(super) type Fleet<const DEPTH: usize = 2> = EmbassyFleet<RawMutex, BLE_HW_MTU, DEPTH, 4>;
 pub(super) type Supervisor = BluetoothAuto<GatedBackend, MAX_PEERS>;
 
 pub(super) fn lab() -> VirtualBleLab {
@@ -67,16 +67,16 @@ pub(super) fn supervisor(
     (supervisor, fleet, lifecycle)
 }
 
-pub(super) struct RadioFixture {
+pub(super) struct RadioFixture<const DEPTH: usize = 2> {
     pub supervisor: Supervisor,
-    pub fleet: Fleet,
-    pub lanes: ManifoldLaneSet<RawMutex, 1, 2>,
-    pub notify: &'static Channel<RawMutex, InterfaceId, 2>,
+    pub fleet: Fleet<DEPTH>,
+    pub lanes: ManifoldLaneSet<RawMutex, 1, DEPTH>,
+    pub notify: &'static Channel<RawMutex, InterfaceId, DEPTH>,
     pub lifecycle: &'static Lifecycle,
     pub wire: WireGate,
 }
 
-impl RadioFixture {
+impl<const DEPTH: usize> RadioFixture<DEPTH> {
     pub fn new(lab: &VirtualBleLab, address: u8, endpoint: Endpoint) -> Self {
         let id = InterfaceId::from_channel_tag(InterfaceKind::BluetoothAuto, &[address]);
         let shared = super::static_storage::allocate(BluetoothAutoShared::new(id));
@@ -91,12 +91,13 @@ impl RadioFixture {
             },
             shared,
         );
-        let lane =
-            super::static_storage::allocate(StaticManifoldLane::<RawMutex, BLE_HW_MTU, 2>::new());
+        let lane = super::static_storage::allocate(
+            StaticManifoldLane::<RawMutex, BLE_HW_MTU, DEPTH>::new(),
+        );
         let wake = super::static_storage::allocate(Signal::new());
         let notify = super::static_storage::allocate(Channel::new());
         let lifecycle = super::static_storage::allocate(Lifecycle::new());
-        let mut lanes = ManifoldLaneSet::<RawMutex, 1, 2>::new();
+        let mut lanes = ManifoldLaneSet::<RawMutex, 1, DEPTH>::new();
         let fleet = lanes
             .claim_supervisor(lane, id, wake)
             .unwrap()

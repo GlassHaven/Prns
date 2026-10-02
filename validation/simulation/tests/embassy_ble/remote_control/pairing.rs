@@ -178,10 +178,18 @@ impl Handle {
 
 pub fn observed_offer(
     sink: &Rc<RefCell<Vec<Observation>>>,
+    opened: RemoteControlPairingOpened,
+) -> RemoteControlPairingOpened {
+    observed_offer_for(sink, CONTROLLER, opened)
+}
+
+pub fn observed_offer_for(
+    sink: &Rc<RefCell<Vec<Observation>>>,
+    controller: usize,
     mut opened: RemoteControlPairingOpened,
 ) -> RemoteControlPairingOpened {
     let mut events = sink.borrow_mut();
-    let index = events.iter().position(|event| matches!(event, Observation::Available { node: CONTROLLER, endpoint, .. } if *endpoint == opened.endpoint)).expect("controller-local availability deadline");
+    let index = events.iter().position(|event| matches!(event, Observation::Available { node, endpoint, .. } if *node == controller && *endpoint == opened.endpoint)).expect("controller-local availability deadline");
     let Observation::Available { expires_at, .. } = events.remove(index) else {
         unreachable!("availability")
     };

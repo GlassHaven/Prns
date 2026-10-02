@@ -10,7 +10,7 @@ description = "Deterministic, host-native virtual device validation for Personal
 publish = false
 
 [features]
-controlled-time = ["tokio/test-util", "prns-runtime-tokio/simulation-control"]
+controlled-time = ["tokio/test-util", "prns-runtime-tokio/simulation-control", "prns-runtime-tokio/runtime-metrics"]
 heap-profile = ["dep:dhat"]
 
 [dependencies]

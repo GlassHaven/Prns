@@ -268,6 +268,18 @@ impl<'driver> EmbassyTasks<'driver> {
         }
         unreachable!("supervisors exceeded the explicit settlement poll budget")
     }
+
+    pub(super) fn poll_turns(&mut self, turns: NonZeroUsize) {
+        let before = self.snapshot();
+        for _ in 0..turns.get() {
+            let _ = self.step_crypto();
+            match self.runner.poll_next().unwrap() {
+                ManualTaskPoll::Pending { .. } | ManualTaskPoll::Idle => {}
+                ManualTaskPoll::Completed { .. } => unreachable!("tracked actors stay live"),
+            }
+        }
+        assert_eq!(self.snapshot(), before);
+    }
 }
 
 #[derive(Debug)]

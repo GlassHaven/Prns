@@ -254,3 +254,58 @@ fn admission_and_result_pressure_use_production_ring_bounds() {
         Err(ControlledCryptoError::WorkerOutOfRange)
     );
 }
+
+#[test]
+fn full_result_ring_defers_publication_until_the_manifold_consumes_a_result() {
+    let control = new_control(1);
+    let pool = control.attach(Arc::new(Notify::new())).unwrap();
+    // Submit directly to the pool to exercise its reserved result headroom. Driver admission is intentionally more conservative than this ring's capacity.
+    for id in 0..CRYPTO_WORKER_RESULT_RING_DEPTH {
+        pool.submit(probe(id as u8, CryptoJobClass::Latency));
+        assert!(matches!(
+            control.execute(ControlledWorkerId(0)),
+            Ok(ControlledCryptoStep::Executed(_))
+        ));
+        assert!(matches!(
+            control.publish(ControlledWorkerId(0)),
+            Ok(ControlledCryptoStep::Published(_))
+        ));
+    }
+    pool.submit(probe(
+        CRYPTO_WORKER_RESULT_RING_DEPTH as u8,
+        CryptoJobClass::Latency,
+    ));
+    control.execute(ControlledWorkerId(0)).unwrap();
+    assert_eq!(
+        control.publish(ControlledWorkerId(0)),
+        Ok(ControlledCryptoStep::Backpressured)
+    );
+    assert_eq!(
+        control.snapshot().unwrap(),
+        ControlledCryptoSnapshot {
+            queued: 0,
+            computed: 1,
+            published: CRYPTO_WORKER_RESULT_RING_DEPTH
+        }
+    );
+    assert!(matches!(consume(&pool), CryptoResult::ScheduledTest(0)));
+    assert!(matches!(
+        control.publish(ControlledWorkerId(0)),
+        Ok(ControlledCryptoStep::Published(_))
+    ));
+    for id in 1..=CRYPTO_WORKER_RESULT_RING_DEPTH {
+        assert!(
+            matches!(consume(&pool), CryptoResult::ScheduledTest(actual) if actual == id as u8)
+        );
+    }
+    assert_eq!(pool.workers[0].outstanding_jobs.get(), 0);
+    assert_eq!(pool.workers[0].outstanding_work.get(), 0);
+    assert_eq!(
+        control.snapshot().unwrap(),
+        ControlledCryptoSnapshot {
+            queued: 0,
+            computed: 0,
+            published: 0
+        }
+    );
+}

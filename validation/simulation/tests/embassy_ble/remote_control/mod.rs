@@ -6,11 +6,11 @@
     clippy::expect_used,
     reason = "bounded deterministic qualification fixtures"
 )]
-mod adapter;
+pub(crate) mod adapter;
 mod campaign;
-mod node;
-mod pairing;
-mod persistence;
+pub(crate) mod node;
+pub(crate) mod pairing;
+pub(crate) mod persistence;
 mod tests;
 
 use personal_rns::identity::vault::IdentitySecretKey;
@@ -24,14 +24,14 @@ const TARGET: usize = 1;
 const REQUEST_TIMEOUT_MS: u64 = 50;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Invocation {
-    identity: personal_rns::identity::IdentityHash,
-    payload: Vec<u8>,
+pub(crate) struct Invocation {
+    pub identity: personal_rns::identity::IdentityHash,
+    pub payload: Vec<u8>,
 }
 #[derive(Clone)]
-struct Messages(
-    Rc<RefCell<Vec<Invocation>>>,
-    Rc<RefCell<Vec<pairing::Observation>>>,
+pub(crate) struct Messages(
+    pub Rc<RefCell<Vec<Invocation>>>,
+    pub Rc<RefCell<Vec<pairing::Observation>>>,
 );
 impl RemoteControlAppMessages<()> for Messages {
     async fn handle_app_message(
@@ -53,7 +53,7 @@ impl RemoteControlAppMessages<()> for Messages {
             .map_err(|_| RemoteControlHostCommandError::ApplyFailed)
     }
 }
-fn secrets(index: usize) -> RemoteControlNodeIdentitySecrets {
+pub(crate) fn secrets(index: usize) -> RemoteControlNodeIdentitySecrets {
     let seed = 0x61 + index as u8 * 2;
     RemoteControlNodeIdentitySecrets::new(
         RemoteControlControllerIdentitySecret::from(IdentitySecretKey::new([seed; 64])),
@@ -61,7 +61,7 @@ fn secrets(index: usize) -> RemoteControlNodeIdentitySecrets {
     )
     .expect("distinct identities")
 }
-fn requests() -> RemoteControlRequestSet {
+pub(crate) fn requests() -> RemoteControlRequestSet {
     let mut requests = RemoteControlRequestSet::empty();
     for request in [
         RemoteControlRequestKind::Describe,
