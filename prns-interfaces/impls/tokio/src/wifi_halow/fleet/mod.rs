@@ -92,6 +92,12 @@ impl<D: HaLowDatagrams> InterfaceSupervisor for HaLow<D> {
     }
 
     async fn run(self, fleet: Fleet) {
+        self.run_on(&fleet).await;
+    }
+}
+
+impl<D: HaLowDatagrams> HaLow<D> {
+    pub(super) async fn run_on(self, fleet: &Fleet) {
         let broadcast = Channel::<D, Broadcast>::new(
             self.socket.clone(),
             self.tag.clone(),

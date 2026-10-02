@@ -20,7 +20,11 @@ the software transport; RF, firmware and durable installation still require
 their separate device checks. The latest
 [three-appliance check](qualification/halow-appliance-2026-10-01.md) passed
 authenticated control and concurrent page work, and identified a radio lifecycle /
-control-route recovery gap. The [deployment specification](halow-deployment.md)
+control-route recovery gap. The [recovery follow-up](qualification/halow-recovery-2026-10-02.md)
+qualifies automatic packet rebinding, unavailable-route rediscovery and retained
+identity/grants on all three boards without a radio-cycle process restart.
+One page handshake timed out and recovered on explicit retry; radio delivery
+remains fallible. The [deployment specification](halow-deployment.md)
 defines the next installer transaction and storage strategy.
 
 ## Product shape
@@ -43,6 +47,14 @@ shared packet socket. The lab used `AF_PACKET`/`SOCK_DGRAM`; no monitor injectio
 or custom chip firmware is needed for this path. Linux supplies the source MAC
 alongside the received data. Keep platform FFI in `prns-ffi`, asynchronous I/O
 in `prns-interfaces-tokio`, and transport policy independent of Linux.
+
+`HaLowDevice` owns the stable configured supervisor; `HaLowRadioSource` supplies
+owned packet-binding generations. The Linux source subscribes to link events
+before binding and invalidates obsolete generations, including down/up events
+in the same batch. Rebinding uses the existing bounded reconnect policy without
+periodic station polling or changing the radio profile. A failed receive releases
+the old socket and child lanes. A replacement reconstructs MAC-derived peers on
+their first frame; neither local nor control announcements run automatically.
 
 The peer key is a versioned, length-delimited stable local interface instance tag
 plus the remote source MAC. Hash that with a new peer `InterfaceKind` through
@@ -178,7 +190,8 @@ any helper; do not turn it into an unauthenticated local command proxy.
    Linux packet adapter are implemented and covered by unit/runtime tests.
 2. Three-node hardware captures confirm shared local/relayed announce broadcast
    and direct page traffic. Concurrent transfers and application restart passed.
-   Sustained load, radio departure, and long-running resource bounds remain.
+   Radio-device recreation now passes the recovery follow-up with stable process
+   and interface identity. Sustained load and long-running resource bounds remain.
 3. The real Hopspot page transfers through wired TCP and native HaLoW. A
    [controlled two-hop regression](qualification/halow-controlled-two-hop.md)
    forces A→B→C, verifies immediate-hop MAC identity, and checks that removing B

@@ -8,6 +8,7 @@ mod faults;
 mod lifecycle;
 mod pressure;
 mod receive;
+pub mod recovery;
 mod resource;
 pub use broadcast::broadcast_faults;
 pub use cancellation::cancel_reply;

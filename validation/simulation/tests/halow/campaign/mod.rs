@@ -7,6 +7,26 @@ use case::{Case, Scenario};
 fn cases(seeds: impl IntoIterator<Item = u64>) -> Vec<Case> {
     let mut result = Vec::new();
     for seed in seeds {
+        use workloads::recovery::{BindingFault, Recovery, RestartedNode};
+        for recovery in [
+            Recovery::PageHandshakeLoss,
+            Recovery::RetiredPageRoute,
+            Recovery::AdapterReplacement,
+            Recovery::FailedHandshake,
+            Recovery::RetainedRestart(RestartedNode::Target),
+            Recovery::RetainedRestart(RestartedNode::Gateway),
+            Recovery::RetainedRestart(RestartedNode::Controller),
+            Recovery::ManagedBinding(BindingFault::MissingDevice),
+            Recovery::ManagedBinding(BindingFault::CoalescedDownUp),
+            Recovery::ManagedBinding(BindingFault::FatalReceive),
+        ] {
+            result.push(Case {
+                version: 1,
+                seed,
+                topology: fixture::Topology::Shared,
+                scenario: Scenario::Recovery(recovery),
+            });
+        }
         for topology in [
             fixture::Topology::Shared,
             fixture::Topology::Chain,
@@ -117,5 +137,5 @@ fn case_schema_rejects_unknown_fields_versions_and_unsupported_topologies() {
     case.version = 1;
     case.scenario = Scenario::Lifecycle;
     assert_eq!(case.validate(), Err(case::InputError::Topology));
-    assert_eq!(cases([42]).len(), 24);
+    assert_eq!(cases([42]).len(), 34);
 }

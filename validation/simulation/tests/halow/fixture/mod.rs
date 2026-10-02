@@ -11,9 +11,13 @@ use std::{
 use tokio::sync::oneshot;
 
 mod node;
-pub use node::{controller, target};
+pub use node::{controller, page, target};
 mod host;
 mod operations;
+mod persistence;
+pub use persistence::{Persistence, RetainedState};
+mod device;
+pub use device::{Bindings, DeviceControl, Presence};
 pub const TARGET: usize = 0;
 pub const PRIMARY: usize = 1;
 pub const HEALTHY: usize = 2;
@@ -43,6 +47,11 @@ pub struct AnnounceSeen {
 }
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum Measurement {
+    DeviceRecovery {
+        cycles: u8,
+        maximum_rebind_ticks: u64,
+        open_attempts: u64,
+    },
     PeerBurst {
         injected_datagrams: usize,
         delivered_frames: u64,
@@ -50,6 +59,14 @@ pub enum Measurement {
 }
 
 pub enum Event {
+    PageConnection(
+        Result<
+            personal_rns::routing::links::LinkId,
+            SendError<personal_rns::engine::EstablishLinkFailure>,
+        >,
+    ),
+    Path(Result<personal_rns::engine::PathFound, RequestPathError>),
+    Connection(Result<personal_rns::routing::links::LinkId, ConnectRemoteControlTargetError>),
     Stopped {
         node: usize,
         result: Result<(), NodeRunError>,
@@ -84,7 +101,10 @@ pub struct Lab<'a> {
     pub calls: Rc<RefCell<Vec<AppInvocation>>>,
     pub announces: Rc<RefCell<Vec<AnnounceSeen>>>,
     pub measurements: Vec<Measurement>,
+    pub wired: Vec<AttachedInterface>,
     generations: [u64; NODE_COUNT],
+    persistence: Persistence,
+    bindings: Bindings,
 }
 pub fn nz(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).expect("nonzero fixture budget")
@@ -134,6 +154,32 @@ pub fn with_lab<R>(
     topology: Topology,
     scenario: impl FnOnce(&mut Lab<'_>) -> R,
 ) -> R {
+    with_persistence(medium, seed, topology, Persistence::Disabled, scenario)
+}
+pub fn with_persistence<R>(
+    medium: VirtualHaLowMedium,
+    seed: u64,
+    topology: Topology,
+    persistence: Persistence,
+    scenario: impl FnOnce(&mut Lab<'_>) -> R,
+) -> R {
+    with_fixture(
+        medium,
+        seed,
+        topology,
+        persistence,
+        Bindings::Explicit,
+        scenario,
+    )
+}
+pub fn with_fixture<R>(
+    medium: VirtualHaLowMedium,
+    seed: u64,
+    topology: Topology,
+    persistence: Persistence,
+    bindings: Bindings,
+    scenario: impl FnOnce(&mut Lab<'_>) -> R,
+) -> R {
     let mut clock = ManualTimeDriver::new(
         ManualMedium::HaLow(medium.clone()),
         Duration::from_millis(1),
@@ -152,7 +198,10 @@ pub fn with_lab<R>(
         calls: Rc::new(RefCell::new(Vec::new())),
         announces: Rc::new(RefCell::new(Vec::new())),
         measurements: Vec::new(),
+        wired: Vec::new(),
         generations: [0; NODE_COUNT],
+        persistence,
+        bindings,
     };
     for index in 0..NODE_COUNT {
         lab.start_node(index);

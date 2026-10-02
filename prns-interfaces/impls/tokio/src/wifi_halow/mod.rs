@@ -5,10 +5,12 @@ use std::io;
 
 mod fleet;
 pub use fleet::{HaLow, HaLowLimits};
+mod device;
+pub use device::{HaLowDevice, HaLowRadioSource};
 #[cfg(target_os = "linux")]
 mod socket;
 #[cfg(target_os = "linux")]
-pub use socket::{EtherType, HaLowSocket};
+pub use socket::{EtherType, HaLowSocket, LinuxHaLowRadio};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Destination {

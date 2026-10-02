@@ -1,11 +1,15 @@
 //! Nonblocking Linux Ethernet datagrams. No monitor mode or radio configuration.
 
-use std::ffi::CString;
 use std::io;
 use std::mem::size_of;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 
 use prns_core::interfaces::MacAddress;
+
+mod device;
+mod link_monitor;
+pub use device::{NetworkDeviceBinding, NetworkDeviceName};
+pub use link_monitor::{LinkChange, LinkChanges, LinkMonitor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EtherType(u16);
@@ -36,8 +40,8 @@ pub enum DiscardReason {
 
 pub struct PacketSocket {
     fd: OwnedFd,
-    interface: i32,
     protocol: EtherType,
+    binding: NetworkDeviceBinding,
 }
 
 impl AsRawFd for PacketSocket {
@@ -49,18 +53,8 @@ impl AsRawFd for PacketSocket {
 impl PacketSocket {
     /// Requires CAP_NET_RAW. The interface is selected explicitly and is not reconfigured.
     pub fn bind(interface: &str, protocol: EtherType) -> io::Result<Self> {
-        if interface.is_empty() || interface.len() >= libc::IFNAMSIZ {
-            return Err(io::Error::from(io::ErrorKind::InvalidInput));
-        }
-        let name =
-            CString::new(interface).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
-        // SAFETY: name is a live NUL-terminated string, and the call retains no pointer.
-        let index = unsafe { libc::if_nametoindex(name.as_ptr()) };
-        if index == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let interface =
-            i32::try_from(index).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+        let device = NetworkDeviceName::new(interface)?;
+        let binding = device.binding()?;
         // SAFETY: socket takes scalar arguments. Protocol zero prevents reception before bind.
         let fd = unsafe {
             libc::socket(
@@ -76,8 +70,8 @@ impl PacketSocket {
         let fd = unsafe { OwnedFd::from_raw_fd(fd) };
         let socket = Self {
             fd,
-            interface,
             protocol,
+            binding,
         };
         socket.filter_protocol()?;
         let mut address = socket.address(MacAddress::new([0; 6]));
@@ -95,7 +89,14 @@ impl PacketSocket {
         if result < 0 {
             return Err(io::Error::last_os_error());
         }
+        if device.binding()? != binding {
+            return Err(io::Error::from(io::ErrorKind::NetworkDown));
+        }
         Ok(socket)
+    }
+
+    pub fn binding(&self) -> NetworkDeviceBinding {
+        self.binding
     }
 
     fn filter_protocol(&self) -> io::Result<()> {
@@ -150,7 +151,7 @@ impl PacketSocket {
         let mut address = libc::sockaddr_ll {
             sll_family: libc::AF_PACKET as u16,
             sll_protocol: self.protocol.0.to_be(),
-            sll_ifindex: self.interface,
+            sll_ifindex: self.binding.index(),
             sll_hatype: 0,
             sll_pkttype: 0,
             sll_halen: 6,
@@ -205,7 +206,7 @@ impl PacketSocket {
         Ok(classify(
             address,
             address_len,
-            self.interface,
+            self.binding.index(),
             self.protocol,
             received as usize,
             buffer.len(),

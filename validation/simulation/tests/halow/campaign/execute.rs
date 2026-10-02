@@ -31,23 +31,50 @@ pub fn run(case: &Case) -> Report {
     let medium = fixture::medium();
     let mut observations = serde_json::Value::Null;
     let result = catch_unwind(AssertUnwindSafe(|| {
-        fixture::with_lab(medium.clone(), case.seed, case.topology, |lab| {
-            match case.scenario {
-                Scenario::Baseline => workloads::baseline(lab, case.topology),
-                Scenario::BroadcastFaults => workloads::broadcast_faults(lab, case.topology),
-                Scenario::ControlOverlap => workloads::overlap(lab),
-                Scenario::Lifecycle => workloads::lifecycle(lab),
-                Scenario::SendPressure => workloads::pressure(lab),
-                Scenario::ReceivePressure => workloads::receive_pressure(lab),
-                Scenario::CancelReply => workloads::cancel_reply(lab),
-                Scenario::ControlFault { leg, effect } => {
-                    workloads::faulted_exchange(lab, leg, effect)
-                }
-                Scenario::ResourceFault { effect } => workloads::resource_fault(lab, effect),
+        let persistence = match case.scenario {
+            Scenario::Recovery(workloads::recovery::Recovery::RetainedRestart(_)) => {
+                fixture::Persistence::Retained(
+                    (0..fixture::NODE_COUNT)
+                        .map(|_| fixture::RetainedState::new())
+                        .collect(),
+                )
             }
-            let metrics = lab.drained_metrics();
-            observations = serde_json::json!({"calls": lab.calls.borrow().iter().map(|call| serde_json::json!({"controller": call.controller.as_bytes(), "payload": call.payload})).collect::<Vec<_>>(), "announces": lab.announces.borrow().iter().map(|seen| serde_json::json!({"node": seen.node, "destination": seen.destination.as_bytes()})).collect::<Vec<_>>(), "metrics": metrics, "measurements":lab.measurements});
-        });
+            _ => fixture::Persistence::Disabled,
+        };
+        let bindings = match case.scenario {
+            Scenario::Recovery(
+                workloads::recovery::Recovery::RetiredPageRoute
+                | workloads::recovery::Recovery::ManagedBinding(_),
+            ) => fixture::Bindings::ManagedTarget(fixture::DeviceControl::new()),
+            _ => fixture::Bindings::Explicit,
+        };
+        fixture::with_fixture(
+            medium.clone(),
+            case.seed,
+            case.topology,
+            persistence,
+            bindings.clone(),
+            |lab| {
+                match case.scenario {
+                    Scenario::Recovery(recovery) => {
+                        workloads::recovery::run(lab, recovery, &bindings)
+                    }
+                    Scenario::Baseline => workloads::baseline(lab, case.topology),
+                    Scenario::BroadcastFaults => workloads::broadcast_faults(lab, case.topology),
+                    Scenario::ControlOverlap => workloads::overlap(lab),
+                    Scenario::Lifecycle => workloads::lifecycle(lab),
+                    Scenario::SendPressure => workloads::pressure(lab),
+                    Scenario::ReceivePressure => workloads::receive_pressure(lab),
+                    Scenario::CancelReply => workloads::cancel_reply(lab),
+                    Scenario::ControlFault { leg, effect } => {
+                        workloads::faulted_exchange(lab, leg, effect)
+                    }
+                    Scenario::ResourceFault { effect } => workloads::resource_fault(lab, effect),
+                }
+                let metrics = lab.drained_metrics();
+                observations = serde_json::json!({"calls": lab.calls.borrow().iter().map(|call| serde_json::json!({"controller": call.controller.as_bytes(), "payload": call.payload})).collect::<Vec<_>>(), "announces": lab.announces.borrow().iter().map(|seen| serde_json::json!({"node": seen.node, "destination": seen.destination.as_bytes()})).collect::<Vec<_>>(), "metrics": metrics, "measurements":lab.measurements});
+            },
+        );
     }));
     let outcome = match result {
         Ok(()) => Outcome::Passed,

@@ -47,9 +47,12 @@ impl Lab<'_> {
         panic!("target frame must reach the actual peer lane before reconnect");
     }
     pub fn link(&mut self, index: usize) -> LinkId {
+        self.link_to(index, TARGET)
+    }
+    pub fn link_to(&mut self, index: usize, destination_node: usize) -> LinkId {
         let handle = self.nodes[index].handle.clone();
         let task = self.insert(async move {
-            let target = target(TARGET);
+            let target = target(destination_node);
             let destination = target.endpoint().destination_hash();
             let identity = target.identity_hash();
             let access = RemoteControlTargetAccess::new(

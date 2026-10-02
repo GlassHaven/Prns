@@ -20,6 +20,20 @@ pub fn target(index: usize) -> RemoteControlTargetIdentity {
 pub fn controller(index: usize) -> IdentityHash {
     secrets(index).identities().controller().identity_hash()
 }
+pub fn page(index: usize) -> PreConfiguredDestination<'static> {
+    PreConfiguredDestination::Single {
+        resource_strategy: personal_rns::routing::links::resources::ResourceStrategy::AcceptNone,
+        app_name: "simulation",
+        aspects: &["halow", "page"],
+        identity: personal_rns::identity::Zeroizing::new([0x61 + index as u8; 64]),
+        announce_app_data: b"",
+        proof: personal_rns::prelude::ProofStrategy::ProveAll,
+        link_requests: personal_rns::prelude::LinkRequestPolicy::AcceptAll,
+        ratchet: personal_rns::engine::RatchetPolicy::NoRatchets,
+        maximum_request_bytes: Default::default(),
+        request_endpoints: ServeMyRequestEndpoints::Yes,
+    }
+}
 pub fn supervisor(
     radio: VirtualHaLowRadio,
     index: usize,
@@ -44,19 +58,23 @@ impl Lab<'_> {
         let origin = personal_rns::engine::InstantMillis(1_000_000 + self.medium.now().get());
         let calls = self.calls.clone();
         let announces = self.announces.clone();
-        let (ready, mut ready_rx) = oneshot::channel();
-        let (shutdown, stopping) = oneshot::channel();
-        let task = self.insert(async move {
-            let entropy = |domain: u8| {
-                RuntimeEntropy::try_new(move |bytes: &mut [u8]| {
-                    for (offset, byte) in bytes.iter_mut().enumerate() {
-                        *byte = domain ^ (index as u8 * 17) ^ generation.to_be_bytes()[offset % 8];
-                    }
-                    Ok::<(), core::convert::Infallible>(())
-                })
-                .expect("fixed validation entropy")
-            };
-            let grants: Vec<_> = [PRIMARY, HEALTHY]
+        let management = match &self.bindings {
+            Bindings::ManagedTarget(control) if index == TARGET => {
+                Some((self.medium.clone(), control.clone()))
+            }
+            Bindings::Explicit | Bindings::ManagedTarget(_) => None,
+        };
+        let persistence = match &self.persistence {
+            Persistence::Disabled => persistence::Selection::Disabled,
+            Persistence::Retained(stores) => persistence::Selection::Retained(
+                NodePersistence::custom_dir(stores[index].directory())
+                    .expect("retained state")
+                    .with_io_driver(persistence::InlineIo),
+            ),
+        };
+        let grants = match &self.persistence {
+            Persistence::Retained(_) if generation != 0 => Vec::new(),
+            Persistence::Disabled | Persistence::Retained(_) => [PRIMARY, HEALTHY]
                 .iter()
                 .map(|controller| {
                     RemoteControlControllerGrant::new(
@@ -66,16 +84,33 @@ impl Lab<'_> {
                     )
                     .expect("explicit grant")
                 })
-                .collect();
+                .collect::<Vec<_>>(),
+        };
+        let (ready, mut ready_rx) = oneshot::channel();
+        let (shutdown, stopping) = oneshot::channel();
+        let task = self.insert(async move {
+            let initial_grants = match grants.as_slice() {
+                [] => RemoteControlInitialControllerGrants::Nobody,
+                grants => RemoteControlInitialControllerGrants::Grants(
+                    RemoteControlControllerGrants::try_from(grants).expect("bounded grants"),
+                ),
+            };
+            let entropy = |domain: u8| {
+                RuntimeEntropy::try_new(move |bytes: &mut [u8]| {
+                    for (offset, byte) in bytes.iter_mut().enumerate() {
+                        *byte = domain ^ (index as u8 * 17) ^ generation.to_be_bytes()[offset % 8];
+                    }
+                    Ok::<(), core::convert::Infallible>(())
+                })
+                .expect("fixed validation entropy")
+            };
+            let mut path_sequence = 0u64;
             let mut node = PrnsNode::new_with_entropy_sources(
                 |handle| PrnsNodeRecipe {
                     remote_control: RemoteControlNodeSetup::new(
                         RemoteControlService::with_capabilities(
                             secrets(index),
-                            RemoteControlInitialControllerGrants::Grants(
-                                RemoteControlControllerGrants::try_from(grants.as_slice())
-                                    .expect("bounded grants"),
-                            ),
+                            initial_grants,
                             RemoteControlSelfAnnouncement::Unavailable,
                             RemoteControlCapabilities::from_requests(permissions())
                                 .expect("describe capability"),
@@ -85,7 +120,7 @@ impl Lab<'_> {
                     transport_identity: Some(personal_rns::identity::Zeroizing::new(
                         [0x91 + index as u8; 64],
                     )),
-                    pre_configured_destinations: [],
+                    pre_configured_destinations: [page(index)],
                     app_state: (),
                     storage: personal_rns::storage::GrowableHeap,
                     request_endpoints: personal_rns::request_endpoints![
@@ -106,12 +141,18 @@ impl Lab<'_> {
                         }
                     },
                     interfaces: ManuallyAttached,
-                    persistence: NoPersistence,
+                    persistence,
                 },
                 TokioHost::with_runtime_entropy(origin, entropy(0xa1)),
                 TokioHandleEntropy::from_sources(entropy(0xb1), move |bytes: &mut [u8]| {
+                    path_sequence = path_sequence.checked_add(1).expect("path ID budget");
                     for (offset, byte) in bytes.iter_mut().enumerate() {
-                        *byte = 0xc1 ^ (index as u8 * 17) ^ generation.to_be_bytes()[offset % 8];
+                        let component = if offset < 8 {
+                            path_sequence
+                        } else {
+                            generation
+                        };
+                        *byte = 0xc1 ^ (index as u8 * 17) ^ component.to_be_bytes()[offset % 8];
                     }
                     Ok::<(), core::convert::Infallible>(())
                 }),
@@ -125,7 +166,22 @@ impl Lab<'_> {
                 &target(index).endpoint().destination_hash(),
             )
             .expect("resource route");
-            let attached = handle.supervise(supervisor(radio, index));
+            let attached = match management {
+                Some((medium, control)) => {
+                    handle.supervise(personal_rns::wifi_halow::HaLowDevice::new(
+                        device::Source::new(radio, medium, control),
+                        scope(index),
+                        policy_for_bitrate(BitrateBps::guess(7_300_000)),
+                        policy_for_bitrate(BitrateBps::guess(4_000_000)),
+                        personal_rns::wifi_halow::HaLowLimits {
+                            peers: NonZeroU8::new(16).expect("peers"),
+                            idle_seconds: NonZeroU32::new(IDLE_SECONDS).expect("idle"),
+                        },
+                        personal_rns::prelude::ReconnectPolicy::STANDARD,
+                    ))
+                }
+                None => handle.supervise(supervisor(radio, index)),
+            };
             ready
                 .send((handle, attached))
                 .unwrap_or_else(|_| panic!("ready receiver"));

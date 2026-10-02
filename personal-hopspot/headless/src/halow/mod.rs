@@ -49,7 +49,7 @@ pub enum Error {
 
 pub struct Prepared {
     #[cfg(target_os = "linux")]
-    radio: personal_rns::wifi_halow::HaLow<personal_rns::wifi_halow::HaLowSocket>,
+    radio: personal_rns::wifi_halow::HaLowDevice<personal_rns::wifi_halow::LinuxHaLowRadio>,
     broadcast: personal_rns::interfaces::InterfaceId,
 }
 impl HaLowOptions {
@@ -67,10 +67,10 @@ impl HaLowOptions {
         #[cfg(target_os = "linux")]
         {
             use personal_rns::interfaces::{BitrateBps, InterfaceId, InterfaceKind};
-            use personal_rns::wifi_halow::{EtherType, HaLow, HaLowLimits, HaLowSocket};
+            use personal_rns::wifi_halow::{EtherType, HaLowDevice, HaLowLimits, LinuxHaLowRadio};
             let scope = InstanceTag::new(scope.as_bytes()).map_err(Error::Scope)?;
             let protocol = EtherType::new(0x88b6).map_err(|_| Error::Protocol)?;
-            let socket = HaLowSocket::bind(device, protocol).map_err(Error::Bind)?;
+            let source = LinuxHaLowRadio::new(device.clone(), protocol).map_err(Error::Bind)?;
             let broadcast = InterfaceId::from_channel_tag(
                 InterfaceKind::WifiHaLowBroadcast,
                 &scope.channel_tag(),
@@ -84,8 +84,8 @@ impl HaLowOptions {
             );
             let idle_seconds = self.halow_idle_seconds;
             Ok(Some(Prepared {
-                radio: HaLow::new(
-                    socket,
+                radio: HaLowDevice::new(
+                    source,
                     scope,
                     peer_policy,
                     broadcast_policy,
@@ -93,6 +93,7 @@ impl HaLowOptions {
                         peers: self.halow_peers,
                         idle_seconds,
                     },
+                    personal_rns::prelude::ReconnectPolicy::STANDARD,
                 ),
                 broadcast,
             }))

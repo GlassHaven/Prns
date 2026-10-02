@@ -7,8 +7,11 @@ Morse firmware, regulatory configuration and calibration. These are application
 targets, separate from firmware-upgrade targets.
 
 This is an implementation specification for the next installation slice, not a
-qualified persistent installer. The [desk qualification](qualification/halow-appliance-2026-10-01.md)
+qualified persistent installer. The [initial desk qualification](qualification/halow-appliance-2026-10-01.md)
 records working transport/control behavior and the recovery gap found on hardware.
+The [recovery qualification](qualification/halow-recovery-2026-10-02.md) closes
+that demonstrated binding/discovery gap on all three boards, with bounded retry
+and retained identities. Persistent activation and power-loss recovery remain gates.
 
 ## Compatibility and budgets
 
@@ -19,10 +22,10 @@ records working transport/control behavior and the recovery gap found on hardwar
 | Kernel | 5.15.150 | 5.15.167 |
 | Vendor image | OpenWrt 1.1 Morse-2.6.13 | OpenWrt 23.05.5, 2.8.5-20250924 |
 | Writable overlay available at inspection | 5,336 KiB | 5,288 / 5,272 KiB |
-| Common tested application | 3,620,680 bytes | Same executable and hash |
-| Candidate gzip, level 9 | 1,501,636 bytes | Same payload; unpacking tested on G4 only |
+| Recovery-qualified application | 3,636,552 bytes | Same executable and hash |
+| Earlier candidate gzip, level 9 | 1,501,636 bytes | 3,620,680-byte candidate; unpacking tested on G4 only |
 
-Two compressed candidates total 3,003,272 bytes. This makes compressed flash
+Two copies of that earlier compressed candidate total 3,003,272 bytes. This makes compressed flash
 slots with RAM expansion a promising storage design; two unpacked executables
 do not fit these overlays. Do not assume a newer application or another vendor
 image has the same budget. The overlay must also accommodate private state,
@@ -83,6 +86,15 @@ station-list polling dependency. MAC identity is transport addressing; controlle
 and node authentication remain cryptographic. Never clone private node state
 between appliances.
 
+The Linux supervisor now retires packet bindings on device down/delete or lost
+link notifications and reopens the named device with bounded jittered backoff.
+It retains the configured parent interface ID and reconstructs its child lanes.
+A missing device leaves wired management available; `Connected` describes a
+packet binding, not mesh association or successful delivery. Keep route recovery
+separate: configured gateways can rediscover unavailable routes without wiping
+retained state. Applications still handle typed operation timeouts and explicit
+retries; reconnection does not silently replay an application command.
+
 Use `--tcp-mode gateway` when connected wired clients need discovery of destinations
 behind the appliance. PointToPoint remains the CLI default. Gateway changes
 discovery forwarding, not authorization. It does not establish that cold discovery
@@ -120,10 +132,11 @@ must not become the installer endpoint.
 
 ## Remaining qualification gates
 
-- Linux network-device recreation currently breaks over-air control while the
-  process can remain available on wired TCP. A one-board application restart did
-  not recover the observed retained-route exchange. Qualify binding replacement,
-  routing recovery and bounded retry behavior together before shipping.
+- Binding replacement and retained-route rediscovery passed on the G4 and both
+  Heltecs with the process still running. One page handshake required an explicit
+  retry; Ethernet capture did not establish the radio/firmware loss mechanism.
+  Extend this bounded desk check with repeated service/radio lifecycle and longer
+  resource monitoring before calling the persistent appliance qualified.
 - Exercise procd start/stop, radio readiness, signal ordering and bounded crash
   retries. [OpenWrt's procd service documentation](https://openwrt.org/docs/techref/procd)
   supplies the integration foundation; a service file alone is not qualification.

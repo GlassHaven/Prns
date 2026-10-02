@@ -1,11 +1,16 @@
 # HaLoW software-transport qualification
 
-This qualification exclusively targets the HaLoW software path before the next
-G4/Heltec desk session. Four production Tokio nodes use the production `HaLow`
+This qualification exclusively targets the HaLoW software path. Four production
+Tokio nodes use the production `HaLow` and managed `HaLowDevice`
 supervisor, envelope parser, source-MAC peer identities, broadcast and unicast
 pacing, crypto, routing, Resource transfer and Remote Control. Application state
 is `()`. Controller identities and target keys are explicitly provisioned in the
 fixture; announcements are explicit actions. No physical devices are accessed.
+
+The recovery follow-up composes wired Gateway ingress with radio discovery and
+real retained state. Its separately bounded
+[three-board qualification](../../../personal-hopspot/headless/docs/qualification/halow-recovery-2026-10-02.md)
+checks the Linux/Morse boundary which this simulator deliberately does not model.
 
 ## Medium and scheduling
 
@@ -83,8 +88,8 @@ complete retention. Teardown remains usable even after trace-budget exhaustion.
   progress. The actual two-second send deadline releases stalled transport work.
   Idle expiry/re-admission preserves the MAC-derived interface ID.
 - Delayed traffic for a retired adapter cannot complete on its replacement.
-  Fatal receive failure detaches the supervisor and children. Explicit adapter
-  replacement and a fresh node recover after observed peer-lane readiness.
+  Fatal receive failure detaches the supervisor and children. Both explicit
+  adapter replacement and managed reopening recover after observed readiness.
 - Real Remote Control build/interface/config/peer inspection and maximum-size
   96-byte app messages run over HaLoW alongside Resources. At the production
   16-peer cap, all peer rows and the shared broadcast child page in ID order;
@@ -103,8 +108,8 @@ Unknown fields, versions and unsupported scenario/topology combinations are
 rejected. Each scenario owns its prerequisites and recovery; there is no generic
 application policy or production development registry.
 
-Routine inputs use seeds `0`, `1`, `42`, `0x5eed`: 96 cases, each run twice.
-Extended inputs use seeds `0..31`: 768 cases, each run twice. Comparison includes
+Routine inputs use seeds `0`, `1`, `42`, `0x5eed`: 136 cases, each run twice.
+Extended inputs use seeds `0..31`: 1,088 cases, each run twice. Comparison includes
 every actual datagram byte, source/destination, scheduled copy, delivery outcome,
 radio generation, app invocation, announce observation, semantic operation
 counter and pressure measurement. Wall-time measurements are excluded.
@@ -117,7 +122,9 @@ add a sequence reducer. Artifact roots are
 Extract an artifact's `case` object for standalone replay:
 
 ```console
-./tools/prns repo.simulation.halow.replay --case validation/simulation/cases/halow/chain.json
+./tools/prns run repo.simulation.halow.replay -- --case validation/simulation/cases/halow/chain.json
+./tools/prns run repo.simulation.halow.replay -- --case validation/simulation/cases/halow/recovery-retired-page.json
+./tools/prns run repo.simulation.halow.replay -- --case validation/simulation/cases/halow/recovery-link-loss.json
 python3 validation/run.py run --suite halow-simulation
 python3 validation/run.py run --suite halow-simulation-extended
 python3 validation/run.py run --suite halow-resource-stability
@@ -136,7 +143,52 @@ constants. Reconnection probes wait for actual source-peer RX progress, since
 announce pacing can defer transmission and core deduplication may suppress a
 repeated announce event. Quiet-peer expiry requires disabling successful TX as
 well as incoming traffic: active-link keepalives otherwise correctly refresh it.
-These were fixture assumptions; no shipping protocol behavior was changed.
+Those initial fixes were fixture assumptions; the later recovery work below
+also changed the production owners and has its own evidence.
+
+## Gateway and device recovery follow-up
+
+Ten recovery scenarios add a real Tokio TCP Gateway connection, independent page
+and control endpoints, repeated cached discovery, failed handshakes, a retired
+page route, target/gateway/controller retained restarts, and managed missing-device,
+coalesced down/up and fatal-receive faults. Retained cases use the actual file
+store and snapshot decoders. On restart, the recipe provides no new grants:
+authenticated success depends on restored authority and pinned identities.
+Page announces seed neighbors explicitly; no control preannounce is required.
+
+The retired-page case first routes through a relay, replaces the gateway binding,
+admits a different MAC without refreshing routes, and fetches the exact page by
+rediscovering across attached peers. The link-loss case confirms that the armed
+fault hit an actual page LinkRequest, waits for its typed link timeout, observes
+independent authenticated control progress, then explicitly repeats path/link/
+Resource without another announce. A delayed obsolete-generation request cannot
+reach the app handler or complete a new waiter.
+
+Each managed case performs eight cycles. It verifies stable parent and peer IDs,
+old owner release, bounded reopen attempts, wired progress while the device is
+missing, and actual binding readiness within 8,000 simulated milliseconds.
+The existing reconnect policy has a 2.5–7.5 second jittered plateau. The fixture
+readiness deadline is not an RF association or operation-completion guarantee.
+Every recovery trace checks that group transmissions contain only announcements;
+recursive path requests use peer lanes. The unchanged unlisted-controller probes
+still require no Response and no app admission.
+
+Production fixes are owned separately: Linux kernel binding invalidation in
+`prns-ffi::ethernet`, bounded reopening in the Tokio HaLoW supervisor, and
+unavailable-route/exact-cached-response handling in core discovery. The cached
+response matrix preserves the entire retained route row and suppresses ordinary
+announce callbacks. Gateway rediscovery retains authorization, request bounds,
+deduplication and rate limits. See the hardware report for the owning tests and
+focused mutation findings, including two off-scope missed mutants requiring
+later triage.
+
+Current routine artifacts are `routine/run-0011` (136 cases), expanded artifacts
+are `extended/run-0006` (1,088 cases), each with two complete fresh runs. The
+registered routine suite passed 14 tests with two explicit ignores. The expanded
+campaign passed in 218.63 seconds on macOS arm64. The 32-cycle isolated heap probe
+passed with peak 4,531,776 bytes and retained 56 bytes; its budgets are unchanged.
+Simulator, core and Tokio Clippy passed with warnings denied. These results do
+not imply Linux packet sockets were executed by the macOS simulator.
 
 ## Remaining hardware boundary
 
@@ -146,14 +198,16 @@ AF_PACKET or bridge behavior, Morse aggregation/retry behavior, RF range or
 performance on the MIPS CPU. The existing board captures cover those adapter
 boundaries separately, with their recorded limits.
 
-Packet-socket rebinding remains explicit; this work does not add automatic
-recovery. Persistent installation, update rollback, power loss, region-specific
+Linux packet-socket rebinding is now automatic and its bounded lifecycle has
+separate physical evidence on the G4 and both Heltecs. The simulator controls
+owned binding generations; actual netlink, device ioctls and AF_PACKET behavior
+remain outside its medium. Persistent installation, update rollback, power loss, region-specific
 radio configuration and long-running device resource limits still need desk
 qualification. A software chain does not establish a forced physical RF chain.
 
-## Verification
+## Initial verification before recovery follow-up
 
-Final results on macOS arm64:
+Initial results on macOS arm64, retained as historical evidence:
 
 | Check | Result |
 | --- | --- |
@@ -169,15 +223,15 @@ Final results on macOS arm64:
 | Named HaLoW standalone replay task | Chain case passed twice |
 | Registry verification, formatting and diff checks | Passed |
 
-Final routine artifacts are `routine/run-0006` (96 files), expanded artifacts
+Initial routine artifacts are `routine/run-0006` (96 files), expanded artifacts
 are `extended/run-0002` (768 files), and standalone chain replay is
 `replay/run-0001`. Every campaign file contains both traces and public
 observations. Earlier runs and initial failing fixture evidence remain separate.
-The new focused suites also run under the normal verification registry.
+The focused suites also run under the normal verification registry.
 
 `./tools/prns verify` still fails on the pre-existing placement of
 `personal-hopspot/headless/scripts/network-lab/{lease.sh,prepare.py,radio.sh}`.
-Those unrelated scripts were not moved. The replay task itself works. No shipping
-mutation-analysis surface changed, so no production mutation run was required.
-Other operating systems, Linux packet sockets, target ISA execution and physical
-devices were not run.
+Those unrelated scripts were not moved. The replay task itself works. The initial
+simulation-only work did not change a shipping mutation surface or execute
+physical devices. The recovery follow-up did both, as recorded separately above
+and in the three-board report. Other operating systems remain unrun.

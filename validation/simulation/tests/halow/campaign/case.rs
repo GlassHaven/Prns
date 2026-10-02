@@ -11,6 +11,7 @@ pub struct Case {
 #[serde(deny_unknown_fields)]
 pub enum Scenario {
     Baseline,
+    Recovery(workloads::recovery::Recovery),
     BroadcastFaults,
     ControlOverlap,
     Lifecycle,
@@ -42,7 +43,8 @@ impl Case {
             Scenario::BroadcastFaults | Scenario::ControlOverlap => {
                 self.topology != fixture::Topology::Asymmetric
             }
-            Scenario::Lifecycle
+            Scenario::Recovery(_)
+            | Scenario::Lifecycle
             | Scenario::SendPressure
             | Scenario::ReceivePressure
             | Scenario::CancelReply

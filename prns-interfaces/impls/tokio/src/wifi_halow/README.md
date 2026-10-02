@@ -1,10 +1,13 @@
 # Native HaLoW datagram backend
 
-`wifi-halow` exposes the attachable `HaLow` supervisor and, on Linux,
-`HaLowSocket`. Attach with `handle.supervise(HaLow::new(socket, instance,
-peer_policy, broadcast_policy, limits))`. The caller provides a configured radio,
-a stable instance tag, distinct pacing policies, and nonzero peer/idle limits.
-Radio configuration and headless CLI integration remain separate work. The core
+`wifi-halow` exposes `HaLow` for one datagram binding and `HaLowDevice` for a
+stable supervisor across binding generations. On Linux, `HaLowSocket` supplies
+one packet binding and `LinuxHaLowRadio` reopens an explicitly named device.
+Attach a managed device with `handle.supervise(HaLowDevice::new(source, instance,
+peer_policy, broadcast_policy, limits, reconnect))`. The caller supplies a stable
+instance tag, distinct pacing policies, nonzero peer/idle limits and an explicit
+reconnect policy. Radio configuration belongs to the OS; the headless CLI selects
+the configured device and scope. The core
 `wifi_halow` module owns source-MAC identity and framing without allocation or OS APIs.
 
 ## Runtime contract
@@ -22,7 +25,8 @@ hop can hear them, and core announce deduplication suppresses echoes. Directed
 path responses stay unicast. Explicit `AllExcept(peer)` still uses unicast for
 that peer's radio to preserve exclusion; other radios can broadcast. Ordinary
 non-announce fleet traffic always fans out over known unicast peers. Direct
-traffic never falls back to broadcast. The adapter adds no payload-hash or timer deduplication.
+traffic never falls back to broadcast. Recursive path-request egress also excludes
+the shared announce-only lane. The adapter adds no payload-hash or timer deduplication.
 
 The experimental payload is `PRNSHL`, version byte `1`, reserved byte `0`, a
 big-endian u16 frame length, and exactly that frame. Only minimum Ethernet padding
@@ -37,8 +41,20 @@ frames for full queues are dropped. Both received and successfully kernel-accept
 sent frames refresh idle expiry; housekeeping runs every five seconds. Successful
 TX does not establish remote liveness. Send backpressure has a two-second deadline.
 A bounded receive burst yields to other work. Runtime egress queues are separately
-bounded. A fatal receive error ends the supervisor and detaches its children;
-automatic socket rebinding is not implemented yet.
+bounded. A fatal receive error ends a single-binding `HaLow` and detaches its
+children. `HaLowDevice` instead releases that binding and reopens through its
+`HaLowRadioSource` with bounded jittered backoff. Its parent ID survives; child
+lanes are reconstructed. A source must supply an owned, cancel-safe binding whose
+receive operation terminates when that generation retires.
+
+The Linux source subscribes to kernel link events before packet bind. A matching
+down/delete retires the old generation even if the same batch ends in up; changed
+index/MAC or lost/truncated notifications also require rebinding. It does not poll
+the station table or change the radio. Missing/down devices may start disconnected
+while wired management remains available. Invalid configuration and initial
+permission errors fail preparation. `Connected` reports the packet binding, not
+RF association, delivery or authorization. Reopening does not announce endpoints
+or silently replay application requests.
 
 A portable injected-datagram test drives a real Prns node through zero-peer
 announcement, malformed-envelope rejection, first-frame admission, directed reply,
@@ -49,7 +65,12 @@ smoke verified a full 3542-byte page over this supervisor on the vendor AP/stati
 connection; see `personal-hopspot/headless/docs/thinknode-g4.md` for exact hashes
 and limits. A subsequent three-node mesh check passed pairwise transfers and
 application rejoin; its report is in the headless `docs/qualification` directory.
-Forced multi-hop, sustained-load, and field-loss qualification remain.
+Physical forced multi-hop, sustained-load, and field-loss qualification remain.
+The [October 2 recovery check](../../../../../personal-hopspot/headless/docs/qualification/halow-recovery-2026-10-02.md)
+qualified automatic device replacement and retained-route rediscovery on all
+three boards with the same process and scoped parent ID; one page handshake
+needed an explicit retry. Deterministic campaigns separately replay owned binding
+faults, wired Gateway discovery and retained-state restarts.
 
 The backend uses `AF_PACKET`/`SOCK_DGRAM`, an explicit device binding and EtherType,
 and requires `CAP_NET_RAW`. Opening it does not change radio configuration or
