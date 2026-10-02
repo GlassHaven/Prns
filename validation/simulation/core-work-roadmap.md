@@ -12,7 +12,7 @@ regression. Validation controls are compiled only with `simulation-control`.
   real persistence, bounded Resources/channels and implemented watch capabilities.
 - [x] Public outcomes and available diagnostic evidence agree under injected faults,
   cancellation, retirement, backpressure and recovery.
-- [ ] Routine 120-case and extended 1,920-case replayable campaigns pass, including
+- [x] Routine 120-case and extended 1,920-case replayable campaigns pass, including
   two independent runs, bounded reduction and compact passing artifacts.
 
 ## Contracts
@@ -43,3 +43,7 @@ before/after native measurements if shared hot paths change. Keep resource
 occupancy, intentionally retained Embassy static allocations and physical device
 performance separate. Any demonstrated unresolved correctness defect keeps this
 slice incomplete.
+
+The slice is complete. [Commands, measurements, limits and existing tooling
+hygiene failures](measurements/core-work-qualification.md) are recorded with the
+qualification owner.

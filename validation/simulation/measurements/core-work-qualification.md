@@ -112,6 +112,56 @@ while requiring zero eviction.
 
 ## Verification record
 
-Qualification and verification results are recorded here after the final source
-checks. Physical boards, other operating systems and ISA execution are not part
-of this host qualification.
+Host: macOS Apple Silicon, 2026-10-01. Physical boards, other operating systems
+and ISA execution are not part of this qualification.
+
+The registered simulator suite passed 428 tests with 11 explicitly ignored,
+including the new 120-case routine campaign. Routine artifacts from that suite
+are in `routine/run-0003`; each case has two matching fresh-fixture traces.
+The extended campaign passed all 1,920 cases in 2,380.15 seconds
+(`extended/run-0000`), with 640 cases per family and two matching runs per case.
+A final artifact audit independently checked all 1,920 recorded pairs. It found
+3,780 compact runs and 60 full seed-42 reference runs.
+
+The extended launcher pinned its executable before the fixture module extraction
+and capture-reservation reduction. It used 131,072 wire values and 1,048,576
+medium-event slots; final-source routine and heap qualifications exercised the
+smaller reservations documented above. Case generation, protocol behavior,
+controlled worker transitions and counter assertions were unchanged. The pinned
+binary is retained with SHA-256 `90cb60a8e8e460b0b4bd534596592a544179f780d16ed17dbe4a8ef30932d1af`.
+Existing Remote Control qualification evidence remains intact.
+
+Owner and product results:
+
+| Check | Result |
+| --- | --- |
+| Root `cargo test --locked` | 2,463 passed; four ignored |
+| Core + shared runtime libraries | 2,178 passed; three ignored |
+| Tokio with `simulation-control` | 312 passed; one ignored |
+| Ordinary Tokio | 306 passed; one ignored |
+| Embassy | 174 passed |
+| Registered embedded persistence recovery | 59 passed |
+| Headless `wifi-halow,websocket,wifi-auto` tests + host build | 11 passed; build passed |
+| Worker owner tests | 31 passed, including six controlled-worker tests |
+| Native full-node one/four-worker probe | Passed; waits on observed readiness and exchanges concurrent verified requests |
+
+Strict Clippy passed for the simulator with `controlled-time,heap-profile` and
+for the Tokio runtime with `simulation-control`. Ordinary Tokio compilation,
+Rust formatting, diff whitespace and validation registry verification passed.
+The replay task passed against the repaired two-stream case. Standalone reduction
+correctly refused the repaired original while retaining it and its fresh passing
+baseline. No configured production mutation surface was changed in this slice.
+
+All ten isolated 32-cycle heap profiles passed in 201.64 seconds. The greatest
+observed peak was 16,014,668 bytes. All-Tokio profiles retained 184 bytes after
+fixture/trace drop. Mixed profiles retained 6,584 bytes beyond measured static
+wiring; Embassy-only retained 8,632 bytes beyond that wiring. Static retention
+was 1,154,560 bytes for the mixed probes and 2,309,120 bytes for Embassy-only,
+accumulated across fresh fixtures and target restarts. These numbers describe
+the test harness, not a shipping node's footprint.
+
+`./tools/prns verify` still fails on the existing unowned script implementations
+in `personal-hopspot/headless/scripts/network-lab/{lease.sh,prepare.py,radio.sh}`.
+The task-runner tests encounter the same existing hygiene issue. This slice did
+not relocate those files. The newly registered replay task executes successfully,
+and `python3 validation/run.py verify` passes.
