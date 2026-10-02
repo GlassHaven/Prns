@@ -36,6 +36,9 @@ struct Options {
     /// Local address for the Reticulum TCP interface (not HTTP or management).
     #[arg(long)]
     listen: SocketAddr,
+    /// Gateway forwards discovery of unknown destinations from connected TCP clients.
+    #[arg(long, value_enum, default_value = "point-to-point")]
+    tcp_mode: personal_hopspot_headless::tcp::TcpMode,
     #[cfg(feature = "websocket")]
     /// Plain WebSocket Reticulum listener; public transport, not administration.
     #[arg(long)]
@@ -142,7 +145,7 @@ async fn run(options: Options) -> Result<(), HostError> {
         capabilities,
     );
     let persistence = NodePersistence::custom_dir(options.state_dir.join("retained"))?;
-    let listener = TcpServer::bind(options.listen).await?;
+    let listener = TcpServer::bind_with_policy(options.listen, options.tcp_mode.policy()).await?;
     let listen = listener.local_addr()?;
     #[cfg(feature = "websocket")]
     let websocket = match options.websocket_listen {

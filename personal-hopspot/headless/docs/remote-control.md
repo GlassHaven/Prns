@@ -32,6 +32,13 @@ probe, use `--app-controller-public-key`. For an interface-change stream, use
 `--watch-controller-public-key`. These are separate permissions and neither is
 implied by inspection. Passing the same public key to both options combines
 them into one grant for that controller.
+
+For a wired client to discover an unknown destination behind a Hopspot, add
+`--tcp-mode gateway` to the host command. The default PointToPoint mode can serve
+known routes but does not recursively forward unknown-path requests. This
+forwarding choice does not grant Remote Control access. In a completely fresh
+HaLoW lab, explicitly announce each node through its wired controller connection
+to establish PRNS neighbor lanes before testing control through another board.
 On fresh state, no option means nobody is authorized. These are initial grants;
 the runtime can also restore a retained authorization snapshot. Omitting a CLI
 key is not a general revocation mechanism for previously persisted grants. The

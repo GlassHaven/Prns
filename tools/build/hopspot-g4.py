@@ -18,6 +18,7 @@ TARGET = "mipsel-unknown-linux-musl"
 BINARY = "personal-hopspot-headless"
 RUST_COMMIT = "6bdf43094fae65d298bc430362f116176cd25a3c"
 ZIG_VERSION = "0.15.2"
+RUST_TOOLCHAIN = "nightly-2026-06-02"
 RUSTFLAGS = "-C link-self-contained=no -C target-feature=+crt-static"
 
 
@@ -49,7 +50,7 @@ def verify_elf(data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--zig", type=Path, required=True, help="Verified Zig 0.15.2 executable")
-    parser.add_argument("--toolchain", default="nightly", help="Rustup toolchain; exact compiler commit is checked")
+    parser.add_argument("--toolchain", default=RUST_TOOLCHAIN, help="Rustup toolchain; exact compiler commit is checked")
     parser.add_argument("--output", type=Path, required=True, help="New application bundle directory; must not exist")
     parser.add_argument("--target-dir", type=Path, default=ROOT / "target/hopspot-g4/cargo")
     parser.add_argument("--with-probe", action="store_true", help="Include the bounded page-fetch qualification executable")

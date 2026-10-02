@@ -34,7 +34,7 @@ aarch64-macos archive used during development had SHA-256
 `3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b`.
 That digest identifies that exact host archive, not every Zig distribution.
 
-Install and verify the toolchain artifacts separately. From the repository root,
+Install `nightly-2026-06-02` with `rust-src` and verify Zig separately. From the repository root,
 use the repository task to build an application bundle:
 
 ```sh
@@ -44,7 +44,7 @@ use the repository task to build an application bundle:
 
 The task checks the compiler commit and Zig version, uses a locked Cargo build
 with `build-std=std,panic_abort`, and rejects the wrong ELF architecture or a
-dynamic loader. `--toolchain` defaults to the installed `nightly` alias, but its compiler
+dynamic loader. `--toolchain` defaults to the dated `nightly-2026-06-02` toolchain; its compiler
 must match the pinned commit. The output directory must be new. The bundle includes
 the executable, this procedure, licenses, third-party notices, `build.json`, and
 `SHA256SUMS`.

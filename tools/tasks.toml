@@ -102,7 +102,7 @@ platforms = ["linux", "macos"]
 audience = ["developer", "ci"]
 entrypoint = ["python3", "tools/build/hopspot-g4.py"]
 requires = ["cargo", "git", "python3", "rustc", "rustup"]
-setup = "Install nightly-2026-06-01 with rust-src and separately verify Zig 0.15.2. Pass --zig and a new --output directory. This produces a development application, not firmware."
+setup = "Install nightly-2026-06-02 with rust-src and separately verify Zig 0.15.2. Pass --zig and a new --output directory. This produces a development application, not firmware."
 
 [[task]]
 id = "build.hopspot.browser"

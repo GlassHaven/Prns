@@ -17,7 +17,11 @@ The dedicated [HaLoW simulation qualification](../../../validation/simulation/me
 also covers replayable faults, actual peer queue/cap pressure, expiry,
 adapter replacement and Remote Control while Resources overlap. It qualifies
 the software transport; RF, firmware and durable installation still require
-their separate device checks.
+their separate device checks. The latest
+[three-appliance check](qualification/halow-appliance-2026-10-01.md) passed
+authenticated control and concurrent page work, and identified a radio lifecycle /
+control-route recovery gap. The [deployment specification](halow-deployment.md)
+defines the next installer transaction and storage strategy.
 
 ## Product shape
 

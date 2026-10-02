@@ -167,10 +167,13 @@ Lifecycle tests exercise real localhost sockets, clean shutdown, identity
 retention, rejection of concurrent writers, and preservation of a damaged
 identity file. They require permission to bind localhost sockets.
 
-## ThinkNode G4
+## HaLoW Linux appliances
 
 The [web installation guide](docs/g4-installation.md) is also embedded in the
 website's `/flash/thinknode-g4` page. The
+[Heltec HT-HD01-V2 guide](docs/heltec-installation.md) is embedded at
+`/flash/heltec-ht-hd01-v2`. The [shared deployment specification](docs/halow-deployment.md)
+describes the next application-installation transaction and recovery gates. The
 [HaLoW integration contract](docs/halow-integration.md) records the proposed
 transport semantics, radio default, additional interfaces, and qualification work.
 

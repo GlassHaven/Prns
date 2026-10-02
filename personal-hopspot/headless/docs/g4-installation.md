@@ -20,6 +20,11 @@ transfer it to the device, run a temporary health check, and then activate a
 service that survives reboot. Updates must preserve identity and provide a way
 back to the previous working application.
 
+The same development executable has also passed checks on two Heltec HT-HD01-V2
+devices. Each model keeps its own compatibility and installation guide. The
+[shared deployment specification](https://github.com/KenAKAFrosty/Prns/blob/main/personal-hopspot/headless/docs/halow-deployment.md)
+sets out the storage, controller enrollment and recovery work needed next.
+
 ## Try the current development application
 
 Developers can build the bundle using the repository's `build.hopspot.g4` task.

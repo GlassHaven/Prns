@@ -86,8 +86,11 @@ pub fn FlashBoardPage(board: String) -> Element {
 #[component]
 fn FlashExperience(selected_slug: Option<String>) -> Element {
     let selected_target = selected_slug.as_deref().and_then(board_target_by_slug);
-    let g4_selected = selected_slug.as_deref() == Some(appliance::G4_SLUG);
-    let missing_selection = selected_slug.is_some() && selected_target.is_none() && !g4_selected;
+    let selected_appliance = selected_slug
+        .as_deref()
+        .and_then(appliance::Appliance::from_slug);
+    let missing_selection =
+        selected_slug.is_some() && selected_target.is_none() && selected_appliance.is_none();
 
     rsx! {
         header { class: "mb-10",
@@ -108,8 +111,8 @@ fn FlashExperience(selected_slug: Option<String>) -> Element {
             }
         }
 
-        if g4_selected {
-            appliance::G4InstallationGuide {}
+        if let Some(selected) = &selected_appliance {
+            {appliance::installation_guide(selected)}
         } else if let Some(target) = selected_target {
             if target.is_flashable() && local_development::board_is_included(target.slug) {
                 GuidedFlasher { key: "{target.slug}", target }
@@ -127,7 +130,7 @@ fn FlashExperience(selected_slug: Option<String>) -> Element {
 
         appliance::LinuxApplianceCard {}
 
-        section { class: if selected_target.is_some() || g4_selected { "mt-12" } else { "mt-4" },
+        section { class: if selected_target.is_some() || selected_appliance.is_some() { "mt-12" } else { "mt-4" },
             h2 { class: "text-2xl font-semibold tracking-tight text-paper",
                 if selected_target.is_some() { "Change board" } else { "Select the exact board" }
             }
