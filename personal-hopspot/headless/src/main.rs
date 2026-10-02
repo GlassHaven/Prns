@@ -201,7 +201,9 @@ async fn run(options: Options) -> Result<(), HostError> {
         handle.supervise(websocket);
     }
     #[cfg(feature = "wifi-halow")]
-    let radio = radio.map(|radio| radio.attach(&handle));
+    if let Some(radio) = radio {
+        radio.attach(&handle);
+    }
     #[cfg(unix)]
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut interrupt = Box::pin(tokio::signal::ctrl_c());
@@ -236,28 +238,6 @@ async fn run(options: Options) -> Result<(), HostError> {
             result.map_err(HostError::Node)?;
             return Err(HostError::NotReady);
         },
-    }
-    #[cfg(feature = "wifi-halow")]
-    if let Some(target) = radio {
-        let ready = async {
-            while !handle
-                .interfaces()
-                .iter()
-                .any(|interface| interface.id == target)
-            {
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-            handle
-                .engine_inspection_snapshot()
-                .await
-                .ok_or(HostError::NotReady)
-        };
-        tokio::select! {
-            result = tokio::time::timeout(Duration::from_secs(5), ready) => {
-                result.map_err(|_| HostError::NotReady)??;
-            }
-            result = &mut task => { result.map_err(HostError::Node)?; return Err(HostError::NotReady); }
-        }
     }
     println!(
         "hopspot_ready listen={listen} node_page={}",
