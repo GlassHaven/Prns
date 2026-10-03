@@ -16,7 +16,9 @@ and retained identities. The [persistent service qualification](qualification/ha
 adds real reboot, retained control and exact pages on all three, plus G4
 crash-driven rollback. The [mesh boot qualification](qualification/halow-mesh-boot-2026-10-02.md)
 adds the explicit persistent radio profile and over-air checks after verified new
-boot epochs. Physical power-loss recovery remains a gate.
+boot epochs. The [durable radio owner qualification](qualification/halow-radio-owner-2026-10-02.md)
+adds protected activation, automatic operational rollback and pending-UCI fault
+recovery on all three boards. Physical power-loss recovery remains a gate.
 
 ## Compatibility and budgets
 
@@ -97,7 +99,10 @@ The manager's typed, read-only `radio-plan` preflights the exact installed vendo
 boot adapter and named binding before returning a reviewable UCI batch. It does
 not activate the radio or confirm recovery. The
 [radio preparation procedure](../../appliance/README.md#persistent-radio-preparation)
-keeps those operations separate and requires a persistent rollback lease.
+keeps planning separate from the durable radio owner. Its private device-wide
+journal, independent boot service, explicit bounded lease and exact-candidate
+confirmation now own activation and rollback. Operational recovery requires a
+new boot epoch and an operating radio; file restoration alone cannot pass.
 
 Persist one explicit, stable local HaLoW scope across interface renames and
 application updates. Source MAC supplies immediate neighbor identity without a

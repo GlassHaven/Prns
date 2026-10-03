@@ -117,16 +117,70 @@ optional multicast-rate-control parameter is not exposed by these boot adapters
 and is deliberately not overridden: group announcements retain vendor group-rate
 behavior, separately from the fixed unicast rate.
 
-Application confirmation does not confirm radio configuration. Guided radio
-activation must first retain private copies of wireless, mesh11sd, system and
-the generated module file, establish wired recovery and arm an independent
-persistent rollback service. Review the returned batch, stage it in a private
-UCI delta directory, inspect the resulting configuration, then commit wireless
-and mesh11sd and bring up only the named radio. Those two commits are not one
-atomic transaction. A recovery lease must cover interruption between them and
-remain available after reboot; a RAM-only watchdog is insufficient. Do not wire
-this planner to an unattended public Apply button before that transaction owner
-and physical power-loss behavior are qualified.
+Application confirmation and radio confirmation are separate transactions. The
+radio owner provides `radio prepare`, `apply`, `confirm`, `rollback`, `status`,
+`recover` and `watch`. It owns one device-wide private journal at
+`/etc/hopspot-radio`, independently of application slots, identities and grants.
+A different application root cannot open a second overlapping radio trial.
+`prepare` keeps originals of wireless, mesh11sd, system and the generated Morse
+module file, including permissions. It generates the candidate in private UCI
+files in RAM; no live UCI commit or radio reload occurs during preparation. It
+checks every intended candidate value, removed key and long-guard list member
+after staging. A successful UCI batch exit alone cannot qualify a candidate.
+The originals contain credentials: retain recovery exports privately.
+
+Install the reviewed `openwrt/hopspot-radio-recovery` asset as
+`/etc/init.d/hopspot-radio-recovery`, make it executable, then enable it. The asset
+expects the manager at `/etc/hopspot/manager`. It starts independently of the
+application, before the vendor network service at boot. `prepare` starts this
+service; `apply` requires both its boot link and a running procd instance using
+the same manager root. Missing protection and pending UCI edits refuse activation
+before changing vendor files. Recovering originals ignores and clears pending
+edits to the owned packages so stale UCI deltas cannot override restoration.
+Inspection and staging use absolute UCI file paths, which bypass delta loading;
+`-t` alone changes the save directory but retains other delta search paths in
+[libuci](https://github.com/openwrt/uci/blob/master/delta.c).
+
+```sh
+manager() {
+    /etc/hopspot/manager --root /etc/hopspot \
+        --max-compressed-bytes 2097152 --max-executable-bytes 4194304 \
+        --flash-reserve-bytes 262144 --ram-reserve-bytes 8388608 "$@"
+}
+chmod 700 /etc/init.d/hopspot-radio-recovery
+/etc/init.d/hopspot-radio-recovery enable
+manager radio prepare --profile /etc/hopspot/radio-profile.json \
+    --recovery-seconds 180 --trial-boots 1
+```
+
+Read `revision` and `profile_sha256` from the returned JSON, then provide those
+exact values to `radio apply`, `confirm` or `rollback` with `--revision` and
+`--profile-sha256`. The profile example is explicitly US-only; inspect the board,
+SKU, operating location, wired management path and storage first. A stale
+candidate cannot confirm another preparation. `rollback` cancels an unapplied
+preparation immediately; an applied trial is restored by the independent service.
+`status` reports its phase as JSON. `recover` performs one recovery step; it can
+restore files and request a reboot.
+
+The lease uses the kernel boot UUID and uptime, not the boards' unreliable wall
+clocks. Each permitted trial reboot consumes persisted allowance and gives one
+new bounded window. Normal checks do not renew the deadline or write the journal.
+A mutation-intent record is synced before the first vendor file change. Journal
+and backup integrity checks prevent a damaged Applying record from concealing
+partial activation. Lost journals with an intact guard select restoration;
+damaged backups refuse host writes. Recovery restores all originals atomically
+per file, preserving modes, then requests a clean vendor reboot. It requires a
+changed boot UUID, matching original files, interface UP/carrier and Morse health
+before reporting `Restored`. A missing reboot has a 60-second deadline; radio
+readiness has a separate 360-second deadline. Unavailable recovery remains an
+explicit nonterminal state, blocking a new trial. Restoring bytes alone is not
+reported as operational recovery.
+
+The local manager has no generic shell or automatic application announce policy.
+It deliberately does not auto-confirm a trial. The trusted installer/controller
+must judge end-to-end health and confirm the exact candidate. This is a development
+transaction owner; physical flash power-loss qualification remains required
+before an unattended public Apply flow.
 
 Confirm health through a different live mesh gateway after boot: authenticate
 against the existing pinned target, inspect build/interfaces/config/peers, verify
@@ -134,12 +188,15 @@ an app message and exact page bytes, and read the real Morse channel/rate and
 mesh parameters. Explicit controller announcements may seed discovery. Use the
 actual PHY associated with the Linux device, because module reload can change
 its index. Keep the wired management listener's address family explicit; IPv6
-link-local management needs an IPv6-capable bind and interface scope. Release
-the recovery lease only after these checks, or restore the original vendor
-configuration. The separate qualification service is not a shipping installer.
+link-local management needs an IPv6-capable bind and interface scope. Confirm
+the exact radio candidate only after these checks, or allow the lease to restore
+the original vendor configuration. The separate qualification service is not a
+shipping installer.
 
 The [three-board mesh boot qualification](../headless/docs/qualification/halow-mesh-boot-2026-10-02.md)
 records real reboot, over-air snapshots/messages/pages, simulator coverage and
 the lab recovery lease. Its mesh-to-AP restoration needed clean vendor reboots on
-the G4 and second Heltec after matching files and Morse health had already passed. A future radio
-transaction must verify operational recovery and own that restart boundary.
+the G4 and second Heltec after matching files and Morse health had already passed.
+The durable radio owner now owns that restart boundary and verifies operational
+recovery; the [radio owner qualification](../headless/docs/qualification/halow-radio-owner-2026-10-02.md)
+records the exercised scope and remaining gates.
