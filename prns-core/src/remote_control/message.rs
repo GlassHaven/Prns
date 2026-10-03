@@ -1428,7 +1428,7 @@ impl RemoteControlRequestSet {
     }
 
     #[must_use]
-    pub fn only(kind: RemoteControlRequestKind) -> Self {
+    pub const fn only(kind: RemoteControlRequestKind) -> Self {
         let mut requests = Self::empty();
         let _inserted = requests.insert(kind);
         requests
@@ -1467,9 +1467,12 @@ impl RemoteControlRequestSet {
         self.bits.get(index).is_some_and(|byte| *byte & mask != 0)
     }
 
-    pub fn insert(&mut self, kind: RemoteControlRequestKind) -> bool {
+    pub const fn insert(&mut self, kind: RemoteControlRequestKind) -> bool {
         let (index, mask) = request_kind_position(kind);
-        let Some(byte) = self.bits.get_mut(index) else {
+        let Some((_, remaining)) = self.bits.split_at_mut_checked(index) else {
+            return false;
+        };
+        let Some(byte) = remaining.first_mut() else {
             return false;
         };
         if *byte & mask != 0 {
@@ -2028,10 +2031,10 @@ pub enum RemoteControlMessageWriteError {
     InvalidRequestSet,
 }
 
-fn request_kind_position(kind: RemoteControlRequestKind) -> (usize, u8) {
+const fn request_kind_position(kind: RemoteControlRequestKind) -> (usize, u8) {
     let wire_value = kind.wire_value();
-    let index = usize::from(wire_value >> 3);
-    let mask = 1u8.wrapping_shl(u32::from(wire_value & 0x07));
+    let index = (wire_value >> 3) as usize;
+    let mask = 1u8.wrapping_shl((wire_value & 0x07) as u32);
     (index, mask)
 }
 

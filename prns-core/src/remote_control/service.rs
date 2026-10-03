@@ -34,7 +34,7 @@ pub enum RemoteControlCapabilitiesError {
 
 impl RemoteControlCapabilities {
     #[must_use]
-    pub fn describe_only() -> Self {
+    pub const fn describe_only() -> Self {
         Self {
             requests: RemoteControlRequestSet::only(RemoteControlRequestKind::Describe),
         }
@@ -52,7 +52,7 @@ impl RemoteControlCapabilities {
     /// Adds one supported operation while preserving the mandatory `Describe` capability.
     /// Repeating an operation is intentionally idempotent.
     #[must_use]
-    pub fn with_request(mut self, request: RemoteControlRequestKind) -> Self {
+    pub const fn with_request(mut self, request: RemoteControlRequestKind) -> Self {
         let _ = self.requests.insert(request);
         self
     }
@@ -505,10 +505,11 @@ mod tests {
             RemoteControlCapabilities::from_requests(RemoteControlRequestSet::empty()),
             Err(RemoteControlCapabilitiesError::DescribeRequired),
         );
-        let capabilities = RemoteControlCapabilities::describe_only()
+        const CAPABILITIES: RemoteControlCapabilities = RemoteControlCapabilities::describe_only()
             .with_request(RemoteControlRequestKind::DescribeBuild)
             .with_request(RemoteControlRequestKind::DescribeBuild);
-        assert!(capabilities.supports(RemoteControlRequestKind::Describe));
-        assert!(capabilities.supports(RemoteControlRequestKind::DescribeBuild));
+        assert!(CAPABILITIES.supports(RemoteControlRequestKind::Describe));
+        assert!(CAPABILITIES.supports(RemoteControlRequestKind::DescribeBuild));
+        assert_eq!(CAPABILITIES.requests().len(), 2);
     }
 }

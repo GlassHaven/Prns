@@ -86,29 +86,25 @@ pub(super) struct Context<'a, D: RetainedDisplayDevice> {
     pub subg_configuration: &'a mut SubGConfigurationState,
 }
 
-pub(super) fn capabilities() -> RemoteControlCapabilities {
-    let mut capabilities = RemoteControlCapabilities::describe_only();
-    for kind in [
-        RemoteControlRequestKind::AnnounceSelf,
-        RemoteControlRequestKind::InventoryInterfaces,
-        RemoteControlRequestKind::SetInterfacePower,
-        RemoteControlRequestKind::SetInterfaceGroup,
-        RemoteControlRequestKind::InventoryInterfaceDiscoveryGroups,
-        RemoteControlRequestKind::ReplaceInterfaceDiscoveryGroups,
-        RemoteControlRequestKind::InventoryInterfacePeers,
-        RemoteControlRequestKind::InventoryInterfaceConfig,
-        RemoteControlRequestKind::SetInterfaceLoRaProfile,
-        RemoteControlRequestKind::DescribeBuild,
-        RemoteControlRequestKind::DescribePower,
-        RemoteControlRequestKind::SetSystemPower,
-        RemoteControlRequestKind::SetDisplayVisibility,
-        RemoteControlRequestKind::InventoryControllers,
-        RemoteControlRequestKind::AuthorizeController,
-        RemoteControlRequestKind::RevokeController,
-    ] {
-        capabilities = capabilities.with_request(kind);
-    }
-    capabilities
+pub(super) const fn capabilities() -> RemoteControlCapabilities {
+    const CAPABILITIES: RemoteControlCapabilities = RemoteControlCapabilities::describe_only()
+        .with_request(RemoteControlRequestKind::AnnounceSelf)
+        .with_request(RemoteControlRequestKind::InventoryInterfaces)
+        .with_request(RemoteControlRequestKind::SetInterfacePower)
+        .with_request(RemoteControlRequestKind::SetInterfaceGroup)
+        .with_request(RemoteControlRequestKind::InventoryInterfaceDiscoveryGroups)
+        .with_request(RemoteControlRequestKind::ReplaceInterfaceDiscoveryGroups)
+        .with_request(RemoteControlRequestKind::InventoryInterfacePeers)
+        .with_request(RemoteControlRequestKind::InventoryInterfaceConfig)
+        .with_request(RemoteControlRequestKind::SetInterfaceLoRaProfile)
+        .with_request(RemoteControlRequestKind::DescribeBuild)
+        .with_request(RemoteControlRequestKind::DescribePower)
+        .with_request(RemoteControlRequestKind::SetSystemPower)
+        .with_request(RemoteControlRequestKind::SetDisplayVisibility)
+        .with_request(RemoteControlRequestKind::InventoryControllers)
+        .with_request(RemoteControlRequestKind::AuthorizeController)
+        .with_request(RemoteControlRequestKind::RevokeController);
+    CAPABILITIES
 }
 
 pub(super) async fn execute<D: RetainedDisplayDevice>(
