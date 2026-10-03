@@ -47,10 +47,22 @@ const MAX_PROFILE_BYTES: u64 = 4096;
 const MAX_BOOT_ADAPTER_BYTES: u64 = 131072;
 
 pub(super) fn print_plan(profile: &Path, board: &Board) -> Result<(), CommandError> {
-    let profile = read_profile(profile)?;
-    let plan = inspect(&profile, board)?;
+    let plan = inspect_profile(profile, board)?;
     println!("{}", serde_json::to_string(&plan)?);
     Ok(())
+}
+
+pub(super) fn inspect_profile(profile: &Path, board: &Board) -> Result<RadioPlan, CommandError> {
+    let profile = read_profile(profile)?;
+    inspect(&profile, board)
+}
+
+pub(super) fn boot_time(
+    root: &Path,
+    board: &Board,
+) -> Result<personal_hopspot_appliance::BootTime, CommandError> {
+    use personal_hopspot_appliance::RadioPlatform;
+    Ok(vendor::OpenWrtRadio::new(root.to_owned(), board.clone()).time()?)
 }
 
 fn read_profile(path: &Path) -> Result<RadioProfile, CommandError> {
@@ -112,12 +124,16 @@ pub(super) struct RadioContext<'a> {
     pub board: Board,
 }
 
-pub(super) fn run(action: RadioAction, context: RadioContext<'_>) -> Result<(), CommandError> {
+pub(super) fn run(
+    action: RadioAction,
+    context: RadioContext<'_>,
+    observer: impl personal_hopspot_appliance::ObserveRadioWrites,
+) -> Result<(), CommandError> {
     let mut platform = vendor::OpenWrtRadio::new(context.manager_root.to_owned(), context.board);
     if let RadioAction::Watch = action {
         return watch(&mut platform);
     }
-    let mut owner = RadioTransaction::open(Path::new(RADIO_STATE_ROOT), UnobservedWrites)?;
+    let mut owner = RadioTransaction::open(Path::new(RADIO_STATE_ROOT), observer)?;
     match action {
         RadioAction::Prepare {
             profile,

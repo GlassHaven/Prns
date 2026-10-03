@@ -1,7 +1,6 @@
 use std::{
     fs,
     io::Read,
-    net::SocketAddr,
     num::{NonZeroU64, NonZeroU8},
     path::{Path, PathBuf},
     process::Command,
@@ -12,7 +11,6 @@ use personal_hopspot_appliance::{
     Appliance, Board, Budgets, CandidateId, Error, LaunchBudget, RadioProfileError, SpaceBudget,
     UnobservedWrites,
 };
-use serde::Deserialize;
 
 #[derive(Parser)]
 pub struct Options {
@@ -32,6 +30,10 @@ pub struct Options {
 
 #[derive(Subcommand)]
 enum Action {
+    Inspect {
+        #[arg(long)]
+        profile: PathBuf,
+    },
     Radio {
         #[command(subcommand)]
         action: radio::RadioAction,
@@ -60,27 +62,18 @@ enum Action {
         #[arg(long)]
         ram_directory: PathBuf,
     },
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LaunchConfiguration {
-    listen: SocketAddr,
-    tcp_mode: TcpMode,
-    radio: Radio,
-}
-
-#[derive(Deserialize)]
-enum TcpMode {
-    Gateway,
-    PointToPoint,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-enum Radio {
-    Disabled,
-    HaLow { device: String, scope: String },
+    Qualify {
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        ram_directory: PathBuf,
+        #[arg(long)]
+        controller_public_key: launch::ControllerPublicKey,
+        #[arg(long, value_enum)]
+        controller_access: launch::ControllerAccess,
+        #[arg(long)]
+        run_for: launch::QualificationWindow,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -111,10 +104,21 @@ pub enum CommandError {
 }
 
 pub fn run(options: Options, public_key: &str) -> Result<(), CommandError> {
+    run_with_radio_observer(options, public_key, UnobservedWrites)
+}
+
+pub fn run_with_radio_observer(
+    options: Options,
+    public_key: &str,
+    observer: impl personal_hopspot_appliance::ObserveRadioWrites,
+) -> Result<(), CommandError> {
     if !options.root.is_absolute() {
         return Err(CommandError::Configuration);
     }
     let board = Board::from_vendor_name(&fs::read_to_string("/tmp/sysinfo/board_name")?)?;
+    if let Action::Inspect { profile } = &options.action {
+        return inspection::print(&options, &board, profile, public_key);
+    }
     if let Action::Radio { action } = options.action {
         return radio::run(
             action,
@@ -123,6 +127,7 @@ pub fn run(options: Options, public_key: &str) -> Result<(), CommandError> {
                 flash_reserve_bytes: options.flash_reserve_bytes,
                 board,
             },
+            observer,
         );
     }
     if let Action::RadioPlan { profile } = &options.action {
@@ -140,6 +145,7 @@ pub fn run(options: Options, public_key: &str) -> Result<(), CommandError> {
         UnobservedWrites,
     )?;
     match options.action {
+        Action::Inspect { .. } => unreachable!("inspection returned before opening slots"),
         Action::Radio { .. } => {
             unreachable!("radio commands returned before opening application slots")
         }
@@ -173,93 +179,36 @@ pub fn run(options: Options, public_key: &str) -> Result<(), CommandError> {
         Action::Run {
             config,
             ram_directory,
-        } => {
-            if !ram_directory.starts_with("/tmp")
-                || ram_directory.components().any(|part| {
-                    matches!(
-                        part,
-                        std::path::Component::ParentDir | std::path::Component::CurDir
-                    )
-                })
-                || ram_directory.starts_with(&options.root)
-            {
-                return Err(CommandError::Configuration);
-            }
-            let mut config_bytes = Vec::new();
-            fs::File::open(config)?
-                .take(4097)
-                .read_to_end(&mut config_bytes)?;
-            if config_bytes.len() > 4096 {
-                return Err(CommandError::Configuration);
-            }
-            let launch: LaunchConfiguration = serde_json::from_slice(&config_bytes)?;
-            let mut arguments = vec![
-                "--state-dir".to_owned(),
-                options.root.join("state").to_string_lossy().into_owned(),
-                "--listen".to_owned(),
-                launch.listen.to_string(),
-                "--tcp-mode".to_owned(),
-                match launch.tcp_mode {
-                    TcpMode::Gateway => "gateway",
-                    TcpMode::PointToPoint => "point-to-point",
-                }
-                .to_owned(),
-            ];
-            match launch.radio {
-                Radio::Disabled => {}
-                Radio::HaLow { device, scope } => {
-                    if device.is_empty()
-                        || device.len() > 15
-                        || !device
-                            .bytes()
-                            .all(|byte| byte.is_ascii_alphanumeric() || b"_-.".contains(&byte))
-                        || scope.is_empty()
-                        || scope.len() > 64
-                        || !scope
-                            .bytes()
-                            .all(|byte| byte.is_ascii_alphanumeric() || b"_-.".contains(&byte))
-                    {
-                        return Err(CommandError::Configuration);
-                    }
-                    arguments.extend([
-                        "--halow-device".to_owned(),
-                        device,
-                        "--halow-scope".to_owned(),
-                        scope,
-                    ]);
-                }
-            }
-            let mut space = filesystem_space(Path::new("/tmp"), options.ram_reserve_bytes)?;
-            let memory = fs::read_to_string("/proc/meminfo")?;
-            let available_kib = memory
-                .lines()
-                .find_map(|line| line.strip_prefix("MemAvailable:"))
-                .ok_or(CommandError::Capacity)?
-                .split_whitespace()
-                .next()
-                .ok_or(CommandError::Capacity)?
-                .parse::<u64>()
-                .map_err(|_| CommandError::Capacity)?;
-            space.available_bytes = space.available_bytes.min(
-                available_kib
-                    .checked_mul(1024)
-                    .ok_or(CommandError::Capacity)?,
-            );
-            let (executable, candidate) = appliance.prepare_launch(&ram_directory, space)?;
-            eprintln!("appliance_launch {}", serde_json::to_string(&candidate)?);
-            drop(appliance);
-            let mut command = Command::new(executable);
-            command.args(arguments);
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::CommandExt;
-                return Err(command.exec().into());
-            }
-            #[cfg(not(unix))]
-            {
-                return Err(CommandError::UnsupportedHost);
-            }
-        }
+        } => launch::execute(
+            appliance,
+            launch::LaunchInputs {
+                root: &options.root,
+                config: &config,
+                ram_directory: &ram_directory,
+                ram_reserve_bytes: options.ram_reserve_bytes,
+            },
+            launch::Purpose::Service,
+        )?,
+        Action::Qualify {
+            config,
+            ram_directory,
+            controller_public_key,
+            controller_access,
+            run_for,
+        } => launch::execute(
+            appliance,
+            launch::LaunchInputs {
+                root: &options.root,
+                config: &config,
+                ram_directory: &ram_directory,
+                ram_reserve_bytes: options.ram_reserve_bytes,
+            },
+            launch::Purpose::Qualification {
+                controller: controller_public_key,
+                access: controller_access,
+                window: run_for,
+            },
+        )?,
     }
     Ok(())
 }
@@ -284,6 +233,8 @@ fn filesystem_space(path: &Path, reserve_bytes: u64) -> Result<SpaceBudget, Comm
     })
 }
 
+mod inspection;
+mod launch;
 mod radio;
 
 #[cfg(test)]

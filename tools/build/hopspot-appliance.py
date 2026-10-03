@@ -58,6 +58,7 @@ def main():
         staging.mkdir()
         shutil.copy2(executable, staging / "manager")
         shutil.copytree(CRATE / "openwrt", staging / "openwrt")
+        shutil.copytree(CRATE / "docs", staging / "docs")
         shutil.copy2(CRATE / "README.md", staging / "INSTALL.md")
         metadata = {"schema": 1, "artifact_kind": "linux-application-slot-manager-development-bundle",
                     "target": G4.TARGET, "source_commit": G4.capture(["git", "rev-parse", "HEAD"]),

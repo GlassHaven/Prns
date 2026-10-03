@@ -1,3 +1,4 @@
+use super::launch::LaunchConfiguration;
 use super::*;
 
 #[test]
@@ -115,4 +116,10 @@ fn radio_trials_require_explicit_policy_and_exact_generation_confirmation() {
     ]))
     .is_ok());
     assert!(Options::try_parse_from(common.into_iter().chain(["shell", "reboot"])).is_err());
+    assert!(Options::try_parse_from(common.into_iter().chain([
+        "--qualification-radio-observation",
+        "pause-after-wireless-replacement",
+        "status",
+    ]))
+    .is_err());
 }

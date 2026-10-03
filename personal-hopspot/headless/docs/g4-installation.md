@@ -1,56 +1,29 @@
 # ThinkNode G4 application installation
 
-Hopspot runs as a Linux application on the G4's existing operating system. The
-installation workflow starts here in the web flasher, with a downloadable
-application and guided setup rather than a replacement firmware image.
+Install Hopspot as an application on the working vendor Linux system. Choose the
+exact ThinkNode G4; this is not a firmware-upgrade target.
 
-**Development preview:** TCP and an experimental native HaLoW interface have
-served a complete Hopspot page on a G4. A signed public download and persistent
-installer are not ready yet. There is no public install button for this board
-at this stage.
+**Development preview:** signed application slots, supervised reboot, pinned
+Remote Control identities, exact pages and protected HaLoW rollback passed on
+this G4 and two Heltec boards. There is no signed public download or unattended
+install button yet. The procedure below is the shared guided development flow.
 
-## What you will need
+| Inspected property | Qualified G4 |
+| --- | --- |
+| Vendor board name | `morse,ekh03v3` |
+| Vendor image / kernel | OpenWrt 1.1 Morse-2.6.13 / 5.15.150 |
+| Application | Static MIPS32r2 little-endian O32, soft float |
+| Regional radio profile | Explicit US 924 MHz / 8 MHz, MCS2, long guard, 18 dBm |
 
-- A ThinkNode G4 with its working vendor system and a reachable management page.
-- An Ethernet connection to the device and authenticated SSH access.
-- A private backup of device configuration and Hopspot identity before updates.
+You need independent Ethernet management, authenticated SSH and private backups.
+Discover the actual address and verify its host key. A USB Ethernet adapter
+provides network access; it is not a qualified programming interface. Other
+images, regional SKUs and USB serial recovery require separate qualification.
 
-The intended flow is to download a verified application bundle from this page,
-transfer it to the device, run a temporary health check, and then activate a
-service that survives reboot. Updates must preserve identity and provide a way
-back to the previous working application.
+Developers build the application with `build.hopspot.g4` and its manager/assets
+with `build.hopspot.appliance` through `./tools/prns`. Development manager bundles
+have checksums, not release authentication. The manager verifies the separate
+signed application package. Never use LuCI firmware upgrade or `sysupgrade` for
+these files. Keep vendor firmware and calibration.
 
-The same development executable has also passed checks on two Heltec HT-HD01-V2
-devices. Each model keeps its own compatibility and installation guide. The
-[shared deployment specification](https://github.com/KenAKAFrosty/Prns/blob/main/personal-hopspot/headless/docs/halow-deployment.md)
-sets out the storage, controller enrollment and recovery work needed next.
-
-## Try the current development application
-
-Developers can build the bundle using the repository's `build.hopspot.g4` task.
-It contains the application, checksums, build information, and `INSTALL.md` with
-the tested temporary deployment procedure. Follow that procedure to run the TCP
-host in RAM and verify its Hopspot page from a second machine.
-
-[Open the build and temporary installation guide](https://github.com/KenAKAFrosty/Prns/blob/main/personal-hopspot/headless/docs/thinknode-g4.md).
-
-The current bundle is unsigned development output. It is **not** an image for
-LuCI firmware upgrade or `sysupgrade`. A temporary installation in `/tmp` loses
-its application and identity at reboot; it does not set up a persistent service.
-
-## Browser connection options
-
-The present G4 management path is Ethernet. A USB-to-Ethernet adapter provides
-network access, not a USB programming connection to the G4. A browser upload
-workflow would need a compatible authenticated endpoint on the device or a local
-helper. Those paths are being evaluated; USB serial recovery has not been
-qualified for this board.
-
-HaLoW is opt-in in the development bundle and requires a separately configured
-radio. Basic three-node mesh transfers and application rejoin have passed bench
-checks. The optional `--with-websocket` bundle also passed browser-node page
-transfers through the G4 to both Heltecs. Sustained load, forced radio multi-hop
-routing, field reliability, Wi-Fi discovery, and persistent browser-asset storage
-need further qualification. A separate static browser bundle has passed temporary
-G4 hosting; see the repository's `browser-hosting.md` guide.
-See the repository's headless README for the experimental radio options.
+[Review compatibility, hardware evidence and remaining gates](https://github.com/KenAKAFrosty/Prns/blob/main/personal-hopspot/headless/docs/halow-deployment.md).

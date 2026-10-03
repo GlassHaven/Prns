@@ -43,8 +43,10 @@ On fresh state, no option means nobody is authorized. These are initial grants;
 the runtime can also restore a retained authorization snapshot. Omitting a CLI
 key is not a general revocation mechanism for previously persisted grants. The
 ready line reports the number of CLI grants, not an effective grant inventory.
-Retain the option in the service launch
-configuration across restarts. The target's separate remote-control identity is
+For a managed appliance, use the manager’s explicit bounded `qualify` operation
+for initial enrollment, then start the normal service without enrollment arguments.
+Retained grants remain authoritative; service restarts must not reenroll a revoked
+controller. The target's separate remote-control identity is
 persisted under `STATE_DIR/remote_control`. Never copy private controller keys
 onto targets. Back up private state securely; share only public provisioning data.
 
@@ -118,7 +120,9 @@ ordinary directed traffic uses peer channels.
 The application, static MIPS build, HaLoW adapter, WebSocket listener and Auto-WiFi
 transport have bounded qualifications. This controller workflow replaces the lab
 announcement ticker; it is not yet a persistent appliance installer. Remaining
-work includes service/config installation, controller enrollment UX, updates and
-rollback, resource qualification, and a web-led application installer. ESP-NOW
+work includes signed manager/bootstrap distribution, physical power-loss and
+manager-update qualification, resource qualification, and automated web/helper
+transport. The [guided application flow](../../appliance/docs/guided-installation.md)
+now connects explicit enrollment to signed slots, service and radio owners. ESP-NOW
 interoperability remains separate qualification work. Do not infer completed
 radio management or browser provisioning from the available transport APIs.

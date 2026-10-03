@@ -32,9 +32,11 @@ const G4_GUIDE: &str =
     include_str!("../../../../../personal-hopspot/headless/docs/g4-installation.md");
 const HELTEC_GUIDE: &str =
     include_str!("../../../../../personal-hopspot/headless/docs/heltec-installation.md");
+const SHARED_GUIDE: &str =
+    include_str!("../../../../../personal-hopspot/appliance/docs/guided-installation.md");
 
 pub(super) fn installation_guide(appliance: &Appliance) -> Element {
-    rsx! { MarkdownBody { source: appliance.guide().to_string() } }
+    rsx! { MarkdownBody { source: format!("{}\n\n{SHARED_GUIDE}", appliance.guide()) } }
 }
 
 #[component]

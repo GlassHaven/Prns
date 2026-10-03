@@ -1,15 +1,27 @@
 # OpenWrt application slots
 
 This development slice owns signed application activation and supervised launch
-on the inspected ThinkNode G4 and Heltec HT-HD01-V2 vendor images. It does not
-flash firmware, alter UCI/radio settings, enroll controllers, announce, or update
-the slot manager itself. A public installer is still gated on signing operations,
+on the inspected ThinkNode G4 and Heltec HT-HD01-V2 vendor images. A separate
+durable owner provides protected radio activation and recovery. Explicit bounded
+qualification can provision an initial controller grant through the signed app;
+service launches never carry enrollment arguments. The manager does not flash
+firmware, automatically announce, or update itself. A public installer is still gated on signing operations,
 the remaining physical recovery checks and a complete guided enrollment flow.
 
 Build with `./tools/prns run build.hopspot.appliance -- --zig PATH --output NEW_DIR`.
 The shipping `manager` pins `release/keys/minisign.pub`. The separately requested
 `--qualification-output PATH` builds an example accepting a temporary lab key;
 it is never included in the bundle. Do not install that example for users.
+
+The [guided installation procedure](docs/guided-installation.md) is shared by the
+website and development bundle. `inspect --profile PATH` emits read-only JSON
+compatibility/resource/boot information and a qualified plan without creating
+state. `qualify` executes the verified active slot with explicit controller access
+and a 1–300-second application lifetime, using the same durable launch accounting
+as `run`. It does not confirm health or modify radio configuration. The target
+key comes back through the trusted SSH session; the controller pins it before
+end-to-end checks. A retained grant can override initial provisioning, so updates
+preserve state and do not reenroll merely to recover access.
 
 ## Package contract
 

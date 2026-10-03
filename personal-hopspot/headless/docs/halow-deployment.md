@@ -31,11 +31,14 @@ recovery on all three boards. Physical power-loss recovery remains a gate.
 | Writable overlay available at inspection | 5,336 KiB | 5,288 / 5,272 KiB |
 | Recovery-qualified application | 3,636,552 bytes | Same executable and hash |
 | Cold-boot corrected application / gzip | 3,631,976 / 1,507,694 bytes | Same |
+| Guided installation shipping manager | 1,511,340 bytes | Same |
 | Earlier candidate gzip, level 9 | 1,501,636 bytes | 3,620,680-byte candidate; unpacking tested on G4 only |
 
 Two compressed slots with RAM expansion now passed service/reboot qualification;
-two unpacked executables do not fit these overlays. The final slot manager is
-measured separately in the service report. Do not assume a newer application or another vendor
+two unpacked executables do not fit these overlays. The latest manager and guided
+flow are measured in the [guided qualification](qualification/halow-guided-2026-10-02.md);
+that slice uses RAM slots and does not repeat persistent footprint qualification.
+Do not assume a newer application or another vendor
 image has the same budget. The overlay must also accommodate private state,
 configuration, update metadata and filesystem overhead. Updates need staging
 headroom in RAM and explicit low-space refusal before writing flash.
@@ -144,8 +147,11 @@ successful response may have come from the process about to reboot.
 
 ## Web-led entry and later automation
 
-The initial website offers a development guide for each exact appliance, with
-download/guided SSH as the first supported transport once signed bundles exist.
+The website embeds one [shared guided procedure](../../appliance/docs/guided-installation.md)
+below each exact model’s compatibility information. The manager bundle carries
+that same document. Read-only `inspect` snapshots and explicit bounded `qualify`
+launches make the steps executable through the existing owners. Public signed
+downloads and automated browser/helper transport remain gates.
 The USB Ethernet adapters here expose a network connection, not the remote board's
 flash. [WebUSB needs an available claimable interface](https://developer.chrome.com/docs/capabilities/build-for-webusb);
 the observed running G4 exposes no USB device-controller interface.
@@ -172,12 +178,13 @@ must not become the installer endpoint.
   filesystems. The temporary qualification loader trusts a separate lab signer;
   the shipping manager rejects that signer. No public release signing was performed.
 - Qualify physical interrupted flash/power-loss recovery, sustained state growth,
-  and a durable radio activation/recovery transaction. The explicit US mesh/rate
+  and manager/bootstrap upgrade handling. The explicit US mesh/rate
   profile and controller-seeded over-air reboot checks now passed on all three;
   other regions, vendor adapters and unattended cold discovery remain unqualified.
   Warm mesh-to-vendor-AP restoration required clean vendor reboots on the G4 and
-  second Heltec. Build that operational recovery boundary into the transaction owner;
-  matching files and a successful firmware health query are insufficient. Do not
+  second Heltec. The durable owner now enforces that clean reboot and operating
+  interface boundary; matching files and a successful firmware health query alone
+  cannot complete recovery. Do not
   discard authorization snapshots merely to avoid route writes.
 - Qualify least privilege, bounded logs/state, sustained actual PRNS Resource
   throughput, longer desk runs, physical forced multi-hop and field range.
