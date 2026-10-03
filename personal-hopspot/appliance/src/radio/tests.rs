@@ -88,10 +88,10 @@ fn plan_changes_only_the_bound_radio_and_mesh_policy_without_committing() {
             "set wireless.default_radio1.mode='mesh'\n",
             "set wireless.default_radio1.mesh_id='Hopspot'\n",
             "set wireless.default_radio1.encryption='none'\n",
-            "set wireless.default_radio1.network=''\n",
             "set wireless.default_radio1.powersave='0'\n",
             "set wireless.default_radio1.wds='0'\n",
             "delete wireless.default_radio1.key\n",
+            "delete wireless.default_radio1.network\n",
             "set mesh11sd.mesh_params.mesh_fwding='0'\n",
             "set mesh11sd.mesh_params.mesh_hwmp_rootmode='2'\n",
             "set mesh11sd.mesh_params.mesh_gate_announcements='0'\n",
@@ -109,6 +109,46 @@ fn plan_changes_only_the_bound_radio_and_mesh_policy_without_committing() {
             key.starts_with("wireless.radio1.")
                 || key.starts_with("wireless.default_radio1.")
                 || key.starts_with("mesh11sd.mesh_params.")
+        );
+    }
+}
+
+#[test]
+fn candidate_projection_rejects_partial_batches_credentials_and_duplicate_guard_options() {
+    let plan = profile().qualified_plan(&Board::ThinkNodeG4, G4_BOOT_ADAPTER_SHA256.to_owned());
+    let projection = concat!(
+        "wireless.radio1.country='US'\n",
+        "wireless.radio1.channel='44'\n",
+        "wireless.radio1.disabled='0'\n",
+        "wireless.radio1.enable_fixed_rate='1'\n",
+        "wireless.radio1.fixed_mcs='2'\n",
+        "wireless.radio1.fixed_bw='3'\n",
+        "wireless.radio1.fixed_ss='1'\n",
+        "wireless.radio1.fixed_guard='0'\n",
+        "wireless.radio1.enable_ps='0'\n",
+        "wireless.radio1.txpower='18'\n",
+        "wireless.radio1.s1g_capab='[OTHER]' '[SHORT-GI-NONE]'\n",
+        "wireless.default_radio1.ifname='wlan0'\n",
+        "wireless.default_radio1.mode='mesh'\n",
+        "wireless.default_radio1.mesh_id='Hopspot'\n",
+        "wireless.default_radio1.encryption='none'\n",
+        "wireless.default_radio1.powersave='0'\n",
+        "wireless.default_radio1.wds='0'\n",
+        "mesh11sd.mesh_params.mesh_fwding='0'\n",
+        "mesh11sd.mesh_params.mesh_hwmp_rootmode='2'\n",
+        "mesh11sd.mesh_params.mesh_gate_announcements='0'\n",
+    );
+    assert_eq!(plan.verify_uci_projection(projection), Ok(()));
+    for damaged in [
+        projection.replace("fixed_mcs='2'", "fixed_mcs='4'"),
+        format!("{projection}wireless.default_radio1.network='ahwlan'\n"),
+        projection.replace("mesh_hwmp_rootmode='2'", "mesh_hwmp_rootmode='0'"),
+        projection.replace("'[SHORT-GI-NONE]'", "'[SHORT-GI-NONE]' '[SHORT-GI-NONE]'"),
+        format!("{projection}wireless.default_radio1.key='test credential'\n"),
+    ] {
+        assert_eq!(
+            plan.verify_uci_projection(&damaged),
+            Err(RadioProfileError::Projection)
         );
     }
 }

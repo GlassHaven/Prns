@@ -60,3 +60,59 @@ fn activation_requires_explicit_resource_and_trial_policy() {
     ]))
     .is_ok());
 }
+
+#[test]
+fn radio_trials_require_explicit_policy_and_exact_generation_confirmation() {
+    let common = [
+        "manager",
+        "--root",
+        "/etc/hopspot",
+        "--max-compressed-bytes",
+        "2097152",
+        "--max-executable-bytes",
+        "4194304",
+        "--flash-reserve-bytes",
+        "262144",
+        "--ram-reserve-bytes",
+        "8388608",
+        "radio",
+    ];
+    for missing in ["--recovery-seconds", "--trial-boots"] {
+        let arguments = [
+            "prepare",
+            "--profile",
+            "/tmp/profile",
+            "--recovery-seconds",
+            "180",
+            "--trial-boots",
+            "1",
+        ];
+        let mut retained = Vec::new();
+        let mut iter = arguments.into_iter();
+        while let Some(argument) = iter.next() {
+            if argument == missing {
+                iter.next();
+            } else {
+                retained.push(argument);
+            }
+        }
+        assert!(Options::try_parse_from(common.into_iter().chain(retained)).is_err());
+    }
+    assert!(Options::try_parse_from(common.into_iter().chain([
+        "confirm",
+        "--revision",
+        "0",
+        "--profile-sha256",
+        &"a".repeat(64)
+    ]))
+    .is_err());
+    assert!(Options::try_parse_from(common.into_iter().chain([
+        "confirm",
+        "--revision",
+        "1",
+        "--profile-sha256",
+        &"a".repeat(64)
+    ]))
+    .is_ok());
+    assert!(Options::try_parse_from(common.into_iter().chain(["shell", "reboot"])).is_err());
+}

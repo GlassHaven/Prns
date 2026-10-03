@@ -18,9 +18,11 @@ pub enum RadioProfileError {
     MeshId,
     #[error("vendor boot adapter differs from the qualified board contract")]
     BootAdapter,
+    #[error("candidate UCI values do not match the qualified plan")]
+    Projection,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String")]
 pub struct UciSection(String);
 
@@ -45,9 +47,15 @@ impl UciSection {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String")]
 pub struct RadioDevice(String);
+
+impl RadioDevice {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 impl TryFrom<String> for RadioDevice {
     type Error = RadioProfileError;
@@ -64,7 +72,7 @@ impl TryFrom<String> for RadioDevice {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String")]
 pub struct MeshId(String);
 
@@ -83,22 +91,22 @@ impl TryFrom<String> for MeshId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RegionalChannel {
     Us924Mhz8Mhz,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadioPreset {
     Mcs2LongGuard18Dbm,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MeshPathSetup {
     ProactiveRequests,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RadioBinding {
     pub radio: UciSection,
@@ -106,7 +114,7 @@ pub struct RadioBinding {
     pub device: RadioDevice,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RadioProfile {
     pub binding: RadioBinding,
@@ -118,9 +126,61 @@ pub struct RadioProfile {
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct RadioPlan {
-    pub board: Board,
-    pub boot_adapter_sha256: String,
-    pub uci_batch: String,
+    board: Board,
+    boot_adapter_sha256: String,
+    uci_batch: String,
+    profile: RadioProfile,
+    #[serde(skip)]
+    settings: Vec<RadioSetting>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum RadioSetting {
+    Set { key: String, value: String },
+    EnsureListMember { key: String, value: String },
+    Remove { key: String },
+}
+
+impl RadioPlan {
+    pub fn board(&self) -> &Board {
+        &self.board
+    }
+    pub fn boot_adapter_sha256(&self) -> &str {
+        &self.boot_adapter_sha256
+    }
+    pub fn uci_batch(&self) -> &str {
+        &self.uci_batch
+    }
+    pub fn profile(&self) -> &RadioProfile {
+        &self.profile
+    }
+
+    pub fn verify_uci_projection(&self, projection: &str) -> Result<(), RadioProfileError> {
+        for setting in &self.settings {
+            let matches = match setting {
+                RadioSetting::Set { key, value } => projection
+                    .lines()
+                    .any(|line| line == format!("{key}='{value}'")),
+                RadioSetting::EnsureListMember { key, value } => projection
+                    .lines()
+                    .find_map(|line| line.strip_prefix(&format!("{key}=")))
+                    .is_some_and(|values| {
+                        values
+                            .split_whitespace()
+                            .filter(|member| *member == format!("'{value}'"))
+                            .count()
+                            == 1
+                    }),
+                RadioSetting::Remove { key } => !projection
+                    .lines()
+                    .any(|line| line.starts_with(&format!("{key}="))),
+            };
+            if !matches {
+                return Err(RadioProfileError::Projection);
+            }
+        }
+        Ok(())
+    }
 }
 
 impl RadioProfile {
@@ -147,7 +207,7 @@ impl RadioProfile {
         let (mcs, guard, power) = match self.preset {
             RadioPreset::Mcs2LongGuard18Dbm => ("2", "0", "18"),
         };
-        let mut commands = String::new();
+        let mut settings = Vec::new();
         for (option, value) in [
             ("country", country),
             ("channel", channel),
@@ -161,26 +221,34 @@ impl RadioProfile {
             ("enable_ps", "0"),
             ("txpower", power),
         ] {
-            commands.push_str(&format!("set wireless.{radio}.{option}='{value}'\n"));
+            settings.push(RadioSetting::Set {
+                key: format!("wireless.{radio}.{option}"),
+                value: value.to_owned(),
+            });
         }
-        commands.push_str(&format!(
-            "del_list wireless.{radio}.s1g_capab='[SHORT-GI-NONE]'\n"
-        ));
-        commands.push_str(&format!(
-            "add_list wireless.{radio}.s1g_capab='[SHORT-GI-NONE]'\n"
-        ));
+        settings.push(RadioSetting::EnsureListMember {
+            key: format!("wireless.{radio}.s1g_capab"),
+            value: "[SHORT-GI-NONE]".to_owned(),
+        });
         for (option, value) in [
             ("ifname", device.as_str()),
             ("mode", "mesh"),
             ("mesh_id", mesh_id.as_str()),
             ("encryption", "none"),
-            ("network", ""),
             ("powersave", "0"),
             ("wds", "0"),
         ] {
-            commands.push_str(&format!("set wireless.{interface}.{option}='{value}'\n"));
+            settings.push(RadioSetting::Set {
+                key: format!("wireless.{interface}.{option}"),
+                value: value.to_owned(),
+            });
         }
-        commands.push_str(&format!("delete wireless.{interface}.key\n"));
+        settings.push(RadioSetting::Remove {
+            key: format!("wireless.{interface}.key"),
+        });
+        settings.push(RadioSetting::Remove {
+            key: format!("wireless.{interface}.network"),
+        });
         let root_mode = match self.mesh_paths {
             MeshPathSetup::ProactiveRequests => "2",
         };
@@ -189,15 +257,32 @@ impl RadioProfile {
             ("mesh_hwmp_rootmode", root_mode),
             ("mesh_gate_announcements", "0"),
         ] {
-            commands.push_str(&format!("set mesh11sd.mesh_params.{option}='{value}'\n"));
+            settings.push(RadioSetting::Set {
+                key: format!("mesh11sd.mesh_params.{option}"),
+                value: value.to_owned(),
+            });
         }
+        let commands = settings
+            .iter()
+            .map(|setting| match setting {
+                RadioSetting::Set { key, value } => format!("set {key}='{value}'\n"),
+                RadioSetting::EnsureListMember { key, value } => {
+                    format!("del_list {key}='{value}'\nadd_list {key}='{value}'\n")
+                }
+                RadioSetting::Remove { key } => format!("delete {key}\n"),
+            })
+            .collect();
         RadioPlan {
             board: board.clone(),
             boot_adapter_sha256,
             uci_batch: commands,
+            profile: self.clone(),
+            settings,
         }
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) mod transaction;

@@ -10,6 +10,13 @@ pub use activation::{
     Activation, CandidateId, ExecutableDigest, Fallback, LaunchBudget, Slot, Status,
 };
 pub use package::{Board, Budgets, PackageError, VerifiedPackage};
+pub use radio::transaction::{
+    BootId, BootTime, FileMode, ObserveRadioWrites, RadioCandidateId, RadioCheckpoint, RadioDigest,
+    RadioFile, RadioFileImage, RadioLease, RadioPhase, RadioPlatform, RadioPreparation,
+    RadioRecoveryProgress, RadioSnapshot, RadioTransaction, RadioTransactionError,
+    RadioTransactionState, RadioTransactionStatus, RadioVendorOperation, RecoveryWindow,
+    RestoredRadioReadiness, TrialBoots,
+};
 pub use radio::{
     MeshId, MeshPathSetup, RadioBinding, RadioDevice, RadioPlan, RadioPreset, RadioProfile,
     RadioProfileError, RegionalChannel, UciSection,

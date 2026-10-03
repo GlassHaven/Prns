@@ -32,6 +32,10 @@ pub struct Options {
 
 #[derive(Subcommand)]
 enum Action {
+    Radio {
+        #[command(subcommand)]
+        action: radio::RadioAction,
+    },
     RadioPlan {
         #[arg(long)]
         profile: PathBuf,
@@ -93,12 +97,12 @@ pub enum CommandError {
     Configuration,
     #[error(transparent)]
     RadioProfile(#[from] RadioProfileError),
+    #[error(transparent)]
+    RadioTransaction(#[from] personal_hopspot_appliance::RadioTransactionError),
     #[error("named radio/interface sections do not match the Morse binding")]
     RadioBinding,
     #[error("pending UCI changes must be resolved before radio planning")]
     PendingUciChanges,
-    #[error("could not inspect vendor UCI configuration")]
-    UciInspection,
     #[error("could not inspect filesystem capacity")]
     Capacity,
     #[cfg(not(unix))]
@@ -111,6 +115,16 @@ pub fn run(options: Options, public_key: &str) -> Result<(), CommandError> {
         return Err(CommandError::Configuration);
     }
     let board = Board::from_vendor_name(&fs::read_to_string("/tmp/sysinfo/board_name")?)?;
+    if let Action::Radio { action } = options.action {
+        return radio::run(
+            action,
+            radio::RadioContext {
+                manager_root: &options.root,
+                flash_reserve_bytes: options.flash_reserve_bytes,
+                board,
+            },
+        );
+    }
     if let Action::RadioPlan { profile } = &options.action {
         radio::print_plan(profile, &board)?;
         return Ok(());
@@ -126,6 +140,9 @@ pub fn run(options: Options, public_key: &str) -> Result<(), CommandError> {
         UnobservedWrites,
     )?;
     match options.action {
+        Action::Radio { .. } => {
+            unreachable!("radio commands returned before opening application slots")
+        }
         Action::RadioPlan { .. } => unreachable!("radio planning returned before opening slots"),
         Action::Status => println!("{}", serde_json::to_string(appliance.activation())?),
         Action::Stage {
