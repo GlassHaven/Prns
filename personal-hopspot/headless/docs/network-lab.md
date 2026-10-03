@@ -18,11 +18,11 @@ three stages. Do not commit it or generated configuration. For example:
 ```sh
 umask 077
 openssl rand -hex 32 > /tmp/hopspot-lab.psk
-python3 prepare.py --role ap --output /tmp/prns-wifi-lab-ap \
+./tools/prns run device.network.lab.prepare -- --role ap --output /tmp/prns-wifi-lab-ap \
   --mac 02:50:52:4e:53:02 --psk-file /tmp/hopspot-lab.psk
-python3 prepare.py --role client --output /tmp/prns-wifi-lab-client-a \
+./tools/prns run device.network.lab.prepare -- --role client --output /tmp/prns-wifi-lab-client-a \
   --mac 02:50:52:4e:53:11 --psk-file /tmp/hopspot-lab.psk
-python3 prepare.py --role client --output /tmp/prns-wifi-lab-client-b \
+./tools/prns run device.network.lab.prepare -- --role client --output /tmp/prns-wifi-lab-client-b \
   --mac 02:50:52:4e:53:12 --psk-file /tmp/hopspot-lab.psk
 ```
 
@@ -74,7 +74,7 @@ existing Wi-Fi credentials and must stay private.
 
 The process watchdog is not crash-proof recovery. Persistent installation still
 needs its own boot/recovery qualification. See the
-[hardware results](../../docs/qualification/ap-two-client-g4-2026-09-29.md).
+[hardware results](qualification/ap-two-client-g4-2026-09-29.md).
 
 ## Station-mode recovery
 

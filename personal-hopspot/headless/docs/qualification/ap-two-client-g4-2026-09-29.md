@@ -75,7 +75,7 @@ Addresses and routes returned to the baseline, including Heltec A's existing
 HaLoW default route. G4's original TCP Hopspot continued serving its page.
 Board clocks were unsynchronized; report dates use the host session date.
 
-The [lab scripts](../../scripts/network-lab/README.md) retain the tested runtime
+The [lab scripts](../network-lab.md) retain the tested runtime
 configuration and cleanup procedure. Generated private staging files, credentials
 and raw device snapshots are not repository artifacts. This is a RAM-only lab,
 not a network migration or installation service.

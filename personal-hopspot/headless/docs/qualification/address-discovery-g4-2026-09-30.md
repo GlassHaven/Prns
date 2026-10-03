@@ -84,7 +84,7 @@ procedure, stable wired explicit listeners, and scoped Auto-WiFi selection. Chan
 only the private lab DHCP reservation/lease file, run the supplied udhcpc hook,
 verify removal of the old address, compare PID plus start time, and request the
 same destination at the new rendezvous address. Keep the rollback deadline and
-configuration-hash checks from the [lab recipe](../../scripts/network-lab/README.md).
+configuration-hash checks from the [lab recipe](../network-lab.md).
 
 ## Restoration
 

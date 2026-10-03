@@ -127,6 +127,25 @@ requires = ["bash", "cargo", "git", "node", "npm", "python3", "wasm-bindgen"]
 setup = "Install the prns-js and prns-wasm locked npm dependencies and wasm-bindgen 0.2.126. Supply a new --output directory and the board listener's --websocket-port."
 
 [[task]]
+id = "device.network.lab.prepare"
+summary = "Prepare private, temporary OpenWrt 2.4 GHz network-lab assets without contacting a device."
+domain = "device"
+effect = "workspace-write"
+platforms = ["linux", "macos"]
+audience = ["developer"]
+entrypoint = ["python3", "tools/device/network_lab/prepare.py"]
+requires = ["python3"]
+setup = "Read personal-hopspot/headless/docs/network-lab.md. Pass a fresh --output, explicit role/MAC and private --psk-file; staged radio operations are lab-only."
+
+[[internal]]
+path = "tools/device/network_lab/radio.sh"
+reason = "OpenWrt network-lab runtime asset copied by the preparation task; never executed on the host."
+
+[[internal]]
+path = "tools/device/network_lab/lease.sh"
+reason = "Private network-lab DHCP hook staged by the preparation task for the device."
+
+[[task]]
 id = "build.hopspot.t096"
 summary = "Build the Heltec T096 firmware and package its recovery-compatible developer UF2."
 domain = "build"

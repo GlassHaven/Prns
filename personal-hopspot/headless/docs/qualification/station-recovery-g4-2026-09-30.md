@@ -56,7 +56,7 @@ first check was performed; it is not a measured association latency. No Hopspot
 or supplicant restart, lease renewal, address replacement or manual reassociation
 was needed. These were fresh page sessions, not survival of an in-flight link.
 
-The [lab recipe](../../scripts/network-lab/README.md#station-mode-recovery)
+The [lab recipe](../network-lab.md#station-mode-recovery)
 describes reproduction. The next qualifications are changed-address/DHCP recovery,
 automatic peer establishment and withdrawal, and sustained resource use.
 Concurrent AP+STA operation remains unqualified.
