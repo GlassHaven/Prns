@@ -1,6 +1,7 @@
 //! Signed Linux application slots; vendor firmware and node state are separate owners.
 
 mod activation;
+mod filesystem;
 mod package;
 mod radio;
 mod storage;

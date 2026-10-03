@@ -1,11 +1,12 @@
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    fs::{self, File},
     num::NonZeroU64,
     path::{Path, PathBuf},
 };
 
 use serde::{Deserialize, Serialize};
+
+use crate::filesystem::{private_directory, private_file, remove_directory, write_synced};
 
 use crate::{
     Activation, Board, Budgets, CandidateId, Fallback, LaunchBudget, PackageError, Slot, Status,
@@ -413,50 +414,10 @@ fn load_journal(root: &Path) -> Result<Activation, Error> {
 }
 
 fn bounded_read(path: &Path, limit: u64) -> Result<Vec<u8>, Error> {
-    let mut bytes = Vec::new();
-    let bounded_length = limit.checked_add(1).ok_or(Error::ReadBudget)?;
-    File::open(path)?
-        .take(bounded_length)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > limit {
-        return Err(Error::ReadBudget);
-    }
-    Ok(bytes)
-}
-
-fn private_directory(path: &Path) -> Result<(), std::io::Error> {
-    fs::create_dir_all(path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    }
-    Ok(())
-}
-
-fn private_file(path: &Path) -> Result<File, std::io::Error> {
-    let mut options = OpenOptions::new();
-    options.read(true).write(true).create(true).truncate(false);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    options.open(path)
-}
-
-fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), std::io::Error> {
-    let mut file = private_file(path)?;
-    file.set_len(0)?;
-    file.write_all(bytes)?;
-    file.sync_all()
-}
-
-fn remove_directory(path: &Path) -> Result<(), std::io::Error> {
-    match fs::remove_dir_all(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
+    match crate::filesystem::bounded_read(path, limit) {
+        Ok(bytes) => Ok(bytes),
+        Err(crate::filesystem::ReadError::Io(error)) => Err(error.into()),
+        Err(crate::filesystem::ReadError::Budget) => Err(Error::ReadBudget),
     }
 }
 
