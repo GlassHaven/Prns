@@ -1857,14 +1857,14 @@ fn watch_interfaces_requires_a_canonical_stream_id() {
     let request_len = request.write_into(&mut request_bytes).unwrap();
     assert_eq!(request_len, 4);
     assert_eq!(
-        RemoteControlRequest::parse(&request_bytes[..request_len]),
+        RemoteControlRequest::parse(request_bytes.get(..request_len).unwrap()),
         Ok(request)
     );
     let mut response_bytes = [0; RemoteControlResponse::MAX_ENCODED_LEN];
     let response_len = response.write_into(&mut response_bytes).unwrap();
     assert_eq!(response_len, 4);
     assert_eq!(
-        RemoteControlResponse::parse(&response_bytes[..response_len]),
+        RemoteControlResponse::parse(response_bytes.get(..response_len).unwrap()),
         Ok(response)
     );
 
@@ -1876,10 +1876,14 @@ fn watch_interfaces_requires_a_canonical_stream_id() {
             0,
             0,
         ];
-        frame[2..2 + invalid_body.len()].copy_from_slice(invalid_body);
-        assert!(RemoteControlRequest::parse(&frame[..2 + invalid_body.len()]).is_err());
+        let frame_len = 2 + invalid_body.len();
+        frame
+            .get_mut(2..frame_len)
+            .unwrap()
+            .copy_from_slice(invalid_body);
+        assert!(RemoteControlRequest::parse(frame.get(..frame_len).unwrap()).is_err());
         frame[1] = RemoteControlResponseKind::WatchInterfaces.wire_value();
-        assert!(RemoteControlResponse::parse(&frame[..2 + invalid_body.len()]).is_err());
+        assert!(RemoteControlResponse::parse(frame.get(..frame_len).unwrap()).is_err());
     }
 }
 
