@@ -738,7 +738,8 @@ where
                 app_state,
                 storage: NodeStorage::default(),
                 request_endpoints,
-                remote_control: personal_rns::remote_control::RemoteControlService::Unavailable.into(),
+                remote_control: personal_rns::remote_control::RemoteControlService::Unavailable
+                    .into(),
                 on_event,
                 interfaces: |node: &PrnsNodeHandle| {
                     for server in servers {
@@ -809,7 +810,8 @@ where
                 app_state: personal_rns::runtime::NoRemoteControlHostControls,
                 storage: NodeStorage::default(),
                 request_endpoints: request_endpoints![],
-                remote_control: personal_rns::remote_control::RemoteControlService::Unavailable.into(),
+                remote_control: personal_rns::remote_control::RemoteControlService::Unavailable
+                    .into(),
                 on_event,
                 interfaces: |node: &PrnsNodeHandle| {
                     node.attach(client);
