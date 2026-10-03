@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::fs::{File, OpenOptions};
 use std::net::SocketAddr;
 use std::num::NonZeroU64;

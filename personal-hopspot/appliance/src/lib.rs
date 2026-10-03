@@ -1,4 +1,5 @@
 //! Signed Linux application slots; vendor firmware and node state are separate owners.
+#![forbid(unsafe_code)]
 
 mod activation;
 mod filesystem;

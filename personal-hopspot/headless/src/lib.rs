@@ -1,4 +1,6 @@
 //! Shared host attachment options for the application and bounded probe.
+#![forbid(unsafe_code)]
+
 #[cfg(feature = "wifi-halow")]
 pub mod halow;
 

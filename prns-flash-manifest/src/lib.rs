@@ -1,4 +1,5 @@
 //! Shared release contract for the Personal Hopspot web and CLI flashers.
+#![forbid(unsafe_code)]
 
 mod canonical_hex;
 mod catalog;

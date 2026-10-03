@@ -52,6 +52,16 @@
       "target": "x86_64-pc-windows-msvc"
     },
     {
+      "manifest": "personal-hopspot/headless/Cargo.toml",
+      "name": "halow-headless",
+      "target": "mipsel-unknown-linux-musl"
+    },
+    {
+      "manifest": "personal-hopspot/appliance/Cargo.toml",
+      "name": "halow-appliance-manager",
+      "target": "mipsel-unknown-linux-musl"
+    },
+    {
       "manifest": "personal-hopspot/mobile/android/rust/Cargo.toml",
       "name": "android",
       "target": "aarch64-linux-android"
@@ -128,7 +138,8 @@
         "daemon-macos": [],
         "desktop-linux": [],
         "desktop-macos": [],
-        "desktop-windows": []
+        "desktop-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "adler2",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -157,6 +168,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -333,6 +346,16 @@
           "auto",
           "default",
           "wincon"
+        ],
+        "halow-appliance-manager": [
+          "auto",
+          "default",
+          "wincon"
+        ],
+        "halow-headless": [
+          "auto",
+          "default",
+          "wincon"
         ]
       },
       "name": "anstream",
@@ -357,6 +380,14 @@
           "std"
         ],
         "daemon-windows": [
+          "default",
+          "std"
+        ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
+        ],
+        "halow-headless": [
           "default",
           "std"
         ]
@@ -385,6 +416,14 @@
         "daemon-windows": [
           "default",
           "utf8"
+        ],
+        "halow-appliance-manager": [
+          "default",
+          "utf8"
+        ],
+        "halow-headless": [
+          "default",
+          "utf8"
         ]
       },
       "name": "anstyle-parse",
@@ -402,7 +441,9 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": [],
+        "halow-headless": []
       },
       "name": "anstyle-query",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -513,6 +554,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -715,6 +757,12 @@
         "esp32-s3-tbeam": [
           "alloc"
         ],
+        "halow-appliance-manager": [
+          "alloc"
+        ],
+        "halow-headless": [
+          "alloc"
+        ],
         "host-c-linux": [
           "alloc"
         ],
@@ -747,6 +795,10 @@
         "engine": [
           "default",
           "std"
+        ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
         ]
       },
       "name": "bit-set",
@@ -763,6 +815,10 @@
     {
       "graphs": {
         "engine": [
+          "default",
+          "std"
+        ],
+        "halow-appliance-manager": [
           "default",
           "std"
         ]
@@ -884,12 +940,16 @@
         "desktop-windows": [
           "default"
         ],
+        "engine": [
+          "default"
+        ],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -909,6 +969,11 @@
     {
       "graphs": {
         "engine": [
+          "serde",
+          "serde_core",
+          "std"
+        ],
+        "halow-appliance-manager": [
           "serde",
           "serde_core",
           "std"
@@ -1035,6 +1100,23 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "std"
+        ]
+      },
+      "name": "bitflags",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 2,
+        "tokens": 2
+      },
+      "version": "2.13.2"
+    },
+    {
+      "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
         "daemon-windows": [],
@@ -1044,6 +1126,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": []
@@ -1103,6 +1187,12 @@
         "esp32-s3-tbeam": [
           "zeroize"
         ],
+        "halow-appliance-manager": [
+          "zeroize"
+        ],
+        "halow-headless": [
+          "zeroize"
+        ],
         "host-c-linux": [
           "zeroize"
         ],
@@ -1149,6 +1239,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -1555,6 +1647,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -1693,6 +1787,10 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default",
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "std"
@@ -1759,6 +1857,9 @@
           "default"
         ],
         "esp32-s3-tbeam": [
+          "default"
+        ],
+        "halow-headless": [
           "default"
         ],
         "host-c-linux": [
@@ -1833,6 +1934,12 @@
           "block-padding"
         ],
         "esp32-s3-tbeam": [
+          "block-padding"
+        ],
+        "halow-appliance-manager": [
+          "block-padding"
+        ],
+        "halow-headless": [
           "block-padding"
         ],
         "host-c-linux": [
@@ -1953,6 +2060,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -1971,6 +2079,21 @@
         "tokens": 0
       },
       "version": "1.0.4"
+    },
+    {
+      "graphs": {
+        "halow-headless": []
+      },
+      "name": "cfg-if",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "1.0.5"
     },
     {
       "graphs": {
@@ -1993,6 +2116,7 @@
     },
     {
       "graphs": {
+        "halow-headless": [],
         "host-c-linux": []
       },
       "name": "cfg_aliases",
@@ -2061,6 +2185,14 @@
           "zeroize"
         ],
         "esp32-s3-tbeam": [
+          "rng",
+          "zeroize"
+        ],
+        "halow-appliance-manager": [
+          "rng",
+          "zeroize"
+        ],
+        "halow-headless": [
           "rng",
           "zeroize"
         ],
@@ -2144,6 +2276,12 @@
         "esp32-s3-tbeam": [
           "block-padding"
         ],
+        "halow-appliance-manager": [
+          "block-padding"
+        ],
+        "halow-headless": [
+          "block-padding"
+        ],
         "host-c-linux": [
           "block-padding"
         ],
@@ -2205,6 +2343,16 @@
           "std",
           "suggestions",
           "usage"
+        ],
+        "halow-appliance-manager": [
+          "color",
+          "default",
+          "derive",
+          "error-context",
+          "help",
+          "std",
+          "suggestions",
+          "usage"
         ]
       },
       "name": "clap",
@@ -2217,6 +2365,30 @@
         "tokens": 0
       },
       "version": "4.6.1"
+    },
+    {
+      "graphs": {
+        "halow-headless": [
+          "color",
+          "default",
+          "derive",
+          "error-context",
+          "help",
+          "std",
+          "suggestions",
+          "usage"
+        ]
+      },
+      "name": "clap",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "4.6.6"
     },
     {
       "graphs": {
@@ -2237,6 +2409,14 @@
           "usage"
         ],
         "daemon-windows": [
+          "color",
+          "error-context",
+          "help",
+          "std",
+          "suggestions",
+          "usage"
+        ],
+        "halow-appliance-manager": [
           "color",
           "error-context",
           "help",
@@ -2258,6 +2438,28 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "color",
+          "error-context",
+          "help",
+          "std",
+          "suggestions",
+          "usage"
+        ]
+      },
+      "name": "clap_builder",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "4.6.6"
+    },
+    {
+      "graphs": {
         "daemon-linux": [
           "default"
         ],
@@ -2265,6 +2467,9 @@
           "default"
         ],
         "daemon-windows": [
+          "default"
+        ],
+        "halow-appliance-manager": [
           "default"
         ]
       },
@@ -2281,9 +2486,28 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default"
+        ]
+      },
+      "name": "clap_derive",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "4.6.4"
+    },
+    {
+      "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": [],
+        "halow-headless": []
       },
       "name": "clap_lex",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -2329,6 +2553,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -2351,7 +2577,9 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": [],
+        "halow-headless": []
       },
       "name": "colorchoice",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -2441,6 +2669,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -2791,6 +3021,10 @@
           "default",
           "std"
         ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "std"
@@ -2829,6 +3063,24 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default",
+          "std"
+        ]
+      },
+      "name": "crc32fast",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 2,
+        "externs": 0,
+        "functions": 13,
+        "impls": 0,
+        "tokens": 15
+      },
+      "version": "1.5.2"
+    },
+    {
+      "graphs": {
         "android": [],
         "daemon-linux": [],
         "daemon-macos": [],
@@ -2858,6 +3110,7 @@
         "esp32-s3-tbeam": [
           "restore-state-u32"
         ],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -3135,6 +3388,12 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [
+          "std"
+        ],
+        "halow-headless": [
+          "std"
+        ],
         "host-c-linux": [
           "std"
         ],
@@ -3203,6 +3462,12 @@
         "esp32-s3-tbeam": [
           "rand_core"
         ],
+        "halow-appliance-manager": [
+          "rand_core"
+        ],
+        "halow-headless": [
+          "rand_core"
+        ],
         "host-c-linux": [
           "rand_core"
         ],
@@ -3247,6 +3512,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -3383,6 +3650,20 @@
           "zeroize"
         ],
         "esp32-s3-tbeam": [
+          "alloc",
+          "digest",
+          "precomputed-tables",
+          "rand_core",
+          "zeroize"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "digest",
+          "precomputed-tables",
+          "rand_core",
+          "zeroize"
+        ],
+        "halow-headless": [
           "alloc",
           "digest",
           "precomputed-tables",
@@ -3946,6 +4227,25 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "alloc",
+          "default",
+          "std"
+        ]
+      },
+      "name": "data-encoding",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 6,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 6
+      },
+      "version": "2.11.1"
+    },
+    {
+      "graphs": {
         "daemon-linux": [
           "futures",
           "futures-channel",
@@ -4115,6 +4415,11 @@
           "oid",
           "zeroize"
         ],
+        "halow-appliance-manager": [
+          "alloc",
+          "oid",
+          "zeroize"
+        ],
         "host-c-linux": [
           "alloc",
           "oid",
@@ -4151,6 +4456,25 @@
         "tokens": 4
       },
       "version": "0.8.1"
+    },
+    {
+      "graphs": {
+        "halow-headless": [
+          "alloc",
+          "oid",
+          "zeroize"
+        ]
+      },
+      "name": "der",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 4,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 4
+      },
+      "version": "0.8.2"
     },
     {
       "graphs": {
@@ -4227,6 +4551,20 @@
         "esp32-s3-tbeam": [
           "block-buffer",
           "core-api"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "block-buffer",
+          "core-api",
+          "default",
+          "std"
+        ],
+        "halow-headless": [
+          "alloc",
+          "block-buffer",
+          "core-api",
+          "default",
+          "std"
         ],
         "host-c-linux": [
           "alloc",
@@ -4357,6 +4695,22 @@
           "zeroize"
         ],
         "esp32-s3-tbeam": [
+          "block-api",
+          "default",
+          "mac",
+          "rand_core",
+          "zeroize"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "block-api",
+          "default",
+          "mac",
+          "oid",
+          "rand_core",
+          "zeroize"
+        ],
+        "halow-headless": [
           "block-api",
           "default",
           "mac",
@@ -4562,6 +4916,7 @@
           "default",
           "std"
         ],
+        "halow-appliance-manager": [],
         "host-c-linux": [
           "default",
           "std"
@@ -4656,6 +5011,9 @@
         "desktop-windows": [
           "default"
         ],
+        "engine": [
+          "default"
+        ],
         "esp32-c6": [
           "default"
         ],
@@ -4672,6 +5030,9 @@
           "default"
         ],
         "esp32-s3-tbeam": [
+          "default"
+        ],
+        "halow-headless": [
           "default"
         ],
         "host-c-linux": [
@@ -4773,6 +5134,12 @@
           "alloc"
         ],
         "esp32-s3-tbeam": [
+          "alloc"
+        ],
+        "halow-appliance-manager": [
+          "alloc"
+        ],
+        "halow-headless": [
           "alloc"
         ],
         "host-c-linux": [
@@ -4923,6 +5290,24 @@
           "zeroize"
         ],
         "esp32-s3-tbeam": [
+          "alloc",
+          "batch",
+          "fast",
+          "rand_core",
+          "signature",
+          "strobe-rs",
+          "zeroize"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "batch",
+          "fast",
+          "rand_core",
+          "signature",
+          "strobe-rs",
+          "zeroize"
+        ],
+        "halow-headless": [
           "alloc",
           "batch",
           "fast",
@@ -5120,6 +5505,9 @@
     },
     {
       "graphs": {
+        "engine": [
+          "timer-item-size-6-words"
+        ],
         "esp32-c6": [
           "timer-item-size-6-words"
         ],
@@ -5169,6 +5557,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -5283,6 +5673,13 @@
           "tcp",
           "udp"
         ],
+        "engine": [
+          "medium-ethernet",
+          "multicast",
+          "proto-ipv6",
+          "tcp",
+          "udp"
+        ],
         "esp32-c6": [
           "dhcpv4",
           "dns",
@@ -5343,6 +5740,13 @@
           "tcp",
           "udp"
         ],
+        "halow-headless": [
+          "medium-ethernet",
+          "multicast",
+          "proto-ipv6",
+          "tcp",
+          "udp"
+        ],
         "host-c-linux": [
           "medium-ethernet",
           "multicast",
@@ -5396,12 +5800,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -5532,12 +5938,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -5564,12 +5972,17 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [
+          "generic-queue-64",
+          "tick-hz-1_000_000"
+        ],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -5596,6 +6009,9 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [
+          "tick-hz-1_000_000"
+        ],
         "esp32-c6": [
           "tick-hz-1_000_000"
         ],
@@ -5614,6 +6030,7 @@
         "esp32-s3-tbeam": [
           "tick-hz-1_000_000"
         ],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -5635,6 +6052,10 @@
     },
     {
       "graphs": {
+        "engine": [
+          "_generic-queue",
+          "generic-queue-64"
+        ],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
@@ -5918,6 +6339,7 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [
           "unproven"
         ],
@@ -5936,6 +6358,7 @@
         "esp32-s3-tbeam": [
           "unproven"
         ],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -5964,12 +6387,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -5996,12 +6421,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -6091,12 +6518,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -6154,12 +6583,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -6186,12 +6617,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -6217,12 +6650,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -6255,6 +6690,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -6275,6 +6711,21 @@
     },
     {
       "graphs": {
+        "halow-headless": []
+      },
+      "name": "embedded-storage",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "0.3.2"
+    },
+    {
+      "graphs": {
         "android": [],
         "daemon-linux": [],
         "daemon-macos": [],
@@ -6289,6 +6740,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -6306,6 +6758,21 @@
         "tokens": 0
       },
       "version": "0.4.1"
+    },
+    {
+      "graphs": {
+        "halow-headless": []
+      },
+      "name": "embedded-storage-async",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "0.4.2"
     },
     {
       "graphs": {
@@ -6505,6 +6972,13 @@
           "std"
         ],
         "engine": [
+          "std"
+        ],
+        "halow-appliance-manager": [
+          "std"
+        ],
+        "halow-headless": [
+          "default",
           "std"
         ],
         "host-c-linux": [
@@ -7784,6 +8258,11 @@
           "alloc",
           "default",
           "std"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "std"
         ]
       },
       "name": "fastrand",
@@ -7800,6 +8279,11 @@
     {
       "graphs": {
         "desktop-linux": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "halow-headless": [
           "alloc",
           "default",
           "std"
@@ -7913,6 +8397,12 @@
           "rust_backend"
         ],
         "desktop-windows": [
+          "any_impl",
+          "default",
+          "miniz_oxide",
+          "rust_backend"
+        ],
+        "halow-appliance-manager": [
           "any_impl",
           "default",
           "miniz_oxide",
@@ -8096,6 +8586,10 @@
           "default",
           "std"
         ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "std"
@@ -8177,6 +8671,10 @@
           "std"
         ],
         "daemon-windows": [
+          "alloc",
+          "std"
+        ],
+        "halow-appliance-manager": [
           "alloc",
           "std"
         ]
@@ -8671,6 +9169,24 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "alloc",
+          "std"
+        ]
+      },
+      "name": "futures-core",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 3,
+        "externs": 0,
+        "functions": 0,
+        "impls": 2,
+        "tokens": 5
+      },
+      "version": "0.3.34"
+    },
+    {
+      "graphs": {
         "android": [
           "std"
         ],
@@ -9056,6 +9572,21 @@
     },
     {
       "graphs": {
+        "halow-headless": []
+      },
+      "name": "futures-sink",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 2,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 2
+      },
+      "version": "0.3.34"
+    },
+    {
+      "graphs": {
         "android": [
           "alloc",
           "std"
@@ -9161,6 +9692,24 @@
         "tokens": 64
       },
       "version": "0.3.33"
+    },
+    {
+      "graphs": {
+        "halow-headless": [
+          "alloc",
+          "std"
+        ]
+      },
+      "name": "futures-task",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 27,
+        "externs": 0,
+        "functions": 24,
+        "impls": 12,
+        "tokens": 64
+      },
+      "version": "0.3.34"
     },
     {
       "graphs": {
@@ -9501,6 +10050,27 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "alloc",
+          "futures-sink",
+          "sink",
+          "slab",
+          "std"
+        ]
+      },
+      "name": "futures-util",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 84,
+        "externs": 0,
+        "functions": 20,
+        "impls": 32,
+        "tokens": 136
+      },
+      "version": "0.3.34"
+    },
+    {
+      "graphs": {
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
@@ -9563,6 +10133,12 @@
         "esp32-s3-tbeam": [
           "more_lengths"
         ],
+        "halow-appliance-manager": [
+          "more_lengths"
+        ],
+        "halow-headless": [
+          "more_lengths"
+        ],
         "host-c-linux": [
           "more_lengths"
         ],
@@ -9623,6 +10199,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -9654,6 +10231,12 @@
         "engine": [
           "std"
         ],
+        "halow-appliance-manager": [
+          "std"
+        ],
+        "halow-headless": [
+          "std"
+        ],
         "host-c-linux": [
           "std"
         ],
@@ -9677,7 +10260,8 @@
     },
     {
       "graphs": {
-        "engine": []
+        "engine": [],
+        "halow-appliance-manager": []
       },
       "name": "getrandom",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -9711,6 +10295,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -9759,6 +10344,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -9870,6 +10457,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -9897,12 +10486,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -9955,6 +10546,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": []
       },
       "name": "heck",
@@ -9976,6 +10569,16 @@
           "std"
         ],
         "desktop-linux": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "halow-headless": [
           "alloc",
           "default",
           "std"
@@ -10013,6 +10616,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -10073,6 +10678,12 @@
           "zeroize"
         ],
         "esp32-s3-tbeam": [
+          "zeroize"
+        ],
+        "halow-appliance-manager": [
+          "zeroize"
+        ],
+        "halow-headless": [
           "zeroize"
         ],
         "host-c-linux": [
@@ -10253,6 +10864,10 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default",
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "std"
@@ -10288,6 +10903,10 @@
           "std"
         ],
         "daemon-windows": [
+          "default",
+          "std"
+        ],
+        "halow-headless": [
           "default",
           "std"
         ],
@@ -10350,6 +10969,9 @@
         "esp32-s3-tbeam": [
           "zeroize"
         ],
+        "halow-appliance-manager": [
+          "zeroize"
+        ],
         "ios": [
           "zeroize"
         ],
@@ -10405,9 +11027,27 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "zeroize"
+        ]
+      },
+      "name": "hybrid-array",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 30,
+        "externs": 0,
+        "functions": 2,
+        "impls": 5,
+        "tokens": 38
+      },
+      "version": "0.4.15"
+    },
+    {
+      "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "icu_collections",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -10429,6 +11069,9 @@
           "zerovec"
         ],
         "daemon-windows": [
+          "zerovec"
+        ],
+        "halow-appliance-manager": [
           "zerovec"
         ]
       },
@@ -10453,6 +11096,9 @@
         ],
         "daemon-windows": [
           "compiled_data"
+        ],
+        "halow-appliance-manager": [
+          "compiled_data"
         ]
       },
       "name": "icu_normalizer",
@@ -10470,7 +11116,8 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "icu_normalizer_data",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -10493,6 +11140,9 @@
         ],
         "daemon-windows": [
           "compiled_data"
+        ],
+        "halow-appliance-manager": [
+          "compiled_data"
         ]
       },
       "name": "icu_properties",
@@ -10510,7 +11160,8 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "icu_properties_data",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -10532,6 +11183,9 @@
           "baked"
         ],
         "daemon-windows": [
+          "baked"
+        ],
+        "halow-appliance-manager": [
           "baked"
         ]
       },
@@ -10591,6 +11245,11 @@
           "alloc",
           "compiled_data",
           "std"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "compiled_data",
+          "std"
         ]
       },
       "name": "idna",
@@ -10613,6 +11272,9 @@
           "compiled_data"
         ],
         "daemon-windows": [
+          "compiled_data"
+        ],
+        "halow-appliance-manager": [
           "compiled_data"
         ]
       },
@@ -10830,6 +11492,12 @@
         "esp32-s3-tbeam": [
           "block-padding"
         ],
+        "halow-appliance-manager": [
+          "block-padding"
+        ],
+        "halow-headless": [
+          "block-padding"
+        ],
         "host-c-linux": [
           "block-padding"
         ],
@@ -10985,6 +11653,12 @@
         ],
         "daemon-windows": [
           "default"
+        ],
+        "halow-appliance-manager": [
+          "default"
+        ],
+        "halow-headless": [
+          "default"
         ]
       },
       "name": "is_terminal_polyfill",
@@ -11056,6 +11730,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": []
@@ -11225,6 +11901,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -11366,6 +12044,9 @@
         "esp32-s3-tbeam": [
           "rust-allocator"
         ],
+        "halow-headless": [
+          "rust-allocator"
+        ],
         "host-c-linux": [
           "rust-allocator"
         ],
@@ -11463,6 +12144,11 @@
           "extra_traits",
           "std"
         ],
+        "halow-appliance-manager": [
+          "default",
+          "extra_traits",
+          "std"
+        ],
         "ios": [
           "default",
           "extra_traits",
@@ -11482,6 +12168,11 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default",
+          "extra_traits",
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "extra_traits",
@@ -11627,6 +12318,28 @@
           "std",
           "xdp"
         ],
+        "halow-appliance-manager": [
+          "auxvec",
+          "default",
+          "elf",
+          "errno",
+          "general",
+          "if_ether",
+          "ioctl",
+          "net",
+          "netlink",
+          "no_std",
+          "std",
+          "xdp"
+        ],
+        "halow-headless": [
+          "auxvec",
+          "elf",
+          "errno",
+          "general",
+          "ioctl",
+          "no_std"
+        ],
         "host-c-linux": [
           "auxvec",
           "default",
@@ -11657,7 +12370,8 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "litemap",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -11679,12 +12393,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -11881,6 +12597,21 @@
     },
     {
       "graphs": {
+        "halow-headless": []
+      },
+      "name": "log",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 3,
+        "externs": 0,
+        "functions": 2,
+        "impls": 1,
+        "tokens": 6
+      },
+      "version": "0.4.34"
+    },
+    {
+      "graphs": {
         "android": [
           "default",
           "std"
@@ -12029,6 +12760,9 @@
         "desktop-windows": [
           "map"
         ],
+        "engine": [
+          "map"
+        ],
         "esp32-c6": [
           "map"
         ],
@@ -12045,6 +12779,9 @@
           "map"
         ],
         "esp32-s3-tbeam": [
+          "map"
+        ],
+        "halow-headless": [
           "map"
         ],
         "host-c-linux": [
@@ -12257,6 +12994,11 @@
           "alloc",
           "default",
           "std"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "std"
         ]
       },
       "name": "memchr",
@@ -12375,6 +13117,10 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "alloc",
+          "std"
+        ],
         "host-c-linux": [
           "alloc",
           "default",
@@ -12435,6 +13181,21 @@
     },
     {
       "graphs": {
+        "halow-appliance-manager": []
+      },
+      "name": "minisign-verify",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 5,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 5
+      },
+      "version": "0.2.5"
+    },
+    {
+      "graphs": {
         "daemon-macos": [
           "default",
           "simd",
@@ -12455,6 +13216,11 @@
         ],
         "desktop-windows": [
           "default",
+          "simd",
+          "simd-adler32",
+          "with-alloc"
+        ],
+        "halow-appliance-manager": [
           "simd",
           "simd-adler32",
           "with-alloc"
@@ -12510,6 +13276,11 @@
           "os-poll"
         ],
         "desktop-windows": [
+          "net",
+          "os-ext",
+          "os-poll"
+        ],
+        "engine": [
           "net",
           "os-ext",
           "os-poll"
@@ -12594,6 +13365,25 @@
         "tokens": 154
       },
       "version": "1.2.2"
+    },
+    {
+      "graphs": {
+        "halow-headless": [
+          "net",
+          "os-ext",
+          "os-poll"
+        ]
+      },
+      "name": "mio",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 105,
+        "externs": 0,
+        "functions": 28,
+        "impls": 21,
+        "tokens": 154
+      },
+      "version": "1.2.3"
     },
     {
       "graphs": {
@@ -12684,6 +13474,7 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [
           "unstable"
         ],
@@ -12702,6 +13493,7 @@
         "esp32-s3-tbeam": [
           "unstable"
         ],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -12730,12 +13522,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -12985,6 +13779,10 @@
           "sched",
           "signal",
           "time"
+        ],
+        "halow-headless": [
+          "process",
+          "sched"
         ],
         "host-c-linux": [
           "process",
@@ -13308,6 +14106,10 @@
           "std"
         ],
         "esp32-s3-tbeam": [
+          "default",
+          "std"
+        ],
+        "halow-appliance-manager": [
           "default",
           "std"
         ],
@@ -15255,6 +16057,17 @@
           "race",
           "std"
         ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "race",
+          "std"
+        ],
+        "halow-headless": [
+          "alloc",
+          "race",
+          "std"
+        ],
         "host-c-linux": [
           "alloc",
           "default",
@@ -15500,6 +16313,11 @@
         "daemon-windows": [
           "alloc",
           "std"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "std"
         ]
       },
       "name": "percent-encoding",
@@ -15527,6 +16345,21 @@
         "functions": 0,
         "impls": 0,
         "tokens": 22
+      },
+      "version": "0.1.0"
+    },
+    {
+      "graphs": {
+        "halow-appliance-manager": []
+      },
+      "name": "personal-hopspot-appliance",
+      "source": "personal-hopspot/appliance",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
       },
       "version": "0.1.0"
     },
@@ -15582,6 +16415,10 @@
           "display",
           "embedded",
           "remote-control-pairing"
+        ],
+        "halow-headless": [
+          "compact-node-pages",
+          "host"
         ],
         "ios": [
           "display",
@@ -15728,6 +16565,23 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default"
+        ]
+      },
+      "name": "personal-hopspot-headless",
+      "source": "personal-hopspot/headless",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "0.1.0"
+    },
+    {
+      "graphs": {
         "ios": [
           "default"
         ]
@@ -15751,6 +16605,9 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [
+          "linker-addresses"
+        ],
         "nrf52840": []
       },
       "name": "personal-hopspot-memory",
@@ -15809,6 +16666,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto",
           "wifi-auto-mdns"
         ],
@@ -15840,6 +16698,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto",
           "wifi-auto-mdns"
         ],
@@ -15871,6 +16730,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto",
           "wifi-auto-mdns"
         ],
@@ -15932,7 +16792,9 @@
           "resource-work-offload",
           "std",
           "std-sync-host",
-          "tokio-host"
+          "tcp",
+          "tokio-host",
+          "wifi-halow"
         ],
         "esp32-c6": [
           "alloc",
@@ -16018,6 +16880,13 @@
           "usb",
           "wifi-auto"
         ],
+        "halow-headless": [
+          "alloc",
+          "flash",
+          "std",
+          "tcp",
+          "tokio-host"
+        ],
         "host-c-linux": [
           "alloc",
           "ax25",
@@ -16039,6 +16908,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto"
         ],
         "host-c-macos": [
@@ -16062,6 +16932,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto"
         ],
         "host-c-windows": [
@@ -16085,6 +16956,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto"
         ],
         "ios": [
@@ -16175,6 +17047,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -16235,6 +17108,12 @@
           "alloc"
         ],
         "esp32-s3-tbeam": [
+          "alloc"
+        ],
+        "halow-appliance-manager": [
+          "alloc"
+        ],
+        "halow-headless": [
           "alloc"
         ],
         "host-c-linux": [
@@ -16332,43 +17211,57 @@
         "android": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "daemon-linux": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "daemon-macos": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "daemon-windows": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "desktop-linux": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "desktop-macos": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "desktop-windows": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
+        ],
+        "engine": [
+          "critical-section",
+          "default",
+          "fallback",
+          "std"
         ],
         "esp32-c6": [
           "critical-section",
           "default",
           "fallback",
           "require-cas",
+          "std",
           "unsafe-assume-single-core"
         ],
         "esp32-s3-heltec": [
@@ -16376,6 +17269,7 @@
           "default",
           "fallback",
           "require-cas",
+          "std",
           "unsafe-assume-single-core"
         ],
         "esp32-s3-heltec-e290": [
@@ -16383,6 +17277,7 @@
           "default",
           "fallback",
           "require-cas",
+          "std",
           "unsafe-assume-single-core"
         ],
         "esp32-s3-heltec-r8": [
@@ -16390,6 +17285,7 @@
           "default",
           "fallback",
           "require-cas",
+          "std",
           "unsafe-assume-single-core"
         ],
         "esp32-s3-heltec-wireless-stick-lite-v3": [
@@ -16397,6 +17293,7 @@
           "default",
           "fallback",
           "require-cas",
+          "std",
           "unsafe-assume-single-core"
         ],
         "esp32-s3-tbeam": [
@@ -16404,17 +17301,20 @@
           "default",
           "fallback",
           "require-cas",
+          "std",
           "unsafe-assume-single-core"
         ],
         "ios": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "nrf52840": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ]
       },
       "name": "portable-atomic",
@@ -16433,17 +17333,20 @@
         "host-c-linux": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "host-c-macos": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ],
         "host-c-windows": [
           "critical-section",
           "default",
-          "fallback"
+          "fallback",
+          "std"
         ]
       },
       "name": "portable-atomic",
@@ -16456,6 +17359,26 @@
         "tokens": 642
       },
       "version": "1.14.0"
+    },
+    {
+      "graphs": {
+        "halow-headless": [
+          "critical-section",
+          "default",
+          "fallback",
+          "std"
+        ]
+      },
+      "name": "portable-atomic",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 312,
+        "externs": 2,
+        "functions": 298,
+        "impls": 16,
+        "tokens": 628
+      },
+      "version": "1.15.0"
     },
     {
       "graphs": {
@@ -16519,6 +17442,9 @@
         ],
         "daemon-windows": [
           "zerovec"
+        ],
+        "halow-appliance-manager": [
+          "zerovec"
         ]
       },
       "name": "potential_utf",
@@ -16566,6 +17492,14 @@
           "std"
         ],
         "engine": [
+          "simd",
+          "std"
+        ],
+        "halow-appliance-manager": [
+          "simd",
+          "std"
+        ],
+        "halow-headless": [
           "simd",
           "std"
         ],
@@ -16815,6 +17749,32 @@
           "std",
           "tokio-host"
         ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "ed25519-batch",
+          "embassy-host",
+          "flash",
+          "large-static-responses",
+          "movable-frame-forwarding",
+          "resource-work-offload",
+          "rns-management-wire",
+          "std",
+          "std-sync-host",
+          "test-support",
+          "tokio-host"
+        ],
+        "halow-headless": [
+          "alloc",
+          "ed25519-batch",
+          "embassy-host",
+          "flash",
+          "movable-frame-forwarding",
+          "resource-work-offload",
+          "rns-management-wire",
+          "std",
+          "tokio-host"
+        ],
         "host-c-linux": [
           "alloc",
           "ed25519-batch",
@@ -16908,10 +17868,16 @@
         "android": [
           "log"
         ],
+        "daemon-linux": [
+          "log"
+        ],
         "daemon-macos": [
           "log"
         ],
         "daemon-windows": [
+          "log"
+        ],
+        "desktop-linux": [
           "log"
         ],
         "desktop-macos": [
@@ -16920,6 +17886,10 @@
         "desktop-windows": [
           "log"
         ],
+        "engine": [
+          "linux-packet"
+        ],
+        "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
         "ios": [
@@ -16929,13 +17899,28 @@
       "name": "prns-ffi",
       "source": "prns-ffi",
       "unsafe": {
-        "blocks": 153,
+        "blocks": 173,
         "externs": 7,
         "functions": 0,
         "impls": 21,
-        "tokens": 213
+        "tokens": 233
       },
       "version": "0.3.7"
+    },
+    {
+      "graphs": {
+        "halow-appliance-manager": []
+      },
+      "name": "prns-flash-manifest",
+      "source": "prns-flash-manifest",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "0.1.0"
     },
     {
       "graphs": {
@@ -17071,6 +18056,11 @@
           "usb",
           "wifi-auto"
         ],
+        "engine": [
+          "bluetooth-auto",
+          "lora",
+          "tcp"
+        ],
         "esp32-c6": [
           "bluetooth-auto",
           "bluetooth-auto-trouble",
@@ -17136,6 +18126,9 @@
           "tcp-dns",
           "usb",
           "wifi-auto"
+        ],
+        "halow-headless": [
+          "tcp"
         ],
         "host-c-linux": [
           "bluetooth-auto",
@@ -17214,6 +18207,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto",
           "wifi-auto-mdns"
         ],
@@ -17239,6 +18233,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto",
           "wifi-auto-mdns"
         ],
@@ -17264,6 +18259,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto",
           "wifi-auto-mdns"
         ],
@@ -17307,7 +18303,9 @@
           "wifi-auto-apple"
         ],
         "engine": [
-          "bluetooth-auto-runtime"
+          "bluetooth-auto-runtime",
+          "tcp",
+          "wifi-halow"
         ],
         "esp32-c6": [
           "bluetooth-auto",
@@ -17369,6 +18367,9 @@
           "usb",
           "wifi-auto"
         ],
+        "halow-headless": [
+          "tcp"
+        ],
         "host-c-linux": [
           "ax25",
           "backbone",
@@ -17387,6 +18388,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto"
         ],
         "host-c-macos": [
@@ -17407,6 +18409,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto"
         ],
         "host-c-windows": [
@@ -17427,6 +18430,7 @@
           "usb",
           "weave",
           "websocket",
+          "websocket-server",
           "wifi-auto"
         ],
         "ios": [
@@ -17472,6 +18476,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -17642,6 +18648,12 @@
           "resource-bzip2",
           "std"
         ],
+        "halow-headless": [
+          "alloc",
+          "movable-frame-forwarding",
+          "resource-bzip2",
+          "std"
+        ],
         "host-c-linux": [
           "alloc",
           "interface-discovery",
@@ -17725,6 +18737,9 @@
         "desktop-windows": [
           "log"
         ],
+        "engine": [
+          "large-static-responses"
+        ],
         "esp32-c6": [
           "alloc",
           "log"
@@ -17749,6 +18764,7 @@
           "alloc",
           "log"
         ],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -17822,6 +18838,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [
           "interface-discovery",
           "parallel-persistence",
@@ -18063,6 +19080,10 @@
           "default",
           "proc-macro"
         ],
+        "halow-appliance-manager": [
+          "default",
+          "proc-macro"
+        ],
         "ios": [
           "default",
           "proc-macro"
@@ -18093,6 +19114,10 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default",
+          "proc-macro"
+        ],
         "host-c-linux": [
           "default",
           "proc-macro"
@@ -18157,6 +19182,16 @@
           "std",
           "tempfile",
           "timeout"
+        ],
+        "halow-appliance-manager": [
+          "bit-set",
+          "default",
+          "fork",
+          "regex-syntax",
+          "rusty-fork",
+          "std",
+          "tempfile",
+          "timeout"
         ]
       },
       "name": "proptest",
@@ -18208,7 +19243,8 @@
     },
     {
       "graphs": {
-        "engine": []
+        "engine": [],
+        "halow-appliance-manager": []
       },
       "name": "quick-error",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -18290,6 +19326,10 @@
           "default",
           "proc-macro"
         ],
+        "halow-appliance-manager": [
+          "default",
+          "proc-macro"
+        ],
         "ios": [
           "default",
           "proc-macro"
@@ -18346,6 +19386,10 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default",
+          "proc-macro"
+        ],
         "host-c-linux": [
           "default",
           "proc-macro"
@@ -18396,6 +19440,11 @@
           "alloc",
           "os_rng",
           "std"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "os_rng",
+          "std"
         ]
       },
       "name": "rand",
@@ -18430,6 +19479,15 @@
           "thread_rng"
         ],
         "daemon-windows": [
+          "alloc",
+          "default",
+          "os_rng",
+          "small_rng",
+          "std",
+          "std_rng",
+          "thread_rng"
+        ],
+        "halow-headless": [
           "alloc",
           "default",
           "os_rng",
@@ -18491,6 +19549,12 @@
         "engine": [
           "std"
         ],
+        "halow-appliance-manager": [
+          "std"
+        ],
+        "halow-headless": [
+          "std"
+        ],
         "host-c-linux": [
           "std"
         ],
@@ -18528,6 +19592,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -18602,6 +19668,14 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [
+          "os_rng",
+          "std"
+        ],
+        "halow-headless": [
+          "os_rng",
+          "std"
+        ],
         "host-c-linux": [
           "os_rng",
           "std"
@@ -18629,7 +19703,8 @@
     },
     {
       "graphs": {
-        "engine": []
+        "engine": [],
+        "halow-appliance-manager": []
       },
       "name": "rand_xorshift",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -18855,6 +19930,18 @@
           "unicode-perl",
           "unicode-script",
           "unicode-segment"
+        ],
+        "halow-appliance-manager": [
+          "default",
+          "std",
+          "unicode",
+          "unicode-age",
+          "unicode-bool",
+          "unicode-case",
+          "unicode-gencat",
+          "unicode-perl",
+          "unicode-script",
+          "unicode-segment"
         ]
       },
       "name": "regex-syntax",
@@ -19060,6 +20147,10 @@
           "default",
           "std"
         ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
+        ],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": []
@@ -19077,7 +20168,8 @@
     },
     {
       "graphs": {
-        "engine": []
+        "engine": [],
+        "halow-appliance-manager": []
       },
       "name": "rmpv",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -19106,6 +20198,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -19140,6 +20234,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -19188,6 +20283,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -19253,6 +20350,16 @@
           "std",
           "time"
         ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "event",
+          "fs",
+          "mm",
+          "net",
+          "std",
+          "time"
+        ],
         "host-c-linux": [
           "alloc",
           "default",
@@ -19290,6 +20397,26 @@
         "tokens": 1592
       },
       "version": "1.1.4"
+    },
+    {
+      "graphs": {
+        "halow-headless": [
+          "alloc",
+          "default",
+          "fs",
+          "std"
+        ]
+      },
+      "name": "rustix",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 1050,
+        "externs": 8,
+        "functions": 510,
+        "impls": 22,
+        "tokens": 1592
+      },
+      "version": "1.1.5"
     },
     {
       "graphs": {
@@ -19480,6 +20607,10 @@
     {
       "graphs": {
         "engine": [
+          "timeout",
+          "wait-timeout"
+        ],
+        "halow-appliance-manager": [
           "timeout",
           "wait-timeout"
         ]
@@ -19795,6 +20926,14 @@
           "default",
           "std"
         ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
+        ],
+        "halow-headless": [
+          "default",
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "std"
@@ -19946,6 +21085,13 @@
           "serde_derive",
           "std"
         ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "derive",
+          "serde_derive",
+          "std"
+        ],
         "ios": [
           "alloc",
           "default",
@@ -19974,6 +21120,9 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "alloc"
+        ],
         "host-c-linux": [
           "alloc",
           "default",
@@ -20117,6 +21266,12 @@
           "result",
           "std"
         ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "result",
+          "std"
+        ],
         "ios": [
           "alloc",
           "result",
@@ -20141,6 +21296,11 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "alloc",
+          "result",
+          "std"
+        ],
         "host-c-linux": [
           "alloc",
           "result",
@@ -20212,6 +21372,9 @@
         "esp32-s3-tbeam": [
           "default"
         ],
+        "halow-appliance-manager": [
+          "default"
+        ],
         "ios": [
           "default"
         ],
@@ -20274,6 +21437,10 @@
         "engine": [
           "default",
           "std"
+        ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
         ]
       },
       "name": "serde_json",
@@ -20289,6 +21456,10 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default",
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "std"
@@ -20446,6 +21617,10 @@
           "default",
           "std"
         ],
+        "halow-headless": [
+          "default",
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "std"
@@ -20481,6 +21656,10 @@
           "std"
         ],
         "daemon-windows": [
+          "default",
+          "std"
+        ],
+        "halow-appliance-manager": [
           "default",
           "std"
         ]
@@ -20541,6 +21720,15 @@
           "zeroize"
         ],
         "esp32-s3-tbeam": [
+          "zeroize"
+        ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "oid",
+          "zeroize"
+        ],
+        "halow-headless": [
           "zeroize"
         ],
         "host-c-linux": [
@@ -20688,6 +21876,7 @@
         "daemon-macos": [],
         "desktop-linux": [],
         "desktop-macos": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": []
       },
@@ -20760,6 +21949,14 @@
           "alloc",
           "rand_core"
         ],
+        "halow-appliance-manager": [
+          "alloc",
+          "rand_core"
+        ],
+        "halow-headless": [
+          "alloc",
+          "rand_core"
+        ],
         "host-c-linux": [
           "alloc",
           "rand_core"
@@ -20799,7 +21996,8 @@
           "const-generics",
           "default",
           "std"
-        ]
+        ],
+        "halow-appliance-manager": []
       },
       "name": "simd-adler32",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -20899,6 +22097,9 @@
           "default",
           "std"
         ],
+        "halow-headless": [
+          "std"
+        ],
         "host-c-linux": [
           "default",
           "std"
@@ -20971,6 +22172,9 @@
           "const_generics"
         ],
         "daemon-windows": [
+          "const_generics"
+        ],
+        "halow-appliance-manager": [
           "const_generics"
         ],
         "host-c-linux": [],
@@ -21082,6 +22286,15 @@
           "socket-tcp",
           "socket-udp"
         ],
+        "engine": [
+          "async",
+          "medium-ethernet",
+          "multicast",
+          "proto-ipv6",
+          "socket",
+          "socket-tcp",
+          "socket-udp"
+        ],
         "esp32-c6": [
           "async",
           "medium-ethernet",
@@ -21163,6 +22376,15 @@
           "socket",
           "socket-dhcpv4",
           "socket-dns",
+          "socket-tcp",
+          "socket-udp"
+        ],
+        "halow-headless": [
+          "async",
+          "medium-ethernet",
+          "multicast",
+          "proto-ipv6",
+          "socket",
           "socket-tcp",
           "socket-udp"
         ],
@@ -21258,6 +22480,9 @@
         "desktop-windows": [
           "all"
         ],
+        "engine": [
+          "all"
+        ],
         "esp32-c6": [
           "all"
         ],
@@ -21296,6 +22521,9 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "all"
+        ],
         "host-c-linux": [
           "all"
         ],
@@ -21448,6 +22676,12 @@
         "esp32-s3-tbeam": [
           "alloc"
         ],
+        "halow-appliance-manager": [
+          "alloc"
+        ],
+        "halow-headless": [
+          "alloc"
+        ],
         "host-c-linux": [
           "alloc"
         ],
@@ -21548,6 +22782,11 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [
+          "alloc",
+          "std"
+        ],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -21575,6 +22814,7 @@
         "desktop-macos": [],
         "desktop-windows": [],
         "engine": [],
+        "halow-appliance-manager": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": []
@@ -21599,12 +22839,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -21666,6 +22908,12 @@
         "esp32-s3-tbeam": [
           "default"
         ],
+        "halow-appliance-manager": [
+          "default"
+        ],
+        "halow-headless": [
+          "default"
+        ],
         "host-c-linux": [
           "default"
         ],
@@ -21723,6 +22971,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "nrf52840": []
       },
@@ -21886,6 +23136,12 @@
           "const-generics"
         ],
         "esp32-s3-tbeam": [
+          "const-generics"
+        ],
+        "halow-appliance-manager": [
+          "const-generics"
+        ],
+        "halow-headless": [
           "const-generics"
         ],
         "host-c-linux": [
@@ -22186,6 +23442,19 @@
           "visit",
           "visit-mut"
         ],
+        "halow-appliance-manager": [
+          "clone-impls",
+          "default",
+          "derive",
+          "extra-traits",
+          "fold",
+          "full",
+          "parsing",
+          "printing",
+          "proc-macro",
+          "visit",
+          "visit-mut"
+        ],
         "ios": [
           "clone-impls",
           "default",
@@ -22302,6 +23571,17 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "clone-impls",
+          "default",
+          "derive",
+          "extra-traits",
+          "full",
+          "parsing",
+          "printing",
+          "proc-macro",
+          "visit"
+        ],
         "host-c-linux": [
           "clone-impls",
           "default",
@@ -22438,6 +23718,29 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "clone-impls",
+          "default",
+          "derive",
+          "full",
+          "parsing",
+          "printing",
+          "proc-macro"
+        ]
+      },
+      "name": "syn",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 39,
+        "externs": 0,
+        "functions": 2,
+        "impls": 3,
+        "tokens": 78
+      },
+      "version": "3.0.6"
+    },
+    {
+      "graphs": {
         "daemon-linux": [
           "default",
           "proc-macro"
@@ -22451,6 +23754,10 @@
           "proc-macro"
         ],
         "desktop-linux": [
+          "default",
+          "proc-macro"
+        ],
+        "halow-appliance-manager": [
           "default",
           "proc-macro"
         ],
@@ -22504,6 +23811,14 @@
           "getrandom"
         ],
         "engine": [
+          "default",
+          "getrandom"
+        ],
+        "halow-appliance-manager": [
+          "default",
+          "getrandom"
+        ],
+        "halow-headless": [
           "default",
           "getrandom"
         ],
@@ -22592,6 +23907,10 @@
           "default",
           "std"
         ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
+        ],
         "nrf-dfu-browser": [
           "default",
           "std"
@@ -22636,6 +23955,24 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "default",
+          "std"
+        ]
+      },
+      "name": "thiserror",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "2.0.20"
+    },
+    {
+      "graphs": {
         "android": []
       },
       "name": "thiserror-impl",
@@ -22656,6 +23993,7 @@
         "daemon-windows": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "halow-appliance-manager": [],
         "nrf-dfu-browser": []
       },
       "name": "thiserror-impl",
@@ -22685,6 +24023,21 @@
         "tokens": 0
       },
       "version": "2.0.19"
+    },
+    {
+      "graphs": {
+        "halow-headless": []
+      },
+      "name": "thiserror-impl",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "2.0.20"
     },
     {
       "graphs": {
@@ -22877,6 +24230,9 @@
         ],
         "daemon-windows": [
           "zerovec"
+        ],
+        "halow-appliance-manager": [
+          "zerovec"
         ]
       },
       "name": "tinystr",
@@ -23042,13 +24398,18 @@
           "bytes",
           "fs",
           "io-util",
+          "libc",
           "macros",
+          "mio",
+          "net",
           "rt",
           "rt-multi-thread",
+          "socket2",
           "sync",
           "test-util",
           "time",
-          "tokio-macros"
+          "tokio-macros",
+          "windows-sys"
         ],
         "esp32-c6": [
           "bytes",
@@ -23193,6 +24554,25 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "bytes",
+          "default",
+          "fs",
+          "io-util",
+          "libc",
+          "macros",
+          "mio",
+          "net",
+          "process",
+          "rt",
+          "signal",
+          "signal-hook-registry",
+          "socket2",
+          "sync",
+          "time",
+          "tokio-macros",
+          "windows-sys"
+        ],
         "host-c-linux": [
           "bytes",
           "default",
@@ -23308,6 +24688,21 @@
         "tokens": 0
       },
       "version": "2.7.1"
+    },
+    {
+      "graphs": {
+        "halow-headless": []
+      },
+      "name": "tokio-macros",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 0,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 0
+      },
+      "version": "2.7.2"
     },
     {
       "graphs": {
@@ -23431,6 +24826,11 @@
           "rustls-tls-native-roots",
           "stream",
           "tokio-rustls"
+        ],
+        "halow-headless": [
+          "connect",
+          "handshake",
+          "stream"
         ],
         "host-c-linux": [
           "__rustls-tls",
@@ -24327,6 +25727,13 @@
           "rustls-pki-types",
           "sha1"
         ],
+        "halow-headless": [
+          "data-encoding",
+          "handshake",
+          "http",
+          "httparse",
+          "sha1"
+        ],
         "host-c-linux": [
           "__rustls-tls",
           "data-encoding",
@@ -24372,6 +25779,9 @@
     {
       "graphs": {
         "engine": [
+          "const-generics"
+        ],
+        "halow-appliance-manager": [
           "const-generics"
         ]
       },
@@ -24425,6 +25835,9 @@
           "const-generics"
         ],
         "esp32-s3-tbeam": [
+          "const-generics"
+        ],
+        "halow-headless": [
           "const-generics"
         ],
         "host-c-linux": [
@@ -24494,7 +25907,8 @@
     },
     {
       "graphs": {
-        "engine": []
+        "engine": [],
+        "halow-appliance-manager": []
       },
       "name": "unarray",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -24542,6 +25956,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -24560,6 +25975,21 @@
         "tokens": 2
       },
       "version": "1.0.24"
+    },
+    {
+      "graphs": {
+        "halow-headless": []
+      },
+      "name": "unicode-ident",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 2,
+        "externs": 0,
+        "functions": 0,
+        "impls": 0,
+        "tokens": 2
+      },
+      "version": "1.0.26"
     },
     {
       "graphs": {
@@ -24679,6 +26109,10 @@
         "daemon-windows": [
           "default",
           "std"
+        ],
+        "halow-appliance-manager": [
+          "default",
+          "std"
         ]
       },
       "name": "url",
@@ -24763,6 +26197,7 @@
         "daemon-linux": [],
         "daemon-macos": [],
         "daemon-windows": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": []
@@ -24782,7 +26217,8 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "utf8_iter",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -24804,6 +26240,12 @@
           "default"
         ],
         "daemon-windows": [
+          "default"
+        ],
+        "halow-appliance-manager": [
+          "default"
+        ],
+        "halow-headless": [
           "default"
         ]
       },
@@ -25036,6 +26478,8 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -25063,12 +26507,14 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "engine": [],
         "esp32-c6": [],
         "esp32-s3-heltec": [],
         "esp32-s3-heltec-e290": [],
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -25103,7 +26549,8 @@
     },
     {
       "graphs": {
-        "engine": []
+        "engine": [],
+        "halow-appliance-manager": []
       },
       "name": "wait-timeout",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -26076,7 +27523,8 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "writeable",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -26144,6 +27592,14 @@
           "static_secrets"
         ],
         "esp32-s3-tbeam": [
+          "precomputed-tables",
+          "static_secrets"
+        ],
+        "halow-appliance-manager": [
+          "precomputed-tables",
+          "static_secrets"
+        ],
+        "halow-headless": [
           "precomputed-tables",
           "static_secrets"
         ],
@@ -26313,6 +27769,10 @@
         "daemon-windows": [
           "derive",
           "zerofrom"
+        ],
+        "halow-appliance-manager": [
+          "derive",
+          "zerofrom"
         ]
       },
       "name": "yoke",
@@ -26330,7 +27790,8 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "yoke-derive",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -26402,6 +27863,9 @@
     {
       "graphs": {
         "engine": [
+          "simd"
+        ],
+        "halow-appliance-manager": [
           "simd"
         ],
         "nrf52840": [
@@ -26495,6 +27959,23 @@
     },
     {
       "graphs": {
+        "halow-headless": [
+          "simd"
+        ]
+      },
+      "name": "zerocopy",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "unsafe": {
+        "blocks": 295,
+        "externs": 1,
+        "functions": 58,
+        "impls": 107,
+        "tokens": 560
+      },
+      "version": "0.8.57"
+    },
+    {
+      "graphs": {
         "nrf52840": []
       },
       "name": "zerocopy-derive",
@@ -26518,6 +27999,9 @@
         ],
         "daemon-windows": [
           "derive"
+        ],
+        "halow-appliance-manager": [
+          "derive"
         ]
       },
       "name": "zerofrom",
@@ -26535,7 +28019,8 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "zerofrom-derive",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -26616,6 +28101,12 @@
           "derive",
           "zeroize_derive"
         ],
+        "halow-appliance-manager": [
+          "alloc",
+          "default",
+          "derive",
+          "zeroize_derive"
+        ],
         "ios": [
           "alloc",
           "default",
@@ -26655,6 +28146,12 @@
           "zeroize_derive"
         ],
         "desktop-windows": [
+          "alloc",
+          "default",
+          "derive",
+          "zeroize_derive"
+        ],
+        "halow-headless": [
           "alloc",
           "default",
           "derive",
@@ -26708,6 +28205,7 @@
         "esp32-s3-heltec-r8": [],
         "esp32-s3-heltec-wireless-stick-lite-v3": [],
         "esp32-s3-tbeam": [],
+        "halow-appliance-manager": [],
         "ios": [],
         "nrf52840": []
       },
@@ -26727,6 +28225,7 @@
         "desktop-linux": [],
         "desktop-macos": [],
         "desktop-windows": [],
+        "halow-headless": [],
         "host-c-linux": [],
         "host-c-macos": [],
         "host-c-windows": [],
@@ -26756,6 +28255,10 @@
         "daemon-windows": [
           "yoke",
           "zerofrom"
+        ],
+        "halow-appliance-manager": [
+          "yoke",
+          "zerofrom"
         ]
       },
       "name": "zerotrie",
@@ -26782,6 +28285,10 @@
         "daemon-windows": [
           "derive",
           "yoke"
+        ],
+        "halow-appliance-manager": [
+          "derive",
+          "yoke"
         ]
       },
       "name": "zerovec",
@@ -26799,7 +28306,8 @@
       "graphs": {
         "daemon-linux": [],
         "daemon-macos": [],
-        "daemon-windows": []
+        "daemon-windows": [],
+        "halow-appliance-manager": []
       },
       "name": "zerovec-derive",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -26815,7 +28323,8 @@
     {
       "graphs": {
         "desktop-linux": [],
-        "engine": []
+        "engine": [],
+        "halow-appliance-manager": []
       },
       "name": "zmij",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -26833,6 +28342,7 @@
         "daemon-linux": [],
         "daemon-macos": [],
         "daemon-windows": [],
+        "halow-headless": [],
         "host-c-linux": []
       },
       "name": "zmij",

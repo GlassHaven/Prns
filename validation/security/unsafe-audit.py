@@ -41,6 +41,16 @@ GRAPHS = (
     ("desktop-linux", "personal-hopspot/desktop/Cargo.toml", "x86_64-unknown-linux-gnu"),
     ("desktop-macos", "personal-hopspot/desktop/Cargo.toml", "aarch64-apple-darwin"),
     ("desktop-windows", "personal-hopspot/desktop/Cargo.toml", "x86_64-pc-windows-msvc"),
+    (
+        "halow-headless",
+        "personal-hopspot/headless/Cargo.toml",
+        "mipsel-unknown-linux-musl",
+    ),
+    (
+        "halow-appliance-manager",
+        "personal-hopspot/appliance/Cargo.toml",
+        "mipsel-unknown-linux-musl",
+    ),
     ("android", "personal-hopspot/mobile/android/rust/Cargo.toml", "aarch64-linux-android"),
     ("ios", "personal-hopspot/mobile/ios/rust/Cargo.toml", "aarch64-apple-ios"),
     ("nrf52840", "personal-hopspot/embedded/nrf52840/Cargo.toml", "thumbv7em-none-eabihf"),
