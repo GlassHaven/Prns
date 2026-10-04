@@ -29,7 +29,10 @@ const MEMORY: NrfFirmwareMemory = NrfFirmwareMemory::new(MEMORY_PROFILE);
 pub(crate) const JOURNAL_LAYOUT: personal_rns::persistence::FlashJournalLayout =
     MEMORY.journal_layout();
 pub(crate) const USB_MANUFACTURER: &str = "Stay Personal";
+#[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
 pub(crate) const USB_PRODUCT: &str = "Personal Hopspot (Wio Tracker L1)";
+#[cfg(feature = "wio-tracker-l1-pro-1w")]
+pub(crate) const USB_PRODUCT: &str = "Personal Hopspot (Wio Tracker L1 Pro 1W)";
 pub(crate) const USB_SERIAL_NUMBER: &str = "PERSONAL-RNS-WIO-L1-HOP";
 pub(crate) const USB_INTERFACE_ID: InterfaceId = InterfaceId::new(*b"wiol1usb");
 pub(crate) const RADIO_PROFILE_PAGES: [u32; 2] = MEMORY.two_flash_pages(RegionRole::RadioProfile);
@@ -37,5 +40,12 @@ pub(crate) const NODE_IDENTITY_FLASH_OFFSET: u32 = MEMORY.flash_offset(RegionRol
 pub(crate) const BLE_IDENTITY_FLASH_OFFSET: u32 = MEMORY.flash_offset(RegionRole::BleIdentity);
 pub(crate) const REMOTE_CONTROL_IDENTITY_FLASH: super::RemoteControlIdentityFlash =
     super::RemoteControlIdentityFlash::at(MEMORY.flash_offset(RegionRole::RemoteControlIdentity));
+#[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
 pub(crate) const ANNOUNCE_APP_DATA: &[u8] = b"\x92\xc4\x1fPersonal Hopspot Wio Tracker L1\xc0";
+#[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
 pub(crate) const NODE_ANNOUNCE_APP_DATA: &[u8] = b"Personal Hopspot Wio Tracker L1";
+#[cfg(feature = "wio-tracker-l1-pro-1w")]
+pub(crate) const ANNOUNCE_APP_DATA: &[u8] =
+    b"\x92\xc4\x26Personal Hopspot Wio Tracker L1 Pro 1W\xc0";
+#[cfg(feature = "wio-tracker-l1-pro-1w")]
+pub(crate) const NODE_ANNOUNCE_APP_DATA: &[u8] = b"Personal Hopspot Wio Tracker L1 Pro 1W";
