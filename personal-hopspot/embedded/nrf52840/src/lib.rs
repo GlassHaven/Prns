@@ -103,6 +103,12 @@ compile_error!("Wio Tracker L1 requires softdevice-s140-v7; its UF2 bootloader s
 #[cfg(all(feature = "board-wio-tracker-l1", feature = "softdevice-s140-v6"))]
 compile_error!("Wio Tracker L1 does not support S140 6.x");
 
+#[cfg(all(
+    feature = "wio-tracker-l1-pro-1w",
+    not(feature = "board-wio-tracker-l1")
+))]
+compile_error!("wio-tracker-l1-pro-1w requires board-wio-tracker-l1");
+
 #[cfg(all(feature = "softdevice-s140-v6", feature = "softdevice-s140-v7"))]
 compile_error!("S140 compatibility features are mutually exclusive");
 

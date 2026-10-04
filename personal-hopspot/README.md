@@ -105,6 +105,11 @@ bootloader. Double-tap reset and copy the UF2 onto the bootloader drive:
 
     ./tools/prns build hopspot wio-tracker-l1
 
+The L1 Pro 1W has its own build, which powers the radio's 1 W amplifier rail
+and maps requested output power through the amplifier's gain curve:
+
+    ./tools/prns build hopspot wio-tracker-l1-pro-1w
+
 ## Local developer web flasher
 
 Build and serve the current working tree for one or more cataloged boards with:

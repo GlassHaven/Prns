@@ -12,7 +12,9 @@ use personal_hopspot_core::face_64x128::{
 use crate::boards::DisplayIoError;
 use crate::immediate_display::ImmediateDisplayDevice;
 
-const ADDRESS: u8 = 0x3c;
+/// Seeed has fitted panels strapped to either address; Meshtastic's L1 configuration names 0x3D
+/// while common SSD1306 modules answer at 0x3C, so the first one that ACKs is used.
+const ADDRESSES: [u8; 2] = [0x3d, 0x3c];
 const PANEL_WIDTH: u32 = 128;
 const PANEL_HEIGHT: u32 = 64;
 const PAGES: usize = (PANEL_HEIGHT / 8) as usize;
@@ -106,6 +108,7 @@ impl Controller {
 /// The Wio Tracker L1's 128x64 monochrome OLED on TWIM (SDA P0.06, SCL P0.05).
 pub(crate) struct OledDisplay {
     i2c: Twim<'static>,
+    address: u8,
     controller: Controller,
     page: [[u8; PANEL_WIDTH as usize]; PAGES],
     displayed_frame: Frame,
@@ -117,6 +120,7 @@ impl OledDisplay {
     pub(crate) fn new(i2c: Twim<'static>) -> Self {
         Self {
             i2c,
+            address: ADDRESSES[0],
             controller: Controller::Ssd1306,
             page: [[0; PANEL_WIDTH as usize]; PAGES],
             displayed_frame: Frame::new(),
@@ -156,10 +160,28 @@ impl OledDisplay {
     /// and 0x3..0x7 on SSD1306. An unrecognised value falls back to SSD1306 framing.
     fn probe(&mut self) -> Result<Controller, DisplayIoError> {
         let mut status = [0u8];
+        self.address = ADDRESSES
+            .into_iter()
+            .find(|&address| {
+                self.i2c
+                    .blocking_write_read_timeout(
+                        address,
+                        &[CONTROL_COMMAND],
+                        &mut status,
+                        IO_TIMEOUT,
+                    )
+                    .is_ok()
+            })
+            .ok_or(DisplayIoError::I2c)?;
         let mut previous = None;
         for _ in 0..4 {
             self.i2c
-                .blocking_write_read_timeout(ADDRESS, &[CONTROL_COMMAND], &mut status, IO_TIMEOUT)
+                .blocking_write_read_timeout(
+                    self.address,
+                    &[CONTROL_COMMAND],
+                    &mut status,
+                    IO_TIMEOUT,
+                )
                 .map_err(|_| DisplayIoError::I2c)?;
             let nibble = status[0] & 0x0f;
             if previous == Some(nibble) {
@@ -209,7 +231,7 @@ impl OledDisplay {
             chunk[0] = CONTROL_DATA;
             chunk[1..].copy_from_slice(&self.page[page]);
             self.i2c
-                .blocking_write_timeout(ADDRESS, &chunk, IO_TIMEOUT)
+                .blocking_write_timeout(self.address, &chunk, IO_TIMEOUT)
                 .map_err(|_| DisplayIoError::I2c)?;
         }
         Ok(())
@@ -217,7 +239,7 @@ impl OledDisplay {
 
     fn command(&mut self, command: u8) -> Result<(), DisplayIoError> {
         self.i2c
-            .blocking_write_timeout(ADDRESS, &[CONTROL_COMMAND, command], IO_TIMEOUT)
+            .blocking_write_timeout(self.address, &[CONTROL_COMMAND, command], IO_TIMEOUT)
             .map_err(|_| DisplayIoError::I2c)
     }
 

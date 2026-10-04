@@ -18,6 +18,8 @@ use embassy_sync::blocking_mutex::Mutex;
 use embassy_time::{Delay, Timer};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use personal_rns::lora::LoRaInterface;
+#[cfg(feature = "wio-tracker-l1-pro-1w")]
+use personal_rns::radios::sx126x::ExternalPowerAmplifier;
 use personal_rns::radios::sx126x::{BoardConfig, FrontendControl, Sx126x, TcxoVoltage};
 use static_cell::{ConstStaticCell, StaticCell};
 
@@ -75,7 +77,12 @@ impl WioBattery {
 struct HeldIo {
     _buzzer: Output<'static>,
     _qspi_cs: Output<'static>,
+    #[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
     radio_rx_enable: Output<'static>,
+    #[cfg(feature = "wio-tracker-l1-pro-1w")]
+    _radio_power: Output<'static>,
+    #[cfg(feature = "wio-tracker-l1-pro-1w")]
+    _grove_boost: Output<'static>,
 }
 
 static HELD_IO: Mutex<CriticalSectionRawMutex, RefCell<Option<HeldIo>>> =
@@ -114,12 +121,24 @@ impl WioBoard {
         let buzzer = Output::new(peripherals.P1_00, Level::Low, OutputDrive::Standard);
         let qspi_cs = Output::new(peripherals.P0_25, Level::High, OutputDrive::Standard);
         // The RF switch's receive path is selected by RXEN (P1.08); SX1262 DIO2 drives transmit.
+        #[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
         let radio_rx_enable = Output::new(peripherals.P1_08, Level::Low, OutputDrive::Standard);
+        // Pro 1W: an LDO enabled by P0.14 feeds the SX1262 and its 1 W PA, and DIO2 alone switches
+        // the antenna path. The Grove 5 V boost (P0.13) stays off as in Seeed's shipping state.
+        #[cfg(feature = "wio-tracker-l1-pro-1w")]
+        let radio_power = Output::new(peripherals.P0_14, Level::High, OutputDrive::Standard);
+        #[cfg(feature = "wio-tracker-l1-pro-1w")]
+        let grove_boost = Output::new(peripherals.P0_13, Level::Low, OutputDrive::Standard);
         HELD_IO.lock(|held| {
             *held.borrow_mut() = Some(HeldIo {
                 _buzzer: buzzer,
                 _qspi_cs: qspi_cs,
+                #[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
                 radio_rx_enable,
+                #[cfg(feature = "wio-tracker-l1-pro-1w")]
+                _radio_power: radio_power,
+                #[cfg(feature = "wio-tracker-l1-pro-1w")]
+                _grove_boost: grove_boost,
             });
         });
 
@@ -200,6 +219,8 @@ impl WioBoard {
         let radio_busy = Input::new(peripherals.P1_10, Pull::None);
         let radio_dio1 = Input::new(peripherals.P0_07, Pull::None);
         let mut radio_reset = Output::new(peripherals.P1_07, Level::Low, OutputDrive::Standard);
+        // The radio LDO switched on above has had the display bring-up to settle; on the stock L1
+        // the SX1262 sits on the always-on 3V3 rail.
         Timer::after_millis(2).await;
         radio_reset.set_high();
         let radio = Sx126x::new(
@@ -214,11 +235,21 @@ impl WioBoard {
                 rx_boost: true,
                 dio2_as_rf_switch: true,
                 external_rx_gain_db: 0,
+                #[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
                 external_power_amplifier: None,
+                #[cfg(feature = "wio-tracker-l1-pro-1w")]
+                external_power_amplifier: Some(ExternalPowerAmplifier {
+                    minimum_output_power_dbm: 1,
+                    maximum_output_power_dbm: 30,
+                    chip_power_dbm: pro_1w_chip_power_dbm,
+                }),
+                #[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
                 frontend_control: FrontendControl::TxRx {
                     enter_transmit,
                     enter_receive,
                 },
+                #[cfg(feature = "wio-tracker-l1-pro-1w")]
+                frontend_control: FrontendControl::NoDynamicControl,
             },
         );
 
@@ -257,6 +288,35 @@ const _: () = {
     assert!(battery_millivolts(2_389) <= 4_205);
 };
 
+/// Convert an antenna-referred request through the Pro 1W PA gain curve Meshtastic ships for this
+/// board (indexed by SX1262 output power). The driver separately clamps to the SX1262 range.
+#[cfg(feature = "wio-tracker-l1-pro-1w")]
+const fn pro_1w_chip_power_dbm(requested_output_dbm: i8) -> i8 {
+    const GAIN_DB_BY_CHIP_POWER: [i8; 22] = [
+        10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10,
+    ];
+
+    let mut chip_power_dbm = 0;
+    while chip_power_dbm < GAIN_DB_BY_CHIP_POWER.len() {
+        let gain_db = GAIN_DB_BY_CHIP_POWER[chip_power_dbm];
+        let is_last = chip_power_dbm == GAIN_DB_BY_CHIP_POWER.len() - 1;
+        if chip_power_dbm as i8 + gain_db > requested_output_dbm || is_last {
+            return requested_output_dbm - gain_db;
+        }
+        chip_power_dbm += 1;
+    }
+
+    requested_output_dbm
+}
+
+#[cfg(feature = "wio-tracker-l1-pro-1w")]
+const _: () = {
+    assert!(pro_1w_chip_power_dbm(1) == -9);
+    assert!(pro_1w_chip_power_dbm(14) == 4);
+    assert!(pro_1w_chip_power_dbm(30) == 20);
+};
+
+#[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
 fn enter_transmit() {
     HELD_IO.lock(|held| {
         if let Some(io) = held.borrow_mut().as_mut() {
@@ -265,6 +325,7 @@ fn enter_transmit() {
     });
 }
 
+#[cfg(not(feature = "wio-tracker-l1-pro-1w"))]
 fn enter_receive() {
     HELD_IO.lock(|held| {
         if let Some(io) = held.borrow_mut().as_mut() {
