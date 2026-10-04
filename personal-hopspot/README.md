@@ -98,6 +98,13 @@ control faces, Bluetooth Auto, and a 60-second display auto-off:
     ./tools/prns build hopspot t096
     ./tools/prns build hopspot t114
 
+Seeed Wio Tracker L1 / L1 Pro developer firmware drives the 128×64 OLED status
+face (SSD1306 or SH1106, detected at boot), the user button and five-way
+joystick, the L76K GNSS, and Bluetooth Auto on the factory S140 7.3.0 UF2
+bootloader. Double-tap reset and copy the UF2 onto the bootloader drive:
+
+    ./tools/prns build hopspot wio-tracker-l1
+
 ## Local developer web flasher
 
 Build and serve the current working tree for one or more cataloged boards with:

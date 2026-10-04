@@ -4,7 +4,8 @@ enum Polarity {
     #[cfg(any(
         feature = "board-t096",
         feature = "board-t1000e",
-        feature = "board-rak4631"
+        feature = "board-rak4631",
+        feature = "board-wio-tracker-l1"
     ))]
     ActiveHigh,
     #[cfg(any(
@@ -24,7 +25,8 @@ impl StatusLed {
     #[cfg(any(
         feature = "board-t096",
         feature = "board-t1000e",
-        feature = "board-rak4631"
+        feature = "board-rak4631",
+        feature = "board-wio-tracker-l1"
     ))]
     pub(crate) fn active_high(output: Output<'static>) -> Self {
         Self {
@@ -50,7 +52,8 @@ impl StatusLed {
             #[cfg(any(
                 feature = "board-t096",
                 feature = "board-t1000e",
-                feature = "board-rak4631"
+                feature = "board-rak4631",
+                feature = "board-wio-tracker-l1"
             ))]
             Polarity::ActiveHigh => self.output.set_high(),
             #[cfg(any(
@@ -67,7 +70,8 @@ impl StatusLed {
             #[cfg(any(
                 feature = "board-t096",
                 feature = "board-t1000e",
-                feature = "board-rak4631"
+                feature = "board-rak4631",
+                feature = "board-wio-tracker-l1"
             ))]
             Polarity::ActiveHigh => self.output.set_low(),
             #[cfg(any(

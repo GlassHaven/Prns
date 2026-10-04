@@ -1,6 +1,6 @@
 use super::{
     MESH_POCKET_10000, MESH_POCKET_5000, MESH_TOWER_V2, MUZI_BASE_DUO, RAK4631, T096, T1000_E,
-    T114, T_ECHO_S140_V6, T_ECHO_S140_V7,
+    T114, T_ECHO_S140_V6, T_ECHO_S140_V7, WIO_TRACKER_L1,
 };
 use crate::profiles::linker::{LinkerAddressProfile, LinkerAddressSpace};
 use crate::profiles::{FLASH, RAM};
@@ -28,8 +28,10 @@ const MUZI_BASE_DUO_LINKER: LinkerAddressProfile =
     LinkerAddressProfile::new(MUZI_BASE_DUO.id, &NRF52840_SPACES);
 const RAK4631_LINKER: LinkerAddressProfile =
     LinkerAddressProfile::new(RAK4631.id, &NRF52840_SPACES);
+const WIO_TRACKER_L1_LINKER: LinkerAddressProfile =
+    LinkerAddressProfile::new(WIO_TRACKER_L1.id, &NRF52840_SPACES);
 
-pub(in crate::profiles) const LINKER_ADDRESS_PROFILES: [&LinkerAddressProfile; 10] = [
+pub(in crate::profiles) const LINKER_ADDRESS_PROFILES: [&LinkerAddressProfile; 11] = [
     &T_ECHO_S140_V6_LINKER,
     &T_ECHO_S140_V7_LINKER,
     &T096_LINKER,
@@ -40,4 +42,5 @@ pub(in crate::profiles) const LINKER_ADDRESS_PROFILES: [&LinkerAddressProfile; 1
     &MESH_TOWER_V2_LINKER,
     &MUZI_BASE_DUO_LINKER,
     &RAK4631_LINKER,
+    &WIO_TRACKER_L1_LINKER,
 ];

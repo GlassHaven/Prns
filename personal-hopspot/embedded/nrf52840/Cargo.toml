@@ -26,6 +26,7 @@ board-t1000e = ["cortex-m/critical-section-single-core"]
 board-mesh-tower-v2 = ["embassy-nrf/nfc-pins-as-gpio"]
 board-muzi-base-duo = ["embassy-nrf/nfc-pins-as-gpio"]
 board-rak4631 = ["embassy-nrf/nfc-pins-as-gpio", "softdevice-s140-v6"]
+board-wio-tracker-l1 = ["personal-hopspot-core/display", "dep:embedded-graphics", "embassy-nrf/time", "softdevice-s140-v7"]
 softdevice-s140-v6 = ["dep:nrf-softdevice", "nrf-softdevice/s140-v6"]
 softdevice-s140-v7 = ["dep:nrf-softdevice", "nrf-softdevice/s140-v7"]
 
@@ -67,6 +68,11 @@ required-features = ["board-mesh-tower-v2", "softdevice-s140-v6"]
 name = "muzi-base-duo"
 path = "src/bin/muzi_base_duo.rs"
 required-features = ["board-muzi-base-duo", "softdevice-s140-v6"]
+
+[[bin]]
+name = "wio-tracker-l1"
+path = "src/bin/wio_tracker_l1.rs"
+required-features = ["board-wio-tracker-l1"]
 
 [[bin]]
 name = "rak4631"

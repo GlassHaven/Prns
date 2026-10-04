@@ -12,7 +12,8 @@ use prns_core::entropy::{EntropySource, RuntimeEntropy};
     feature = "board-t1000e",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631"
+    feature = "board-rak4631",
+    feature = "board-wio-tracker-l1"
 ))]
 mod status_led;
 
@@ -23,10 +24,17 @@ mod status_led;
 ))]
 mod button;
 
-#[cfg(any(feature = "board-t096", feature = "board-t114"))]
+#[cfg(any(
+    feature = "board-t096",
+    feature = "board-t114",
+    feature = "board-wio-tracker-l1"
+))]
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum DisplayIoError {
+    #[cfg(any(feature = "board-t096", feature = "board-t114"))]
     Spi,
+    #[cfg(feature = "board-wio-tracker-l1")]
+    I2c,
     NotInitialized,
 }
 
@@ -100,6 +108,8 @@ pub(crate) mod t1000e;
 pub(crate) mod t114;
 #[cfg(feature = "board-t-echo")]
 pub(crate) mod t_echo;
+#[cfg(feature = "board-wio-tracker-l1")]
+pub(crate) mod wio_tracker_l1;
 
 #[cfg(all(
     feature = "board-mesh-pocket",
@@ -109,7 +119,8 @@ pub(crate) mod t_echo;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
-    not(feature = "board-rak4631")
+    not(feature = "board-rak4631"),
+    not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use mesh_pocket as selected;
 
@@ -121,7 +132,8 @@ pub(crate) use mesh_pocket as selected;
     not(feature = "board-mesh-pocket"),
     not(feature = "board-t1000e"),
     not(feature = "board-muzi-base-duo"),
-    not(feature = "board-rak4631")
+    not(feature = "board-rak4631"),
+    not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use mesh_tower_v2 as selected;
 #[cfg(all(
@@ -132,7 +144,8 @@ pub(crate) use mesh_tower_v2 as selected;
     not(feature = "board-mesh-pocket"),
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
-    not(feature = "board-rak4631")
+    not(feature = "board-rak4631"),
+    not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use muzi_base_duo as selected;
 #[cfg(all(
@@ -143,7 +156,8 @@ pub(crate) use muzi_base_duo as selected;
     not(feature = "board-mesh-pocket"),
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
-    not(feature = "board-muzi-base-duo")
+    not(feature = "board-muzi-base-duo"),
+    not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use rak4631 as selected;
 #[cfg(all(
@@ -154,7 +168,8 @@ pub(crate) use rak4631 as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
-    not(feature = "board-rak4631")
+    not(feature = "board-rak4631"),
+    not(feature = "board-wio-tracker-l1")
 ))]
 #[allow(unused_imports)] // Reserved for the runtime once the bring-up boundary is cleared.
 pub(crate) use t096 as selected;
@@ -166,7 +181,8 @@ pub(crate) use t096 as selected;
     not(feature = "board-mesh-pocket"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
-    not(feature = "board-rak4631")
+    not(feature = "board-rak4631"),
+    not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use t1000e as selected;
 #[cfg(all(
@@ -177,7 +193,8 @@ pub(crate) use t1000e as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
-    not(feature = "board-rak4631")
+    not(feature = "board-rak4631"),
+    not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use t114 as selected;
 #[cfg(all(
@@ -188,6 +205,19 @@ pub(crate) use t114 as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
-    not(feature = "board-rak4631")
+    not(feature = "board-rak4631"),
+    not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use t_echo as selected;
+#[cfg(all(
+    feature = "board-wio-tracker-l1",
+    not(feature = "board-t-echo"),
+    not(feature = "board-t096"),
+    not(feature = "board-t114"),
+    not(feature = "board-mesh-pocket"),
+    not(feature = "board-t1000e"),
+    not(feature = "board-mesh-tower-v2"),
+    not(feature = "board-muzi-base-duo"),
+    not(feature = "board-rak4631")
+))]
+pub(crate) use wio_tracker_l1 as selected;
