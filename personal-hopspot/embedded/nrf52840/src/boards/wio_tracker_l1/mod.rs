@@ -2,40 +2,40 @@ mod display;
 mod gnss;
 mod hardware;
 mod identity;
+mod input;
 
-use personal_hopspot_memory::{MemoryProfile, RegionRole, T096};
+use personal_hopspot_memory::{MemoryProfile, RegionRole, WIO_TRACKER_L1};
 use personal_rns::interfaces::InterfaceId;
 
-pub(crate) use super::button::{drive as drive_button, EVENTS as INPUT_EVENTS};
-pub(crate) type ButtonInput = embassy_nrf::gpio::Input<'static>;
 use crate::memory::NrfFirmwareMemory;
 pub(crate) use crate::storage::Nrf52840Storage as Storage;
-pub(crate) use display::St7735Display as DisplayDriver;
+pub(crate) use display::OledDisplay as DisplayDriver;
 pub(crate) use gnss::{
-    control as control_gnss, drive as drive_gnss, snapshot as gnss_snapshot, T096Gnss as Gnss,
+    control as control_gnss, drive as drive_gnss, snapshot as gnss_snapshot, WioGnss as Gnss,
 };
 pub(crate) use hardware::{
-    T096Battery as Battery, T096Board as Board, T096DisplayBringup as Display,
-    T096Hardware as Hardware, T096LoraInterface as LoraInterface,
+    WioBattery as Battery, WioBoard as Board, WioDisplayBringup as Display,
+    WioHardware as Hardware, WioLoraInterface as LoraInterface,
 };
 pub(crate) use identity::{
     bootstrap_ble_identity, bootstrap_node_identity, startup_notice as identity_startup_notice,
 };
+pub(crate) use input::{drive as drive_button, WioInputs as ButtonInput, EVENTS as INPUT_EVENTS};
 
-pub(crate) const MEMORY_PROFILE: &MemoryProfile = &T096;
+pub(crate) const MEMORY_PROFILE: &MemoryProfile = &WIO_TRACKER_L1;
 
 const MEMORY: NrfFirmwareMemory = NrfFirmwareMemory::new(MEMORY_PROFILE);
 
 pub(crate) const JOURNAL_LAYOUT: personal_rns::persistence::FlashJournalLayout =
     MEMORY.journal_layout();
 pub(crate) const USB_MANUFACTURER: &str = "Stay Personal";
-pub(crate) const USB_PRODUCT: &str = "Personal Hopspot (Heltec T096)";
-pub(crate) const USB_SERIAL_NUMBER: &str = "PERSONAL-RNS-T096-HOP";
-pub(crate) const USB_INTERFACE_ID: InterfaceId = InterfaceId::new(*b"t096-usb");
+pub(crate) const USB_PRODUCT: &str = "Personal Hopspot (Wio Tracker L1)";
+pub(crate) const USB_SERIAL_NUMBER: &str = "PERSONAL-RNS-WIO-L1-HOP";
+pub(crate) const USB_INTERFACE_ID: InterfaceId = InterfaceId::new(*b"wiol1usb");
 pub(crate) const RADIO_PROFILE_PAGES: [u32; 2] = MEMORY.two_flash_pages(RegionRole::RadioProfile);
 pub(crate) const NODE_IDENTITY_FLASH_OFFSET: u32 = MEMORY.flash_offset(RegionRole::NodeIdentity);
 pub(crate) const BLE_IDENTITY_FLASH_OFFSET: u32 = MEMORY.flash_offset(RegionRole::BleIdentity);
 pub(crate) const REMOTE_CONTROL_IDENTITY_FLASH: super::RemoteControlIdentityFlash =
     super::RemoteControlIdentityFlash::at(MEMORY.flash_offset(RegionRole::RemoteControlIdentity));
-pub(crate) const ANNOUNCE_APP_DATA: &[u8] = b"\x92\xc4\x15Personal Hopspot T096\xc0";
-pub(crate) const NODE_ANNOUNCE_APP_DATA: &[u8] = b"Personal Hopspot T096";
+pub(crate) const ANNOUNCE_APP_DATA: &[u8] = b"\x92\xc4\x1fPersonal Hopspot Wio Tracker L1\xc0";
+pub(crate) const NODE_ANNOUNCE_APP_DATA: &[u8] = b"Personal Hopspot Wio Tracker L1";

@@ -6,7 +6,7 @@ use personal_rns::interfaces::subghz::{
 };
 use personal_rns::interfaces::{InterfaceId, InterfaceSnapshot, InterfaceStatus};
 use personal_rns::manifold::embassy::EmbassyInterfaceStatus;
-#[cfg(feature = "board-t096")]
+#[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
 use personal_rns::remote_control::RemoteControlGnssPower;
 use personal_rns::remote_control::{
     RemoteControlApplyOutcome, RemoteControlCapabilities, RemoteControlDiscoveryGroups,
@@ -19,7 +19,7 @@ use personal_rns::runtime::{
     RemoteControlHostCommand, RemoteControlHostCommandError, RemoteControlHostResponse,
 };
 
-#[cfg(feature = "board-t096")]
+#[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
 use crate::boards::selected as board;
 use crate::immediate_display::{ImmediateDisplayDevice, ImmediateDisplayRuntime};
 
@@ -89,7 +89,7 @@ pub(super) struct Context<'a, D: ImmediateDisplayDevice> {
     pub lora_controller: &'a mut personal_rns::lora::LoRaController<'static>,
     pub subg_store: &'a mut ConfigurationStore,
     pub subg_configuration: &'a mut SubGConfigurationState,
-    #[cfg(feature = "board-t096")]
+    #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
     pub gnss_wanted: &'a mut bool,
 }
 
@@ -116,7 +116,7 @@ pub(super) fn capabilities() -> RemoteControlCapabilities {
     ] {
         capabilities = capabilities.with_request(kind);
     }
-    #[cfg(feature = "board-t096")]
+    #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
     {
         capabilities = capabilities.with_request(RemoteControlRequestKind::SetGnssPower);
     }
@@ -284,7 +284,7 @@ pub(super) async fn execute<D: ImmediateDisplayDevice>(
                     .await
                     .map_err(|_| RemoteControlHostCommandError::ApplyFailed)?;
                 restore_desired_interfaces(&context);
-                #[cfg(feature = "board-t096")]
+                #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
                 if *context.gnss_wanted {
                     board::control_gnss(hopspot::GnssReceiverCommand::Enable);
                 }
@@ -346,7 +346,7 @@ pub(super) async fn execute<D: ImmediateDisplayDevice>(
             };
             Ok(RemoteControlHostResponse::SetDisplayAutoOff(outcome))
         }
-        #[cfg(feature = "board-t096")]
+        #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
         RemoteControlHostCommand::SetGnssPower { power } => {
             let desired = power == RemoteControlGnssPower::On;
             let outcome = if *context.gnss_wanted == desired {
@@ -613,7 +613,7 @@ pub(super) async fn apply_scheduled<D: ImmediateDisplayDevice>(
             lora_status.disable();
             usb_status.disable();
             BluetoothAutoStatus::new(&BLE_SHARED).disable();
-            #[cfg(feature = "board-t096")]
+            #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
             board::control_gnss(hopspot::GnssReceiverCommand::Disable);
             system.set_awake(false);
         }

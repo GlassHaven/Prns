@@ -9,7 +9,11 @@ use static_cell::{ConstStaticCell, StaticCell};
 use personal_hopspot_core as hopspot;
 use personal_rns::engine::IssuedCommand;
 use personal_rns::interfaces::lora::{AirtimePolicy, LORA_MAX_PAYLOAD};
-#[cfg(not(any(feature = "board-t096", feature = "board-t114")))]
+#[cfg(not(any(
+    feature = "board-t096",
+    feature = "board-t114",
+    feature = "board-wio-tracker-l1"
+)))]
 use personal_rns::interfaces::subghz::SubGConfigurationState;
 use personal_rns::interfaces::usb_auto::{WEBUSB_PRODUCT_ID, WEBUSB_VENDOR_ID};
 use personal_rns::interfaces::{ConnectionState, InterfaceId};
@@ -40,6 +44,7 @@ use board::{
 use super::entropy::install_hal_runtime_entropy;
 #[cfg(any(
     feature = "board-t096",
+    feature = "board-wio-tracker-l1",
     feature = "board-t114",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
@@ -48,6 +53,7 @@ use super::entropy::install_hal_runtime_entropy;
 use super::entropy::install_softdevice_runtime_entropy;
 #[cfg(any(
     feature = "board-t096",
+    feature = "board-wio-tracker-l1",
     feature = "board-t114",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
@@ -58,13 +64,18 @@ use super::entropy::{runtime_entropy, seed_from_hal};
 
 #[cfg(any(
     feature = "board-t096",
+    feature = "board-wio-tracker-l1",
     feature = "board-t114",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
     feature = "board-rak4631"
 ))]
 mod bluetooth;
-#[cfg(any(feature = "board-t096", feature = "board-t114"))]
+#[cfg(any(
+    feature = "board-t096",
+    feature = "board-t114",
+    feature = "board-wio-tracker-l1"
+))]
 mod remote_control;
 #[cfg(any(
     feature = "board-t1000e",
@@ -81,7 +92,11 @@ mod remote_control;
 ))]
 #[path = "button_announce.rs"]
 mod selected;
-#[cfg(any(feature = "board-t096", feature = "board-t114"))]
+#[cfg(any(
+    feature = "board-t096",
+    feature = "board-t114",
+    feature = "board-wio-tracker-l1"
+))]
 #[path = "display.rs"]
 mod selected;
 #[cfg(feature = "board-t1000e")]
@@ -98,6 +113,7 @@ const LORA_TX_QUEUE_BYTES: usize = 1024;
 const LORA_OUTBOUND_DEPTH: usize = Storage::MAX_OUTGOING_RESOURCE_REACTION_FRAMES;
 #[cfg(any(
     feature = "board-t096",
+    feature = "board-wio-tracker-l1",
     feature = "board-t114",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
@@ -119,6 +135,7 @@ const PACKET_PHY_INDEX_BUCKETS: usize =
 
 #[cfg(any(
     feature = "board-t096",
+    feature = "board-wio-tracker-l1",
     feature = "board-t114",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
@@ -175,6 +192,7 @@ static LORA_MANIFOLD_LANE: StaticManifoldLane<
 > = StaticManifoldLane::new();
 #[cfg(any(
     feature = "board-t096",
+    feature = "board-wio-tracker-l1",
     feature = "board-t114",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
@@ -214,6 +232,7 @@ pub async fn run(spawner: Spawner) -> ! {
         .await;
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t114",
         feature = "board-mesh-tower-v2",
         feature = "board-muzi-base-duo",
@@ -235,7 +254,11 @@ pub async fn run(spawner: Spawner) -> ! {
             )
         })
         .await;
-    #[cfg(any(feature = "board-t096", feature = "board-t114"))]
+    #[cfg(any(
+        feature = "board-t096",
+        feature = "board-t114",
+        feature = "board-wio-tracker-l1"
+    ))]
     let identity_startup_notice =
         board::identity_startup_notice(node_bootstrap.persistence(), ble_bootstrap.persistence());
     let node_identity = node_bootstrap.into_identity();
@@ -243,13 +266,14 @@ pub async fn run(spawner: Spawner) -> ! {
         remote_control_bootstrap.into_parts();
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t114",
         feature = "board-mesh-tower-v2",
         feature = "board-muzi-base-duo",
         feature = "board-rak4631"
     ))]
     let ble_identity = Some(ble_bootstrap.into_identity());
-    #[cfg(feature = "board-t096")]
+    #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
     let Hardware {
         usb: usb_driver,
         vbus,
@@ -324,6 +348,7 @@ pub async fn run(spawner: Spawner) -> ! {
 
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t114",
         feature = "board-mesh-tower-v2",
         feature = "board-muzi-base-duo",
@@ -332,6 +357,7 @@ pub async fn run(spawner: Spawner) -> ! {
     let entropy = prepare_softdevice_runtime_entropy(entropy);
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t114",
         feature = "board-mesh-tower-v2",
         feature = "board-muzi-base-duo",
@@ -345,6 +371,7 @@ pub async fn run(spawner: Spawner) -> ! {
     Timer::after_millis(100).await;
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t114",
         feature = "board-mesh-tower-v2",
         feature = "board-muzi-base-duo",
@@ -354,6 +381,7 @@ pub async fn run(spawner: Spawner) -> ! {
 
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t114",
         feature = "board-mesh-tower-v2",
         feature = "board-muzi-base-duo",
@@ -382,11 +410,23 @@ pub async fn run(spawner: Spawner) -> ! {
         remote_control::capabilities(),
     );
     let mut manifold_lanes = ManifoldLanes::new();
-    #[cfg(any(feature = "board-t096", feature = "board-t114"))]
+    #[cfg(any(
+        feature = "board-t096",
+        feature = "board-t114",
+        feature = "board-wio-tracker-l1"
+    ))]
     let loaded_subg_configuration = selected::load_subg_configuration(shared_flash).await;
-    #[cfg(any(feature = "board-t096", feature = "board-t114"))]
+    #[cfg(any(
+        feature = "board-t096",
+        feature = "board-t114",
+        feature = "board-wio-tracker-l1"
+    ))]
     let subg_configuration = loaded_subg_configuration.state;
-    #[cfg(not(any(feature = "board-t096", feature = "board-t114")))]
+    #[cfg(not(any(
+        feature = "board-t096",
+        feature = "board-t114",
+        feature = "board-wio-tracker-l1"
+    )))]
     let subg_configuration = SubGConfigurationState::Unconfigured;
     static LORA_STATUS: StaticCell<EmbassyInterfaceStatus> = StaticCell::new();
     let lora_status: &'static EmbassyInterfaceStatus =
@@ -433,6 +473,7 @@ pub async fn run(spawner: Spawner) -> ! {
         .expect("LoRa lane is available");
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t114",
         feature = "board-mesh-tower-v2",
         feature = "board-muzi-base-duo",
@@ -491,6 +532,7 @@ pub async fn run(spawner: Spawner) -> ! {
     let usb_seam = usb_lane.into_seam(NOTIFY.sender(), entropy);
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t114",
         feature = "board-mesh-tower-v2",
         feature = "board-muzi-base-duo",
@@ -515,7 +557,7 @@ pub async fn run(spawner: Spawner) -> ! {
         heartbeat,
         super::bootloader_entry::wait(),
     );
-    #[cfg(feature = "board-t096")]
+    #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
     {
         let face = selected::face(selected::FaceInput {
             display,

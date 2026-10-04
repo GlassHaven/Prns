@@ -3,9 +3,10 @@ use core::future::Future;
 
 #[cfg(feature = "board-t114")]
 use embassy_futures::join::join5;
-#[cfg(feature = "board-t096")]
+#[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
 use embassy_futures::join::{join3, join4};
 use embassy_futures::select::{select4, Either4};
+#[cfg(feature = "board-t114")]
 use embassy_nrf::gpio::Input;
 use embassy_time::{Duration, Timer};
 use personal_hopspot_core as hopspot;
@@ -111,7 +112,7 @@ pub(super) fn face(input: FaceInput) -> impl Future {
             access_point: hopspot::AccessPointState::Unsupported,
             shared_instance_config_export: hopspot::SharedInstanceConfigExport::Unavailable,
             discovery_groups: hopspot::DiscoveryGroupEditorAvailability::Available,
-            #[cfg(feature = "board-t096")]
+            #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
             gnss: hopspot::GnssAvailability::Available,
             #[cfg(feature = "board-t114")]
             gnss: hopspot::GnssAvailability::Unavailable,
@@ -132,7 +133,7 @@ pub(super) fn face(input: FaceInput) -> impl Future {
             startup_notice.map(|notice| (embassy_time::Instant::now().as_millis() + 5_000, notice));
         let mut scheduled_remote_control_effect = None;
         let mut system = super::remote_control::SystemIntent::from_status(lora_status, usb_status);
-        #[cfg(feature = "board-t096")]
+        #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
         let mut gnss_wanted = false;
         macro_rules! execute_hopspot_command {
             ($snapshots:expr, $power:expr, $command:expr) => {
@@ -148,7 +149,7 @@ pub(super) fn face(input: FaceInput) -> impl Future {
                         lora_controller: &mut lora_controller,
                         subg_store: &mut subg_configuration_store,
                         subg_configuration: &mut working_subg_configuration,
-                        #[cfg(feature = "board-t096")]
+                        #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
                         gnss_wanted: &mut gnss_wanted,
                     },
                     $command,
@@ -240,7 +241,7 @@ pub(super) fn face(input: FaceInput) -> impl Future {
             }
             let now = hopspot::display::MonotonicMillis::new(now_ms);
             let _blanking = display.poll_blanking(now, display_now).await;
-            #[cfg(feature = "board-t096")]
+            #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
             let gnss = (display.visibility() == hopspot::display::DisplayVisibility::Visible
                 && ui_state.gnss_visible())
             .then(board::gnss_snapshot);
@@ -364,7 +365,7 @@ pub(super) fn face(input: FaceInput) -> impl Future {
                                 notice_until_ms = Some((now_ms + NOTICE_MS, notice));
                             }
                         }
-                        #[cfg(feature = "board-t096")]
+                        #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
                         hopspot::UiAction::ControlGnss(command) => {
                             let power = match command {
                                 hopspot::GnssReceiverCommand::Enable => {
@@ -517,13 +518,13 @@ where
     join5(io, lora, face, bluetooth, board::drive_button(button))
 }
 
-#[cfg(feature = "board-t096")]
+#[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
 pub(super) fn run<I, L, F, B>(
     io: I,
     lora: L,
     face: F,
     bluetooth: B,
-    button: Input<'static>,
+    button: board::ButtonInput,
     gnss: board::Gnss,
 ) -> impl Future
 where

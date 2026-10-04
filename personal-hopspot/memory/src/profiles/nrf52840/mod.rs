@@ -372,6 +372,53 @@ const RAK4631_REGIONS: [MemoryRegion; 9] = [
     ),
 ];
 
+/// Seeed's Wio Tracker L1 ships the Adafruit nRF52 UF2 bootloader with S140 7.3.0, so the
+/// application starts at 0x27000. Meshtastic's InternalFS occupies 0xED000..0xF4000; keep that
+/// and the page below it untouched so a return to the factory firmware finds its own state.
+const WIO_TRACKER_L1_REGIONS: [MemoryRegion; 9] = [
+    region(
+        "platform-firmware",
+        FLASH,
+        0,
+        0x27000,
+        RegionOwner::Platform,
+        RegionRetention::Immutable,
+        RegionRole::SoftDevice,
+    ),
+    region(
+        "firmware",
+        FLASH,
+        0x27000,
+        0xE1000,
+        RegionOwner::FirmwareImage,
+        RegionRetention::ReplaceWithFirmware,
+        RegionRole::FirmwareImage,
+    ),
+    T114_REGIONS[2],
+    T114_REGIONS[3],
+    T114_REGIONS[4],
+    T114_REGIONS[5],
+    T114_REGIONS[6],
+    region(
+        "factory-reserved",
+        FLASH,
+        0xEC000,
+        0xF4000,
+        RegionOwner::Factory,
+        RegionRetention::Immutable,
+        RegionRole::FactoryReserved,
+    ),
+    region(
+        "recovery-bootloader",
+        FLASH,
+        0xF4000,
+        0x100000,
+        RegionOwner::Platform,
+        RegionRetention::Immutable,
+        RegionRole::RecoveryBootloader,
+    ),
+];
+
 const T1000E_REGIONS: [MemoryRegion; 7] = [
     region(
         "platform-firmware",
@@ -540,7 +587,17 @@ pub const RAK4631: MemoryProfile = MemoryProfile {
     runtime_reservations: &NRF_RUNTIME_RESERVATIONS,
 };
 
-const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 10] = [
+pub const WIO_TRACKER_L1: MemoryProfile = MemoryProfile {
+    id: MemoryProfileId("wio-tracker-l1"),
+    architecture: ProcessorArchitecture::ThumbV7em,
+    address_spaces: &NRF52840_S140_RAM_SPACES,
+    regions: &WIO_TRACKER_L1_REGIONS,
+    firmware: firmware_placement(0x27000, 0xE1000, 0xE1000),
+    journals: &HELTEC_DISPLAY_JOURNALS,
+    runtime_reservations: &NRF_RUNTIME_RESERVATIONS,
+};
+
+const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 11] = [
     T_ECHO_S140_V6.id,
     T_ECHO_S140_V7.id,
     T096.id,
@@ -551,6 +608,7 @@ const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 10] = [
     MESH_TOWER_V2.id,
     MUZI_BASE_DUO.id,
     RAK4631.id,
+    WIO_TRACKER_L1.id,
 ];
 
 pub const NRF52840_MEMORY_X_BINDING: NrfMemoryXBinding = NrfMemoryXBinding {

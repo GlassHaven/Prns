@@ -2,6 +2,7 @@ use personal_rns::usb_auto::WebUsbBootloaderEntry;
 
 #[cfg(any(
     feature = "board-t096",
+    feature = "board-wio-tracker-l1",
     feature = "board-t1000e",
     feature = "board-mesh-pocket",
     feature = "board-muzi-base-duo",
@@ -19,6 +20,7 @@ mod request {
         Ready,
         #[cfg(any(
             feature = "board-t096",
+            feature = "board-wio-tracker-l1",
             feature = "board-mesh-pocket",
             feature = "board-muzi-base-duo",
             feature = "board-rak4631"
@@ -40,6 +42,7 @@ mod request {
                     ResetPreparation::Ready => cortex_m::peripheral::SCB::sys_reset(),
                     #[cfg(any(
                         feature = "board-t096",
+                        feature = "board-wio-tracker-l1",
                         feature = "board-mesh-pocket",
                         feature = "board-muzi-base-duo",
                         feature = "board-rak4631"
@@ -62,6 +65,7 @@ mod request {
 
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
         feature = "board-rak4631"
@@ -83,6 +87,7 @@ mod request {
 pub const fn webusb_entry() -> WebUsbBootloaderEntry {
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t1000e",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
@@ -94,6 +99,7 @@ pub const fn webusb_entry() -> WebUsbBootloaderEntry {
 
     #[cfg(not(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t1000e",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
@@ -105,6 +111,7 @@ pub const fn webusb_entry() -> WebUsbBootloaderEntry {
 pub async fn wait() -> ! {
     #[cfg(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t1000e",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
@@ -114,6 +121,7 @@ pub async fn wait() -> ! {
 
     #[cfg(not(any(
         feature = "board-t096",
+        feature = "board-wio-tracker-l1",
         feature = "board-t1000e",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
