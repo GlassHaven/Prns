@@ -248,6 +248,7 @@ impl BoardTarget {
             "heltec-wireless-stick-lite-v3" => Some(&board_images::HELTEC_WIRELESS_STICK_LITE_V3),
             "rak4631" => Some(&board_images::RAK4631),
             "rak10724" => Some(&board_images::RAK10724),
+            "raspberry-pi-zero-2-w" => Some(&board_images::RASPBERRY_PI_ZERO_2_W),
             "muzi-base-duo" => Some(&board_images::MUZI_BASE_DUO),
             _ => None,
         }

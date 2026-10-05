@@ -29,6 +29,7 @@ pub(crate) fn generate() {
         ),
         ("RAK4631", "rak4631.webp"),
         ("RAK10724", "rak10724.webp"),
+        ("RASPBERRY_PI_ZERO_2_W", "raspberry-pi-zero-2-w.webp"),
         ("MUZI_BASE_DUO", "muzi-base-duo.webp"),
     ];
 

@@ -45,6 +45,7 @@ transparent background inside a dark "slot" (`.flash-board-slot--inset` in
 | Seeed XIAO ESP32-S3 + Wio-SX1262 | https://www.seeedstudio.com/Wio-SX1262-with-XIAO-ESP32S3-p-5982.html | https://media-cdn.seeedstudio.com/media/catalog/product/2/-/2-102010611-wio-sx1262-with-xiao-esp32s3.jpg | built-in imagegen background extraction; WebP thumbnail | vendor product photo, nominative use; AI-assisted cutout |
 | SenseCAP Solar Node P1 / P1-Pro | https://www.seeedstudio.com/SenseCAP-Solar-Node-P1-Pro-for-Meshtastic-LoRa-p-6412.html | https://media-cdn.seeedstudio.com/media/catalog/product/2/-/2-114993633-sensecap-solar-node-p1-pro-for-meshtastic_1.jpg | built-in imagegen background extraction; WebP thumbnail | vendor product photo, nominative use; AI-assisted cutout |
 | RAK WisMesh 1W (RAK10724) | https://store.rakwireless.com/products/meshtastic-1w-lora-booster-kit-rak3401 | https://cdn.shopify.com/s/files/1/0177/8784/6756/files/RAK10724_WisMesh_1W-Booster-Starter-Kit-01_3.png?v=1785997006 | built-in imagegen board extraction; WebP thumbnail | vendor product photo, nominative use; AI-assisted cutout |
+| Raspberry Pi Zero 2 W | https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/ | https://assets.raspberrypi.com/static/51035ec4c2f8f630b3d26c32e90c93f1/6e7df/zero2-hero.png | original vendor alpha preserved; `cwebp -q 90 -resize 160 0` | vendor product image, nominative use |
 
 Real-alpha vendor originals are not stored in the repo; the source URL above is
 the pointer, and regeneration is a plain download, a lanczos `scale=160`, and a
