@@ -240,7 +240,7 @@ impl Esp32S3Board for HeltecV3Board {
                 frontend_control: lora_frontend.control(),
             },
         )
-        .with_radio_activity_control(RadioActivityControl::TxRx {
+        .with_radio_activity_control(&RadioActivityControl::TxRx {
             enter_transmit: radio_activity_started,
             leave_transmit: radio_activity_finished,
             enter_receive: radio_activity_started,

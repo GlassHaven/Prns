@@ -243,43 +243,47 @@ pub enum RadioActivityControl {
 }
 
 impl RadioActivityControl {
-    fn enter_transmit(self) {
-        if let Self::TxRx { enter_transmit, .. } = self {
-            enter_transmit();
-        }
-    }
-
-    fn leave_transmit(self) {
-        if let Self::TxRx { leave_transmit, .. } = self {
-            leave_transmit();
-        }
-    }
-
-    fn enter_receive(self) {
+    fn enter_receive(&self) {
         if let Self::TxRx { enter_receive, .. } = self {
             enter_receive();
         }
     }
 
-    fn leave_receive(self) {
+    fn leave_receive(&self) {
         if let Self::TxRx { leave_receive, .. } = self {
             leave_receive();
         }
     }
 }
 
-struct TransmitActivityGuard(RadioActivityControl);
+enum TransmitActivityGuard {
+    Disabled,
+    Active { leave_transmit: fn() },
+}
 
 impl TransmitActivityGuard {
-    fn enter(control: RadioActivityControl) -> Self {
-        control.enter_transmit();
-        Self(control)
+    fn enter(control: &RadioActivityControl) -> Self {
+        match control {
+            RadioActivityControl::None => Self::Disabled,
+            RadioActivityControl::TxRx {
+                enter_transmit,
+                leave_transmit,
+                ..
+            } => {
+                enter_transmit();
+                Self::Active {
+                    leave_transmit: *leave_transmit,
+                }
+            }
+        }
     }
 }
 
 impl Drop for TransmitActivityGuard {
     fn drop(&mut self) {
-        self.0.leave_transmit();
+        if let Self::Active { leave_transmit } = self {
+            leave_transmit();
+        }
     }
 }
 
@@ -355,7 +359,7 @@ pub struct Sx126x<SPI, BUSY, DIO1, RST, DLY> {
     reset: RST,
     delay: DLY,
     config: BoardConfig,
-    radio_activity_control: RadioActivityControl,
+    radio_activity_control: &'static RadioActivityControl,
     freq_hz: u32,
     modulation: Modulation,
     packet: LoraPacket,
@@ -387,7 +391,7 @@ where
             reset,
             delay,
             config,
-            radio_activity_control: RadioActivityControl::None,
+            radio_activity_control: &RadioActivityControl::None,
             freq_hz: 915_000_000,
             modulation: Modulation::Lora {
                 spreading_factor: SpreadingFactor::Sf7,
@@ -405,7 +409,7 @@ where
         }
     }
 
-    pub fn with_radio_activity_control(mut self, control: RadioActivityControl) -> Self {
+    pub fn with_radio_activity_control(mut self, control: &'static RadioActivityControl) -> Self {
         self.radio_activity_control = control;
         self
     }
@@ -1074,8 +1078,8 @@ mod tests {
         RX_ACTIVITY_FINISHED.fetch_add(1, Ordering::Relaxed);
     }
 
-    fn activity_control() -> RadioActivityControl {
-        RadioActivityControl::TxRx {
+    fn activity_control() -> &'static RadioActivityControl {
+        &RadioActivityControl::TxRx {
             enter_transmit: tx_activity_started,
             leave_transmit: tx_activity_finished,
             enter_receive: rx_activity_started,
@@ -1824,5 +1828,45 @@ mod tests {
             Ok(RadioEvent::Frame(_))
         ));
         assert_eq!(RX_ACTIVITY_FINISHED.load(Ordering::Relaxed), 1);
+
+        let mut timed_out = Sx126x::new(
+            MockSpi::new(Rc::new(RefCell::new(Vec::new()))),
+            MockWait,
+            Dio1NeverHigh,
+            MockOut,
+            MockDelay,
+            board(),
+        )
+        .with_radio_activity_control(activity_control());
+        assert_eq!(
+            block_on(timed_out.transmit(b"timeout")),
+            Err(Error::Timeout)
+        );
+        assert_eq!(TX_ACTIVITY_STARTED.load(Ordering::Relaxed), 2);
+        assert_eq!(TX_ACTIVITY_FINISHED.load(Ordering::Relaxed), 2);
+
+        struct PendingDelay;
+        impl DelayNs for PendingDelay {
+            async fn delay_ns(&mut self, _ns: u32) {
+                core::future::pending::<()>().await;
+            }
+        }
+        let mut cancelled = Sx126x::new(
+            MockSpi::new(Rc::new(RefCell::new(Vec::new()))),
+            BusyNeverLow,
+            MockWait,
+            MockOut,
+            PendingDelay,
+            board(),
+        )
+        .with_radio_activity_control(activity_control());
+        {
+            let mut attempt = core::pin::pin!(cancelled.transmit(b"cancel"));
+            let mut context = core::task::Context::from_waker(core::task::Waker::noop());
+            assert!(attempt.as_mut().poll(&mut context).is_pending());
+            assert_eq!(TX_ACTIVITY_STARTED.load(Ordering::Relaxed), 3);
+            assert_eq!(TX_ACTIVITY_FINISHED.load(Ordering::Relaxed), 2);
+        }
+        assert_eq!(TX_ACTIVITY_FINISHED.load(Ordering::Relaxed), 3);
     }
 }
