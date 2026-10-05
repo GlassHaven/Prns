@@ -1,8 +1,9 @@
 use embassy_nrf::nvmc::{Error as NvmcError, Nvmc};
 use personal_rns::identity::vault::{FlashVault, FlashVaultError};
 use personal_rns::remote_control::{
-    RemoteControlNodeIdentityBootstrap, RemoteControlNodeIdentityBootstrapError,
-    REMOTE_CONTROL_IDENTITY_VAULT_SLOTS,
+    load_factory_controller_grant, RemoteControlControllerGrant, RemoteControlControllerGrants,
+    RemoteControlInitialControllerGrants, RemoteControlNodeIdentityBootstrap,
+    RemoteControlNodeIdentityBootstrapError, REMOTE_CONTROL_IDENTITY_VAULT_SLOTS,
 };
 use prns_core::entropy::{EntropySource, RuntimeEntropy};
 
@@ -42,8 +43,40 @@ pub(crate) enum DisplayIoError {
 #[cfg(any(feature = "board-t096", feature = "board-t114"))]
 mod tft;
 
-pub(crate) type RemoteControlIdentityBootstrapError =
-    RemoteControlNodeIdentityBootstrapError<FlashVaultError<NvmcError>>;
+pub(crate) enum RemoteControlIdentityBootstrapError {
+    Identity(RemoteControlNodeIdentityBootstrapError<FlashVaultError<NvmcError>>),
+    FactoryGrant(FlashVaultError<NvmcError>),
+}
+
+impl core::fmt::Debug for RemoteControlIdentityBootstrapError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Identity(error) => formatter.debug_tuple("Identity").field(error).finish(),
+            Self::FactoryGrant(error) => {
+                formatter.debug_tuple("FactoryGrant").field(error).finish()
+            }
+        }
+    }
+}
+
+pub(crate) struct RemoteControlIdentityLoad {
+    pub(crate) bootstrap: RemoteControlNodeIdentityBootstrap,
+    pub(crate) factory_grant: Option<RemoteControlControllerGrant>,
+}
+
+pub(crate) fn initial_controller_grants(
+    factory_grant: Option<RemoteControlControllerGrant>,
+    storage: &mut Option<[RemoteControlControllerGrant; 1]>,
+) -> RemoteControlInitialControllerGrants<'_> {
+    let Some(grant) = factory_grant else {
+        return RemoteControlInitialControllerGrants::Nobody;
+    };
+    let grants = storage.insert([grant]);
+    RemoteControlInitialControllerGrants::Grants(
+        RemoteControlControllerGrants::try_from(grants.as_slice())
+            .expect("one factory controller grant is a valid initial grant set"),
+    )
+}
 
 pub(crate) struct RemoteControlIdentityFlash {
     offset: u32,
@@ -67,29 +100,36 @@ impl RemoteControlIdentityFlash {
         &self,
         nvmc: &mut Nvmc<'_>,
         entropy: &mut RuntimeEntropy<S>,
-    ) -> Result<RemoteControlNodeIdentityBootstrap, RemoteControlIdentityBootstrapError> {
+    ) -> Result<RemoteControlIdentityLoad, RemoteControlIdentityBootstrapError> {
         let mut vault =
             FlashVault::<_, REMOTE_CONTROL_IDENTITY_VAULT_SLOTS>::new(nvmc, self.offset);
         let bootstrap = RemoteControlNodeIdentityBootstrap::load_or_generate_with_runtime_entropy(
             &mut vault, entropy,
         );
         #[cfg(any(feature = "board-rak4631", feature = "board-rak10724"))]
-        if matches!(
+        let bootstrap = if matches!(
             bootstrap,
             Err(RemoteControlNodeIdentityBootstrapError::ControllerLoad(
                 FlashVaultError::Corrupt
             ))
         ) {
-            return {
-                vault
-                    .erase_all()
-                    .map_err(RemoteControlNodeIdentityBootstrapError::ControllerStore)?;
-                RemoteControlNodeIdentityBootstrap::load_or_generate_with_runtime_entropy(
-                    &mut vault, entropy,
-                )
-            };
-        }
-        bootstrap
+            vault
+                .erase_all()
+                .map_err(RemoteControlNodeIdentityBootstrapError::ControllerStore)
+                .map_err(RemoteControlIdentityBootstrapError::Identity)?;
+            RemoteControlNodeIdentityBootstrap::load_or_generate_with_runtime_entropy(
+                &mut vault, entropy,
+            )
+        } else {
+            bootstrap
+        };
+        let bootstrap = bootstrap.map_err(RemoteControlIdentityBootstrapError::Identity)?;
+        let factory_grant = load_factory_controller_grant(&vault)
+            .map_err(RemoteControlIdentityBootstrapError::FactoryGrant)?;
+        Ok(RemoteControlIdentityLoad {
+            bootstrap,
+            factory_grant,
+        })
     }
 }
 

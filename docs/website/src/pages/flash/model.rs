@@ -58,6 +58,11 @@ const WIO_TRACKER_L1_CONFIRMATION_DETAIL: &str = "INFO_UF2.TXT identifies the TR
 const HT_N5262_SHARED_UF2_IDENTITY: &str = "ht-n5262";
 const HT_N5262_CONFIRMATION_DETAIL: &str = "INFO_UF2.TXT confirms only the shared HT-n5262 recovery family. It cannot distinguish T114, MeshTower V2, or either MeshPocket capacity; the printed product label and, for MeshPocket, enclosure capacity marking are the final identity check.";
 
+const RAK4631_SHARED_UF2_IDENTITY: &str = "wisblock-rak4631-board";
+const RAK4631_CONFIRMATION_DETAIL: &str = "INFO_UF2.TXT identifies the shared RAK4631 recovery family. Check the kit label: RAK WisBlock RAK4631 and RAK WisMesh 1W Booster Kit need different firmware for their radio hardware.";
+const XIAO_NRF52840_SHARED_UF2_IDENTITY: &str = "nrf52840-seeedxiao-v1";
+const SOLAR_NODE_CONFIRMATION_DETAIL: &str = "INFO_UF2.TXT identifies the shared Seeed XIAO nRF52840 recovery family. Confirm the enclosure is a SenseCAP Solar Node P1 or P1-Pro; this firmware is not for a standalone XIAO board.";
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum WebSerialCapability {
     Checking,
@@ -236,8 +241,23 @@ pub(super) fn preparation_guide(
                 "Copy the verified MeshTower V2 UF2 to HT-n5262 and wait for the drive to disappear when the device reboots.".to_string(),
             ],
         },
+        PreparationProfile::Rak4631Uf2 | PreparationProfile::Rak10724Uf2 => PreparationGuide {
+            lead: "The WisBlock Starter Kit and WisMesh 1W share the same bootloader identity. Match the selected firmware to the kit label before continuing.",
+            steps: vec![
+                "Connect a USB data cable and double-press RESET until the RAK4631 drive appears.".to_string(),
+                "Select INFO_UF2.TXT from that drive. It confirms the shared recovery family and S140 6.1.1, not which kit is connected.".to_string(),
+                "Copy the verified UF2 for your selected kit to RAK4631 and wait for the drive to disappear as the device reboots.".to_string(),
+            ],
+        },
+        PreparationProfile::SensecapSolarNodeUf2 => PreparationGuide {
+            lead: "Use this image for the SenseCAP Solar Node P1 or P1-Pro. Its XIAO bootloader identity is also used by other Seeed boards, so confirm the Solar Node enclosure label.",
+            steps: vec![
+                "Connect a USB data cable and double-press RST to open the XIAO-BOOT drive. Use RST, not the PWR button.".to_string(),
+                "Select INFO_UF2.TXT from that drive. This release supports the S140 7.3.0 foundation.".to_string(),
+                "Copy the verified Solar Node UF2 to XIAO-BOOT and wait for the drive to disappear as the device reboots.".to_string(),
+            ],
+        },
         PreparationProfile::MuziBaseDuoUf2
-        | PreparationProfile::Rak4631Uf2
         | PreparationProfile::T096Uf2 => uf2_preparation_guide(target),
         PreparationProfile::T1000eNrfSerialDfu => {
             t1000e_preparation_guide(target, nrf_recovery)
@@ -462,6 +482,8 @@ pub(super) fn board_identity_confirmation_detail(target: BoardFlashTarget) -> Op
     match shared_identity {
         HT_N5262_SHARED_UF2_IDENTITY => Some(HT_N5262_CONFIRMATION_DETAIL),
         WIO_TRACKER_L1_SHARED_UF2_IDENTITY => Some(WIO_TRACKER_L1_CONFIRMATION_DETAIL),
+        RAK4631_SHARED_UF2_IDENTITY => Some(RAK4631_CONFIRMATION_DETAIL),
+        XIAO_NRF52840_SHARED_UF2_IDENTITY => Some(SOLAR_NODE_CONFIRMATION_DETAIL),
         _ => panic!("shared UF2 identity requires family-specific confirmation detail"),
     }
 }
@@ -569,6 +591,24 @@ mod tests {
             board_identity_confirmation_detail(wio.flash_target.unwrap()),
             Some(WIO_TRACKER_L1_CONFIRMATION_DETAIL)
         );
+    }
+
+    #[test]
+    fn shared_recovery_families_keep_product_specific_confirmation() {
+        for (slug, expected) in [
+            ("rak4631", RAK4631_CONFIRMATION_DETAIL),
+            ("rak10724", RAK4631_CONFIRMATION_DETAIL),
+            (
+                "seeed-sensecap-solar-node-p1",
+                SOLAR_NODE_CONFIRMATION_DETAIL,
+            ),
+        ] {
+            let board = board_target_by_slug(slug).expect("shipping board");
+            assert_eq!(
+                board_identity_confirmation_detail(board.flash_target.unwrap()),
+                Some(expected)
+            );
+        }
     }
 
     #[test]

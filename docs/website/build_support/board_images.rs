@@ -21,6 +21,7 @@ pub(crate) fn generate() {
         ("HELTEC_MESH_NODE_T096", "heltec-mesh-node-t096.webp"),
         ("MESH_TOWER_V2", "mesh-tower-v2.webp"),
         ("THINKNODE_G4", "thinknode-g4.webp"),
+        ("THINKNODE_M7", "thinknode-m7.webp"),
         ("HELTEC_HT_HD01", "heltec-ht-hd01.webp"),
         ("HELTEC_E290", "heltec-e290.webp"),
         (

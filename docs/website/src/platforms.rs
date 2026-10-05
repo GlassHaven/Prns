@@ -101,6 +101,8 @@ pub enum PreparationProfile {
     WioTrackerL1Uf2,
     #[cfg_attr(not(feature = "local-dev-flasher"), allow(dead_code))]
     Rak4631Uf2,
+    Rak10724Uf2,
+    SensecapSolarNodeUf2,
     T096Uf2,
     T1000eNrfSerialDfu,
 }
@@ -243,6 +245,7 @@ impl BoardTarget {
             "t096" => Some(&board_images::HELTEC_MESH_NODE_T096),
             "mesh-tower-v2" => Some(&board_images::MESH_TOWER_V2),
             "thinknode-g4" => Some(&board_images::THINKNODE_G4),
+            "thinknode-m7" => Some(&board_images::THINKNODE_M7),
             "heltec-ht-hd01-v2" => Some(&board_images::HELTEC_HT_HD01),
             "heltec-e290" => Some(&board_images::HELTEC_E290),
             "heltec-wireless-stick-lite-v3" => Some(&board_images::HELTEC_WIRELESS_STICK_LITE_V3),
@@ -278,22 +281,12 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
         flash_target: None,
     },
     BoardTarget {
-        name: "SenseCAP Solar Node P1",
-        slug: "seeed-sensecap-solar-node-p1",
-        silicon: "nRF52840 + SX1262",
+        name: "Elecrow ThinkNode M7",
+        slug: "thinknode-m7",
+        silicon: "ESP32-S3 + LR1110 + CH390D Ethernet",
         tier: Tier::BringUp,
         interfaces: &[],
-        icon: Some("nordicsemiconductor"),
-        preparation_profile: None,
-        flash_target: None,
-    },
-    BoardTarget {
-        name: "RAK WisMesh 1W",
-        slug: "rak10724",
-        silicon: "nRF52840 + SX1262 + SKY66122 PA",
-        tier: Tier::BringUp,
-        interfaces: &[],
-        icon: Some("nordicsemiconductor"),
+        icon: Some("espressif"),
         preparation_profile: None,
         flash_target: None,
     },
@@ -736,11 +729,7 @@ mod tests {
 
         assert_eq!(
             bring_up,
-            vec![
-                "Raspberry Pi Zero 2 W",
-                "SenseCAP Solar Node P1",
-                "RAK WisMesh 1W"
-            ]
+            vec!["Raspberry Pi Zero 2 W", "Elecrow ThinkNode M7"]
         );
         assert!(
             UPCOMING_BOARD_TARGETS

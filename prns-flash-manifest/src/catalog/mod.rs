@@ -811,6 +811,46 @@ const RAK4631_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
     }],
 };
 
+const RAK10724_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
+    preparation_profile: PreparationProfile::Rak10724Uf2,
+    package: "t-echo",
+    binary: "rak10724",
+    board_feature: "board-rak10724",
+    manufacturer: "Stay Personal",
+    product: "Personal Hopspot (RAK WisMesh 1W)",
+    serial_number: "PERSONAL-RNS-RAK10724-HOP",
+    variants: &[PinnedUf2Variant {
+        softdevice_family: "s140",
+        softdevice_version: "6.1.1",
+        fwid: "0x00b6",
+        memory_profile: "rak10724",
+        family_id: "0xada52840",
+        application_link: Uf2ApplicationLink::SoftdeviceS140V6,
+        target_directory: "target/rak10724",
+        filename: "rak10724-s140-6.1.1.uf2",
+    }],
+};
+
+const SENSECAP_SOLAR_NODE_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
+    preparation_profile: PreparationProfile::SensecapSolarNodeUf2,
+    package: "t-echo",
+    binary: "sensecap-solar-node",
+    board_feature: "board-sensecap-solar-node",
+    manufacturer: "Stay Personal",
+    product: "Personal Hopspot (SenseCAP Solar Node)",
+    serial_number: "PERSONAL-RNS-SOLARNODE-HOP",
+    variants: &[PinnedUf2Variant {
+        softdevice_family: "s140",
+        softdevice_version: "7.3.0",
+        fwid: "0x0123",
+        memory_profile: "sensecap-solar-node",
+        family_id: "0xada52840",
+        application_link: Uf2ApplicationLink::BareMetal,
+        target_directory: "target/sensecap-solar-node",
+        filename: "sensecap-solar-node-s140-7.3.0.uf2",
+    }],
+};
+
 fn pinned_uf2_recipe(slug: &str) -> Option<&'static PinnedUf2Recipe> {
     match slug {
         "t-echo" => Some(&T_ECHO_UF2_RECIPE),
@@ -822,6 +862,8 @@ fn pinned_uf2_recipe(slug: &str) -> Option<&'static PinnedUf2Recipe> {
         "mesh-tower-v2" => Some(&MESH_TOWER_V2_UF2_RECIPE),
         "muzi-base-duo" => Some(&MUZI_BASE_DUO_UF2_RECIPE),
         "rak4631" => Some(&RAK4631_UF2_RECIPE),
+        "rak10724" => Some(&RAK10724_UF2_RECIPE),
+        "seeed-sensecap-solar-node-p1" => Some(&SENSECAP_SOLAR_NODE_UF2_RECIPE),
         _ => None,
     }
 }
@@ -1045,7 +1087,9 @@ mod tests {
                 "muzi-base-duo",
                 "heltec-v3",
                 "seeed-wio-tracker-l1",
-                "xiao-esp32s3-wio-sx1262"
+                "xiao-esp32s3-wio-sx1262",
+                "rak10724",
+                "seeed-sensecap-solar-node-p1"
             ]
         );
         assert!(catalog
@@ -1144,6 +1188,8 @@ mod tests {
                     Some(8_388_608),
                     Some(("partitions-hopspot-8mb.csv", "8mb"))
                 ),
+                ("rak10724", None, None),
+                ("seeed-sensecap-solar-node-p1", None, None),
             ]
         );
         Ok(())
@@ -1233,6 +1279,12 @@ mod tests {
                     "xiao-esp32s3-wio-sx1262",
                     "xiao-esp32s3-wio-sx1262",
                     "xtensa-esp32s3-none-elf"
+                ),
+                ("rak10724", "rak10724", "thumbv7em-none-eabihf"),
+                (
+                    "seeed-sensecap-solar-node-p1",
+                    "sensecap-solar-node",
+                    "thumbv7em-none-eabihf"
                 ),
             ]
         );
@@ -1391,7 +1443,10 @@ mod tests {
         assert_eq!(build.board_feature, "board-rak4631");
         assert_eq!(build.rust_target, "thumbv7em-none-eabihf");
         assert_eq!(build.mount_label, "RAK4631");
-        assert_eq!(build.board_identity.match_kind, Uf2BoardIdMatchKind::Exact);
+        assert_eq!(
+            build.board_identity.match_kind,
+            Uf2BoardIdMatchKind::ExactShared
+        );
         assert_eq!(build.board_identity.value, "wisblock-rak4631-board");
         assert_eq!(build.application_usb.usb.vendor_id, "0x1209");
         assert_eq!(build.application_usb.usb.product_id, "0x0001");

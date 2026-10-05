@@ -345,6 +345,8 @@ pub enum PreparationProfile {
     MeshTowerV2Uf2,
     WioTrackerL1Uf2,
     Rak4631Uf2,
+    Rak10724Uf2,
+    SensecapSolarNodeUf2,
     T1000eNrfDfu,
 }
 
@@ -360,6 +362,8 @@ impl PreparationProfile {
             "mesh-tower-v2-uf2" => Ok(Self::MeshTowerV2Uf2),
             "muzi-base-duo-uf2" => Ok(Self::MuziBaseDuoUf2),
             "rak4631-uf2" => Ok(Self::Rak4631Uf2),
+            "rak10724-uf2" => Ok(Self::Rak10724Uf2),
+            "sensecap-solar-node-uf2" => Ok(Self::SensecapSolarNodeUf2),
             "t1000e-nrf-dfu" => Ok(Self::T1000eNrfDfu),
             _ => Err(DomainValueError::PreparationProfile(value.to_string())),
         }
@@ -376,6 +380,8 @@ impl PreparationProfile {
             Self::MeshTowerV2Uf2 => "mesh-tower-v2-uf2",
             Self::MuziBaseDuoUf2 => "muzi-base-duo-uf2",
             Self::Rak4631Uf2 => "rak4631-uf2",
+            Self::Rak10724Uf2 => "rak10724-uf2",
+            Self::SensecapSolarNodeUf2 => "sensecap-solar-node-uf2",
             Self::T1000eNrfDfu => "t1000e-nrf-dfu",
         }
     }

@@ -103,6 +103,32 @@ pub(super) async fn restore(image: [u8; CAPACITY], expected: &[Grant]) {
     );
 }
 
+#[test]
+fn retained_revocation_overrides_a_factory_grant_after_restart() {
+    embassy_futures::block_on(async {
+        let revoked = grant(0x42, Authority::Administrator, Request::Describe);
+        let empty = snapshot(&[]);
+        let mut flash = TestFlash::new();
+        flash.bytes = image(&empty, Campaign::Append).await;
+        let mut owner = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4>::new(
+            flash,
+            LAYOUT,
+            EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
+            FixedRouteSnapshotKeys::new(),
+            (|_| {}) as fn(EmbeddedPersistenceDiagnostic),
+        );
+        let mut engine = EngineState::<crate::storage::GrowableHeap>::default();
+        let mut remote = available_remote_control(&mut engine);
+        remote.set_controller_grant(revoked).unwrap();
+        let report = owner
+            .restore(&mut engine, &mut remote, InstantMillis(0))
+            .await;
+        assert_eq!(report.remote_control_controller_grants_refused_count, 0);
+        assert_eq!(report.remote_control_controller_grants_dropped_count, 0);
+        assert!(remote.controller_grants().unwrap().is_empty());
+    });
+}
+
 async fn store(
     image: [u8; CAPACITY],
     confirmed: &RemoteControlAuthorizationSnapshot,

@@ -60,7 +60,7 @@ impl T1000eBoard {
                 .await
                 .is_err()
         {
-            crate::runtime::bootloader_entry::enter_t1000e_bootloader(
+            crate::runtime::bootloader_entry::enter_bare_metal_bootloader(
                 personal_rns::usb_auto::WebUsbBootloaderMode::Uf2HandOff,
             );
         }

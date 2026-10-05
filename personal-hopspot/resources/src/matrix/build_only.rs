@@ -1,8 +1,6 @@
 use personal_hopspot_builder::platform::nrf52840::firmware;
 use personal_hopspot_builder::LtoMode;
-use personal_hopspot_memory::{
-    MemoryProfile, MESH_TOWER_V2, MUZI_BASE_DUO, RAK10724, SENSECAP_SOLAR_NODE, WIO_TRACKER_L1,
-};
+use personal_hopspot_memory::{MemoryProfile, MESH_TOWER_V2, MUZI_BASE_DUO, WIO_TRACKER_L1};
 
 const NRF52840_RUST_TARGET: &str = "thumbv7em-none-eabihf";
 const NRF52840_PACKAGE: &str = "t-echo";
@@ -14,31 +12,7 @@ pub(super) struct BuildOnlyTarget {
     pub recipe: firmware::Recipe<'static>,
 }
 
-pub(super) const TARGETS: [BuildOnlyTarget; 5] = [
-    BuildOnlyTarget {
-        id: "rak10724",
-        display_name: "RAK WisMesh 1W",
-        profile: &RAK10724,
-        recipe: firmware::Recipe {
-            package: NRF52840_PACKAGE,
-            binary: "rak10724",
-            rust_target: NRF52840_RUST_TARGET,
-            cargo_features: "board-rak10724",
-            lto: LtoMode::Configured,
-        },
-    },
-    BuildOnlyTarget {
-        id: "sensecap-solar-node",
-        display_name: "Seeed SenseCAP Solar Node P1/P1-Pro",
-        profile: &SENSECAP_SOLAR_NODE,
-        recipe: firmware::Recipe {
-            package: NRF52840_PACKAGE,
-            binary: "sensecap-solar-node",
-            rust_target: NRF52840_RUST_TARGET,
-            cargo_features: "board-sensecap-solar-node",
-            lto: LtoMode::Configured,
-        },
-    },
+pub(super) const TARGETS: [BuildOnlyTarget; 3] = [
     BuildOnlyTarget {
         id: "mesh-tower-v2",
         display_name: "Heltec MeshTower V2",
