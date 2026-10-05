@@ -458,10 +458,10 @@ pub const PLATFORMS: &[Platform] = &[
         icon: Some("semtech"),
     },
     Platform {
-        name: "Wi-Fi HaLoW",
+        name: "Morse Micro MM6108",
         group: Group::Microcontroller,
         tier: Tier::InstallationPreview,
-        icon: None,
+        icon: Some("morsemicro"),
     },
     Platform {
         name: "MediaTek MT7628",
@@ -699,8 +699,8 @@ pub const LANDING_PLATFORM_CHIPS: &[LandingPlatformChip] = &[
         icon: Some("mediatek"),
     },
     LandingPlatformChip {
-        name: "Wi-Fi HaLoW",
-        icon: None,
+        name: "Morse Micro MM6108",
+        icon: Some("morsemicro"),
     },
     LandingPlatformChip {
         name: "Rust",
