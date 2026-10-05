@@ -933,13 +933,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
-      - name: install the reference RNS (rns==1.4.2)
+      - name: install the reference RNS (rns==1.5.4)
         run: uv venv /tmp/rns && uv pip install --python /tmp/rns/bin/python -r validation/oracles/requirements.txt
-      - name: install the control-RPC reference RNS (rns==1.4.2)
+      - name: install the control-RPC reference RNS (rns==1.5.4)
         run: uv venv /tmp/rns-rpc && uv pip install --python /tmp/rns-rpc/bin/python -r validation/oracles/requirements.txt
-      - name: install the interop reference RNS (rns==1.5.0)
+      - name: install the interop reference RNS (rns==1.5.4)
         run: uv venv /tmp/rns-interop && uv pip install --python /tmp/rns-interop/bin/python -r validation/interop/requirements.txt
-      - name: install the interop control-RPC reference RNS (rns==1.5.0)
+      - name: install the interop control-RPC reference RNS (rns==1.5.4)
         run: uv venv /tmp/rns-interop-rpc && uv pip install --python /tmp/rns-interop-rpc/bin/python -r validation/interop/requirements.txt
       - name: PR deterministic oracle lane
         run: python3 validation/run.py run --domain oracles --tier pr --expected-sha "$GITHUB_SHA"

@@ -12,25 +12,25 @@ nightly = "nightly-2025-11-21"
 environment = "SMOKE_PYTHON"
 venv = "validation/.venv/rns-{version}"
 requirements = "validation/oracles/requirements.txt"
-version = "1.4.2"
+version = "1.5.4"
 
 [interpreters.rpc]
 environment = "RPC_SMOKE_PYTHON"
 venv = "validation/.venv/rns-rpc-{version}"
 requirements = "validation/oracles/requirements.txt"
-version = "1.4.2"
+version = "1.5.4"
 
 [interpreters.interop_smoke]
 environment = "SMOKE_PYTHON"
 venv = "validation/.venv/rns-interop-{version}"
 requirements = "validation/interop/requirements.txt"
-version = "1.5.0"
+version = "1.5.4"
 
 [interpreters.interop_rpc]
 environment = "RPC_SMOKE_PYTHON"
 venv = "validation/.venv/rns-interop-rpc-{version}"
 requirements = "validation/interop/requirements.txt"
-version = "1.5.0"
+version = "1.5.4"
 
 [registry]
 cargo_lock_workspaces = [
