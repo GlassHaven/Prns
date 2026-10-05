@@ -696,18 +696,19 @@ where
         if self.pending_confirmation.is_some() {
             return self.retry_not_before.or(Some(now));
         }
-        let group_configuration_pending = self.groups.as_ref().has_pending_request();
+        // A pending settings change is due now: the manifold only runs `progress` once the
+        // deadline passes, and `wait_for_work` keeps waking it until the change is taken.
+        let configuration_pending =
+            self.groups.as_ref().has_pending_request() || NODE_NAME_STORE.has_pending_request();
         if self.journal.is_none() {
-            return group_configuration_pending.then_some(now);
+            return configuration_pending.then_some(now);
         }
-        let mut deadline = if self.compaction.is_some()
-            || self.landing_batch.is_some()
-            || group_configuration_pending
-        {
-            Some(now)
-        } else {
-            None
-        };
+        let mut deadline =
+            if self.compaction.is_some() || self.landing_batch.is_some() || configuration_pending {
+                Some(now)
+            } else {
+                None
+            };
         let ratchet_ready = self.ratchet_ready_at();
         let route_ready = self.route_ready_at();
         deadline = earlier(deadline, ratchet_ready);

@@ -1268,6 +1268,53 @@ fn discovery_group_snapshot_survives_compaction_and_reboot() {
 }
 
 #[test]
+fn a_pending_node_name_makes_persistence_due_immediately() {
+    use super::super::node_name_store::store_node_name;
+    let _store = lock_discovery_group_store();
+    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
+    NODE_NAME_STORE.reset_for_test();
+    embassy_futures::block_on(async {
+        let mut persistence = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4>::new(
+            TestFlash::new(),
+            LAYOUT,
+            EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
+            FixedRouteSnapshotKeys::new(),
+            (|_| {}) as fn(EmbeddedPersistenceDiagnostic),
+        );
+        let mut engine = EngineState::<crate::storage::GrowableHeap>::default();
+        let mut remote_control = available_remote_control(&mut engine);
+        persistence
+            .restore(&mut engine, &mut remote_control, InstantMillis(0))
+            .await;
+        // Settle whatever a fresh journal schedules first, so only the name can make it due.
+        for now in 1..64 {
+            match persistence.next_deadline(InstantMillis(now)) {
+                Some(deadline) if deadline.0 <= now => {
+                    persistence.progress(&mut engine, InstantMillis(now)).await;
+                }
+                _ => break,
+            }
+        }
+        assert!(persistence
+            .next_deadline(InstantMillis(5))
+            .is_none_or(|deadline| deadline.0 > 5));
+        let stored = store_node_name(RemoteControlNodeName::new("Box-Hopspot").unwrap());
+        // Without this the manifold spins: work is signalled but progress is never due.
+        assert_eq!(
+            persistence.next_deadline(InstantMillis(5)),
+            Some(InstantMillis(5))
+        );
+        persistence.progress(&mut engine, InstantMillis(5)).await;
+        assert_eq!(stored.await, Ok(()));
+        assert!(persistence
+            .next_deadline(InstantMillis(6))
+            .is_none_or(|deadline| deadline.0 > 6));
+    });
+    NODE_NAME_STORE.reset_for_test();
+    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
+}
+
+#[test]
 fn node_name_survives_progress_reboot_compaction_and_reboot() {
     use super::super::node_name_store::{restored_node_name_now, store_node_name};
     let _store = lock_discovery_group_store();
