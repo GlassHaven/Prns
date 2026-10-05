@@ -188,9 +188,9 @@ def manifest() -> dict:
                     else [
                         {
                             "softdevice_family": "s140",
-                            "softdevice_version": "7.3.0" if slug == "seeed-wio-tracker-l1" else "6.1.1",
-                            "fwid": "0x0123" if slug == "seeed-wio-tracker-l1" else "0x00b6",
-                            "application_base": "0x00027000" if slug == "seeed-wio-tracker-l1" else "0x00026000",
+                            "softdevice_version": "7.3.0" if slug in {"seeed-wio-tracker-l1", "seeed-sensecap-solar-node-p1"} else "6.1.1",
+                            "fwid": "0x0123" if slug in {"seeed-wio-tracker-l1", "seeed-sensecap-solar-node-p1"} else "0x00b6",
+                            "application_base": "0x00027000" if slug in {"seeed-wio-tracker-l1", "seeed-sensecap-solar-node-p1"} else "0x00026000",
                             "family_id": "0xada52840",
                             "path": f"{slug}.uf2",
                             "size": 512,

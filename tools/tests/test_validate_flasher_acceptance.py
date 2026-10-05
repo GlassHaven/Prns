@@ -82,7 +82,7 @@ def manifest() -> dict:
                             "softdevice_family": "s140",
                             "softdevice_version": CATALOG[board]["build"]["variants"][0]["softdevice_version"],
                             "fwid": CATALOG[board]["build"]["variants"][0]["fwid"],
-                            "application_base": "0x00027000" if board == "seeed-wio-tracker-l1" else "0x00026000",
+                            "application_base": "0x00027000" if board in {"seeed-wio-tracker-l1", "seeed-sensecap-solar-node-p1"} else "0x00026000",
                             "family_id": "0xada52840",
                             "path": (
                                 "heltec-t114-s140-6.1.1.uf2"
