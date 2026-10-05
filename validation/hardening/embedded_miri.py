@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import tomllib
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -18,12 +19,18 @@ from validation.hardening.embedded_failure import (
     ProofFailure,
     execution_error,
 )
+from validation.hardening.embedded_miri_execution import (
+    MiriExecutionError,
+    discover_tests,
+    run_tests,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = ROOT / "validation" / "hardening" / "embedded-miri.toml"
 RUNNER_PATH = ROOT / "validation" / "hardening" / "embedded_miri.py"
 FAILURE_SOURCE = ROOT / "validation" / "hardening" / "embedded_failure.py"
+EXECUTION_SOURCE = ROOT / "validation" / "hardening" / "embedded_miri_execution.py"
 VALID_IDENTIFIER = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?")
 TEST_RESULT = re.compile(
     rb"test result: ok\. (?P<passed>[0-9]+) passed; 0 failed; [0-9]+ ignored;"
@@ -325,6 +332,8 @@ def run_scenario(
     identity: ToolchainIdentity,
     artifact_directory: Path,
 ) -> Observation:
+    if mode is Mode.FULL:
+        return run_full_scenario(scenario, model, identity, artifact_directory)
     log = artifact_directory / f"{scenario.component}-{model.value}.log"
     completed_tests = 0
     outputs = []
@@ -367,6 +376,52 @@ def run_scenario(
     if completed_tests == 0:
         raise EmbeddedMiriError(f"{scenario.component} {model.value} completed no tests")
     return Observation(model=model, completed_tests=completed_tests, log=log)
+
+
+def run_full_scenario(
+    scenario: Scenario, model: BorrowModel, identity: ToolchainIdentity,
+    artifact_directory: Path,
+) -> Observation:
+    log = artifact_directory / f"{scenario.component}-{model.value}.log"
+    command = command_for(scenario, scenario.full_filters[0], identity.channel)
+    command = command[:command.index("--")]
+    environment = miri_environment(model)
+    outputs = []
+    failures = []
+    completed = 0
+    seen: set[str] = set()
+    try:
+        names = discover_tests(command, scenario.full_filters, ROOT, environment)
+        outputs.append(("discovered-tests=" + json.dumps(names) + "\n").encode())
+        print(f"[embedded-miri:{model.value}] {scenario.component}: {len(names)} tests", flush=True)
+        for result in run_tests(
+            command, names, ROOT, environment,
+            artifact_directory / f"{scenario.component}-{model.value}-tests",
+        ):
+            outputs.append(result.output)
+            log.write_bytes(render_log(model, identity, outputs))
+            if result.name not in names or result.name in seen:
+                raise EmbeddedMiriError(f"unexpected or duplicate Miri test result: {result.name}")
+            seen.add(result.name)
+            if result.returncode != 0:
+                failures.append(result.name)
+                continue
+            if parse_completed_tests(result.output) != 1:
+                raise EmbeddedMiriError(f"Miri did not execute exactly one test: {result.name}")
+            completed += 1
+    except (OSError, subprocess.SubprocessError, MiriExecutionError) as error:
+        outputs.append(str(error).encode())
+        raise execution_error(FailureKind.TOOL_FAILURE, str(error)) from error
+    finally:
+        log.write_bytes(render_log(model, identity, outputs))
+    if failures:
+        raise execution_error(
+            FailureKind.STRUCTURAL_VIOLATION,
+            f"{scenario.component} {model.value} failed tests: {', '.join(failures)}; log={relative(log)}",
+        )
+    if completed != len(names):
+        raise EmbeddedMiriError(f"Miri completed {completed} of {len(names)} discovered tests")
+    return Observation(model=model, completed_tests=completed, log=log)
 
 
 def parse_completed_tests(output: bytes) -> int:
@@ -421,7 +476,7 @@ def record_proof(
         "--output",
         str(output),
     ]
-    for source in (INVENTORY_PATH, RUNNER_PATH, FAILURE_SOURCE, *scenario.sources):
+    for source in (INVENTORY_PATH, RUNNER_PATH, FAILURE_SOURCE, EXECUTION_SOURCE, *scenario.sources):
         command.extend(("--source", str(source)))
     for observation in observations:
         command.extend(("--log", str(observation.log)))
@@ -462,7 +517,7 @@ def record_failure(
         "--output",
         str(output),
     ]
-    for source in (INVENTORY_PATH, RUNNER_PATH, FAILURE_SOURCE, *scenario.sources):
+    for source in (INVENTORY_PATH, RUNNER_PATH, FAILURE_SOURCE, EXECUTION_SOURCE, *scenario.sources):
         command.extend(("--source", str(source)))
     for log in logs:
         command.extend(("--log", str(log)))
@@ -517,26 +572,20 @@ def run(mode: Mode) -> None:
     for scenario in scenarios:
         observations = []
         scenario_failures = []
-        for model in configuration.borrow_models:
-            try:
-                observations.append(
-                    run_scenario(
-                        scenario,
-                        mode,
-                        model,
-                        identity,
-                        artifacts,
+        with ThreadPoolExecutor(max_workers=len(configuration.borrow_models)) as executor:
+            pending = [
+                executor.submit(run_scenario, scenario, mode, model, identity, artifacts)
+                for model in configuration.borrow_models
+            ]
+            for future in pending:
+                try:
+                    observations.append(future.result())
+                except ProofExecutionError as error:
+                    scenario_failures.append(error.failure)
+                except (EmbeddedMiriError, OSError, subprocess.SubprocessError) as error:
+                    scenario_failures.append(
+                        ProofFailure(kind=FailureKind.TOOL_FAILURE, diagnostic=str(error))
                     )
-                )
-            except ProofExecutionError as error:
-                scenario_failures.append(error.failure)
-            except (EmbeddedMiriError, OSError, subprocess.SubprocessError) as error:
-                scenario_failures.append(
-                    ProofFailure(
-                        kind=FailureKind.TOOL_FAILURE,
-                        diagnostic=str(error),
-                    )
-                )
         if scenario_failures:
             first = scenario_failures[0]
             combined = ProofFailure(

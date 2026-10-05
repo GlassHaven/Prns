@@ -174,77 +174,94 @@ async fn store(
     (image, trace)
 }
 
+enum GrantChange {
+    Update,
+    Revoke,
+}
+
 #[test]
-fn interrupted_grant_updates_and_revocations_restore_whole_authority_tables() {
+fn interrupted_grant_update_append_restores_whole_authority_tables() {
+    exercise_grant_change(Campaign::Append, GrantChange::Update);
+}
+
+#[test]
+fn interrupted_grant_update_compaction_restores_whole_authority_tables() {
+    exercise_grant_change(Campaign::CompactThenAppend, GrantChange::Update);
+}
+
+#[test]
+fn interrupted_grant_revocation_append_restores_whole_authority_tables() {
+    exercise_grant_change(Campaign::Append, GrantChange::Revoke);
+}
+
+#[test]
+fn interrupted_grant_revocation_compaction_restores_whole_authority_tables() {
+    exercise_grant_change(Campaign::CompactThenAppend, GrantChange::Revoke);
+}
+
+fn exercise_grant_change(campaign: Campaign, change: GrantChange) {
     embassy_futures::block_on(async {
         let administrator = grant(11, Authority::Administrator, Request::Describe);
         let operator = grant(22, Authority::Operator, Request::Describe);
         let confirmed = [administrator, operator];
         let confirmed_snapshot = snapshot(&confirmed);
-        let candidates = [
-            std::vec![
+        let candidate = match change {
+            GrantChange::Update => std::vec![
                 administrator,
                 grant(22, Authority::Operator, Request::AnnounceSelf)
             ],
-            std::vec![administrator],
-        ];
-        for candidate in candidates {
-            let candidate_snapshot = snapshot(&candidate);
-            for campaign in [Campaign::Append, Campaign::CompactThenAppend] {
-                let baseline = image(&confirmed_snapshot, campaign).await;
-                let (healthy, trace) =
-                    store(baseline, &confirmed_snapshot, &candidate_snapshot, None).await;
-                restore(healthy, &candidate).await;
-                assert_eq!(
-                    trace
-                        .iter()
-                        .any(|event| matches!(event, Operation::Erase { .. })),
-                    matches!(campaign, Campaign::CompactThenAppend)
-                );
-                let commit = trace
-                    .iter()
-                    .rposition(|event| matches!(event, Operation::Write { .. }))
-                    .unwrap();
-                assert!(matches!(trace[commit], Operation::Write { len: 4, .. }));
-                let mut cuts = 0;
-                for (operation, event) in trace.iter().enumerate() {
-                    let prefixes: Vec<_> = match event {
-                        Operation::Read { len, .. } => std::vec![0, *len],
-                        Operation::Write { len, .. } | Operation::Erase { len, .. } => {
-                            (0..=*len).collect()
-                        }
+            GrantChange::Revoke => std::vec![administrator],
+        };
+        let candidate_snapshot = snapshot(&candidate);
+        let baseline = image(&confirmed_snapshot, campaign).await;
+        let (healthy, trace) =
+            store(baseline, &confirmed_snapshot, &candidate_snapshot, None).await;
+        restore(healthy, &candidate).await;
+        assert_eq!(
+            trace
+                .iter()
+                .any(|event| matches!(event, Operation::Erase { .. })),
+            matches!(campaign, Campaign::CompactThenAppend)
+        );
+        let commit = trace
+            .iter()
+            .rposition(|event| matches!(event, Operation::Write { .. }))
+            .unwrap();
+        assert!(matches!(trace[commit], Operation::Write { len: 4, .. }));
+        let mut cuts = 0;
+        for (operation, event) in trace.iter().enumerate() {
+            let prefixes: Vec<_> = match event {
+                Operation::Read { len, .. } => std::vec![0, *len],
+                Operation::Write { len, .. } | Operation::Erase { len, .. } => (0..=*len).collect(),
+            };
+            for completed_bytes in prefixes {
+                let cut = Cut {
+                    operation,
+                    completed_bytes,
+                };
+                let (image, observed) = store(
+                    baseline,
+                    &confirmed_snapshot,
+                    &candidate_snapshot,
+                    Some(cut),
+                )
+                .await;
+                assert_eq!(observed, trace[..=operation], "{cut:?}");
+                let expected =
+                    if operation > commit || (operation == commit && completed_bytes == 4) {
+                        candidate.as_slice()
+                    } else {
+                        &confirmed
                     };
-                    for completed_bytes in prefixes {
-                        let cut = Cut {
-                            operation,
-                            completed_bytes,
-                        };
-                        let (image, observed) = store(
-                            baseline,
-                            &confirmed_snapshot,
-                            &candidate_snapshot,
-                            Some(cut),
-                        )
-                        .await;
-                        assert_eq!(observed, trace[..=operation], "{cut:?}");
-                        let expected = if operation > commit
-                            || (operation == commit && completed_bytes == 4)
-                        {
-                            candidate.as_slice()
-                        } else {
-                            &confirmed
-                        };
-                        for _ in 0..2 {
-                            restore(image, expected).await;
-                        }
-                        cuts += 1;
-                    }
+                for _ in 0..2 {
+                    restore(image, expected).await;
                 }
-                std::eprintln!(
-                    "verified {cuts} {campaign:?} grant cuts, candidate table size {}",
-                    candidate.len()
-                );
+                cuts += 1;
             }
         }
+        std::eprintln!(
+            "verified {cuts} {campaign:?} grant cuts, candidate table size {}",
+            candidate.len()
+        );
     });
 }

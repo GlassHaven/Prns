@@ -51,4 +51,7 @@ sources = [
     "prns-runtime/impls/embassy/Cargo.lock",
     "prns-runtime/impls/embassy/src/runtime/embedded_persistence",
     "prns-core/src/persistence",
+    "prns-core/src/remote_control/core.rs",
+    "prns-core/src/remote_control/test_support.rs",
+    "prns-runtime/impls/embassy/src/runtime/node_facade/mod.rs",
 ]

@@ -59,6 +59,16 @@ Run the full Miri borrow-model matrix before release-sensitive changes:
 python3 validation/run.py run --suite embedded-miri-full
 ```
 
+The full runner discovers every unit test selected by the component inventory and runs
+both borrow models concurrently, with at most four independent interpreter processes
+per model. Each discovered test must execute exactly once in each model; ignored tests,
+empty selections, failed tests, and incomplete results cannot produce passing evidence.
+Per-test logs and the discovered test lists remain in the suite artifact directory while
+execution is in progress. The full suite has a four-hour limit for the exhaustive
+power-loss campaigns. Test identity fixtures reuse derived keys, while each simulated
+node still owns fresh keys, engine state, and authorization tables.
+
+
 ## Build and combine the full evidence
 
 The production resource matrix is heavier because it builds every current firmware target through the canonical builder:
