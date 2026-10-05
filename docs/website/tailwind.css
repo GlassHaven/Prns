@@ -494,6 +494,10 @@ html, body {
 .flash-flasher-panel__action {
     width: 100%;
 }
+.flash-recovery-panel {
+    width: fit-content;
+    max-width: min(100%, 44rem);
+}
 .flash-local-panel {
     max-width: 44rem;
 }

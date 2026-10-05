@@ -846,7 +846,7 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
         if let Some((recovery_mount_label, managed_application)) = nrf_hand_off {
             section {
                 id: "flash-recovery",
-                class: "mt-5 rounded-card border border-line/60 bg-layer/40 p-5 text-sm text-soft",
+                class: "flash-recovery-panel mt-5 rounded-card border border-line/60 bg-layer/40 p-5 text-sm text-soft",
                 "aria-labelledby": "flash-recovery-title",
                 h2 { id: "flash-recovery-title", class: "text-lg font-semibold text-paper", "Recovery" }
                 p { class: "mt-2",
@@ -879,7 +879,7 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
                     p { class: "mt-2 text-xs text-soft", role: "status", "aria-live": "polite", "{hand_off_status}" }
                 }
                 p { class: "mt-2 text-xs text-soft",
-                    "For trackers running Personal Hopspot. Restarting keeps your firmware and settings in place."
+                    "For trackers running Hopspot. Restarting keeps your firmware and settings in place."
                 }
                 if web_usb() == WebUsbCapability::Unavailable {
                     p { class: "mt-2 text-xs text-soft",
