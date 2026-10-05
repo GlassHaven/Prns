@@ -461,7 +461,7 @@ pub const PLATFORMS: &[Platform] = &[
         name: "Morse Micro MM6108",
         group: Group::Microcontroller,
         tier: Tier::InstallationPreview,
-        icon: None,
+        icon: Some("morsemicro"),
     },
     Platform {
         name: "MediaTek MT7628",
@@ -700,7 +700,7 @@ pub const LANDING_PLATFORM_CHIPS: &[LandingPlatformChip] = &[
     },
     LandingPlatformChip {
         name: "Morse Micro MM6108",
-        icon: None,
+        icon: Some("morsemicro"),
     },
     LandingPlatformChip {
         name: "Rust",
