@@ -318,6 +318,9 @@ html, body {
     -webkit-mask: var(--logo) center / contain no-repeat;
     mask: var(--logo) center / contain no-repeat;
 }
+.platform-chip__icon--logotype {
+    width: 4.25rem;
+}
 /* Marquee chips tile via margin (not gap) so two copies loop seamlessly; the
    platforms-page grid spaces with gap instead, so scope the margin here. */
 .platform-marquee__track .platform-chip {

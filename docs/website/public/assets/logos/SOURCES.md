@@ -1,5 +1,9 @@
 # Logo sources
 
-`mediatek.svg` adapts the initial M from the [Simple Icons MediaTek artwork](https://cdn.simpleicons.org/mediatek), retrieved 2026-10-05, into a compact UI monogram. The original M path is isolated and uniformly scaled into a 24×24 viewBox; the full wordmark and parallelogram are omitted. This is a site-specific abbreviation, not an official standalone MediaTek logo. The site's existing monochrome mask supplies the surrounding text color.
+`mediatek.svg` uses MediaTek's official **Secondary Logo White** SVG, downloaded on 2026-10-05 from its [brand asset library](https://www.mediatek.com/brand-logos-chips):
 
-MediaTek's [brand assets](https://www.mediatek.com/brand-assets) document the source wordmark. The monogram identifies the MT7628 processor vendor on the ThinkNode G4 and Heltec HT-HD01-V2 cards. MediaTek remains its owner's trademark and is used only to identify compatible hardware, without implying endorsement.
+https://728015.fs1.hubspotusercontent-na1.net/hubfs/728015/Mediatek_Corporate_Assets_June2025/Brand_Logos_Chips_june2025/Svg/Secondary%20Logo_White.svg
+
+The complete logotype's paths, proportions and white fill are unchanged. The SVG canvas is trimmed around the artwork with surrounding space retained, and a descriptive title is added. The site's shared monochrome CSS mask follows the surrounding text color; the wordmark gets additional horizontal room to remain readable.
+
+MediaTek's [brand guidelines](https://www.mediatek.com/brand-assets) recommend the full logotype for small digital placements. This replaces the earlier custom M abbreviation. It identifies the MT7628 processor vendor on the ThinkNode G4 and Heltec HT-HD01-V2 cards, without implying endorsement.
