@@ -9,6 +9,8 @@ pub(crate) fn generate() {
         ("HELTEC_V4", "heltec-v4.webp"),
         ("T_BEAM_SUPREME", "t-beam-supreme.webp"),
         ("XIAO_ESP32_C6", "xiao-esp32-c6.webp"),
+        ("XIAO_ESP32S3_WIO_SX1262", "xiao-esp32s3-wio-sx1262.webp"),
+        ("SENSECAP_SOLAR_NODE_P1", "sensecap-solar-node-p1.webp"),
         ("T_ECHO", "t-echo.webp"),
         (
             "SEEED_CARD_TRACKER_T1000_E",

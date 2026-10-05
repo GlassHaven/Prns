@@ -233,6 +233,8 @@ impl BoardTarget {
             "heltec-v4" => Some(&board_images::HELTEC_V4),
             "heltec-v4-r8" => Some(&board_images::HELTEC_V4),
             "t-beam-supreme" => Some(&board_images::T_BEAM_SUPREME),
+            "xiao-esp32s3-wio-sx1262" => Some(&board_images::XIAO_ESP32S3_WIO_SX1262),
+            "seeed-sensecap-solar-node-p1" => Some(&board_images::SENSECAP_SOLAR_NODE_P1),
             "xiao-esp32-c6" => Some(&board_images::XIAO_ESP32_C6),
             "t-echo" => Some(&board_images::T_ECHO),
             "t114" => Some(&board_images::T114),

@@ -43,6 +43,9 @@ transparent background inside a dark "slot" (`.flash-board-slot--inset` in
 | Heltec V3 | https://heltec.org/project/wifi-lora-32-v3/ | https://heltec.org/wp-content/uploads/2023/09/2.png | real alpha (vendor PNG) | vendor image, nominative use |
 | Seeed Wio Tracker L1 | https://wiki.seeedstudio.com/wio_tracker_l1_node/ | https://media-cdn.seeedstudio.com/media/catalog/product/cache/bb49d3ec4ee05b6f018e93f896b8a25d/1/-/1-114993648-wio-tracker-l1.jpg | white-knockout | vendor catalog image, nominative use |
 
+| Seeed XIAO ESP32-S3 + Wio-SX1262 | https://www.seeedstudio.com/Wio-SX1262-with-XIAO-ESP32S3-p-5982.html | https://media-cdn.seeedstudio.com/media/catalog/product/2/-/2-102010611-wio-sx1262-with-xiao-esp32s3.jpg | built-in imagegen background extraction; WebP thumbnail | vendor product photo, nominative use; AI-assisted cutout |
+| SenseCAP Solar Node P1 / P1-Pro | https://www.seeedstudio.com/SenseCAP-Solar-Node-P1-Pro-for-Meshtastic-LoRa-p-6412.html | https://media-cdn.seeedstudio.com/media/catalog/product/2/-/2-114993633-sensecap-solar-node-p1-pro-for-meshtastic_1.jpg | built-in imagegen background extraction; WebP thumbnail | vendor product photo, nominative use; AI-assisted cutout |
+
 Real-alpha vendor originals are not stored in the repo; the source URL above is
 the pointer, and regeneration is a plain download, a lanczos `scale=160`, and a
 quality-90 WebP encode. When the vendor canvas leaves the board small, crop to
@@ -59,3 +62,5 @@ A genuinely transparent XIAO ESP32-C6 render also exists on the Seeed wiki
 attribution + share-alike obligation, so the catalog uses the white-knockout for
 a uniform basis instead. Swap to it for a crisper edge if wanted, and add the
 Seeed CC BY-SA attribution here and in the footer.
+
+The two Seeed cutouts added for the firmware integration used the built-in imagegen tool with the instruction: remove only the white backdrop and floor shadow to transparency; preserve the photographed hardware, labels, colors, proportions and viewing angle; add no text or objects. The transparent outputs were inspected and encoded with `cwebp -q 90 -resize 160 0`.
