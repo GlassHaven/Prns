@@ -59,15 +59,31 @@ Run the full Miri borrow-model matrix before release-sensitive changes:
 python3 validation/run.py run --suite embedded-miri-full
 ```
 
-The full runner discovers every unit test selected by the component inventory and runs
-both borrow models concurrently, with at most four independent interpreter processes
-per model. Each discovered test must execute exactly once in each model; ignored tests,
-empty selections, failed tests, and incomplete results cannot produce passing evidence.
-Per-test logs and the discovered test lists remain in the suite artifact directory while
-execution is in progress. The longest power-loss campaigns divide their boundaries
-into four disjoint partitions, retaining every interruption point and assertion.
-The full suite has a five-and-a-half-hour limit. Test identity fixtures reuse derived
-keys, while each simulated node still owns fresh keys, engine state, and authorization
+The registered full suite expands into eight round-robin shards. Each discovers the
+complete component inventory and runs its assigned tests under both borrow models,
+with two interpreter processes per model. CI runs each shard as a separate job with a
+five-hour limit; the local command runs up to two shards concurrently, bounded by the
+host's processor count. The longest power-loss campaigns divide their boundaries into
+four disjoint test partitions, retaining every interruption point and assertion. Their
+filters run first so each shard starts with the expensive campaigns.
+
+Full evidence requires a clean commit and every discovered test executed exactly once
+under each model. Individual shards save test logs and fingerprinted records, but do not
+produce passing capability proofs. The collector checks the complete union, matching
+source, toolchain, host and build flags, and each named test result before recording
+full proofs. Ignored tests, missing shards and changed logs fail collection.
+
+To retry a failed shard without repeating successful shards from the same clean commit:
+
+```console
+python3 validation/run.py run --suite embedded-miri-full-shard-0-of-8
+python3 validation/run.py aggregate --tier release --suite embedded-miri-full --expected-sha "$(git rev-parse HEAD)"
+```
+
+Use the failed shard's actual index. Per-test logs remain in each shard's artifact
+directory while execution is in progress; assembled proofs live under
+`validation-artifacts/results/embedded-miri-full`. Test identity fixtures reuse derived
+keys, while each simulated node still owns fresh keys, engine state and authorization
 tables.
 
 

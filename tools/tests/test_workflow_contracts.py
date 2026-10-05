@@ -169,6 +169,18 @@ class WorkflowSchedulingTests(unittest.TestCase):
             if suite["domain"] in {"kani", "fuzz", "oracles"}:
                 self.assertNotIn(suite["id"], selected["native"])
 
+    def test_embedded_assurance_collects_complete_miri_before_summarizing(self) -> None:
+        for workflow in ("deep-validation.yml", "release-readiness.yml"):
+            with self.subTest(workflow=workflow):
+                job = self.workflow_jobs(workflow)["embedded-assurance"]
+                self.assertLess(
+                    job.index("validation/run.py aggregate"),
+                    job.index("./tools/prns build embedded assurance summarize"),
+                )
+                self.assertIn("--suite embedded-miri-full", job)
+                self.assertIn("--proofs validation-artifacts/results", job)
+                self.assertIn("dtolnay/rust-toolchain@", job)
+
     def test_deep_validation_rejects_every_unsuccessful_lane(self) -> None:
         aggregate = self.workflow_jobs("deep-validation.yml")["deep-validation"]
         bindings = dict(re.findall(

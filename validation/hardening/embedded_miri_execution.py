@@ -27,10 +27,11 @@ class TestExecution:
 def discover_tests(
     command: tuple[str, ...], filters: tuple[str, ...], cwd: Path, environment: dict[str, str],
 ) -> tuple[str, ...]:
-    tests: set[str] = set()
+    tests: list[str] = []
+    seen: set[str] = set()
     for test_filter in filters:
         result = subprocess.run(
-            (*command, "--lib", "--", test_filter, "--list", "--format", "terse"),
+            (*command, "--lib", "--", test_filter, "--list", "--format", "terse", "--color", "never"),
             cwd=cwd, env=environment, capture_output=True, check=True,
         )
         selected = {
@@ -40,8 +41,9 @@ def discover_tests(
         }
         if not selected:
             raise MiriExecutionError(f"Miri filter {test_filter!r} discovered no unit tests")
-        tests.update(selected)
-    return tuple(sorted(tests))
+        tests.extend(sorted(selected - seen))
+        seen.update(selected)
+    return tuple(tests)
 
 
 def execute_test(
@@ -53,7 +55,7 @@ def execute_test(
         output.write(f"test={name}\n".encode())
         output.flush()
         result = subprocess.run(
-            (*command, "--lib", "--", name, "--exact", "--test-threads=1"),
+            (*command, "--lib", "--", name, "--exact", "--test-threads=1", "--color", "never"),
             cwd=cwd, env=environment, stdout=output, stderr=subprocess.STDOUT,
         )
     print(
@@ -66,15 +68,17 @@ def execute_test(
 
 def run_tests(
     command: tuple[str, ...], names: tuple[str, ...], cwd: Path,
-    environment: dict[str, str], directory: Path,
+    environment: dict[str, str], directory: Path, *, workers: int = WORKERS_PER_MODEL,
 ) -> Iterator[TestExecution]:
     if not names or len(names) != len(set(names)):
         raise MiriExecutionError("full Miri execution requires a nonempty unique test inventory")
+    if type(workers) is not int or not 1 <= workers <= WORKERS_PER_MODEL:
+        raise MiriExecutionError(f"Miri requires between one and {WORKERS_PER_MODEL} workers per model")
     directory.mkdir(parents=True, exist_ok=True)
     for previous in directory.glob("[0-9][0-9][0-9][0-9].log"):
         previous.unlink()
     (directory / "tests.json").write_text(json.dumps(names, indent=2) + "\n")
-    with ThreadPoolExecutor(max_workers=WORKERS_PER_MODEL) as executor:
+    with ThreadPoolExecutor(max_workers=workers) as executor:
         pending = [
             executor.submit(
                 execute_test, command, name, cwd, environment, directory / f"{index:04}.log",

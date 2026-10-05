@@ -49,6 +49,8 @@ MIRI_FILES = COMMON_FILES | frozenset(
         "validation/hardening/embedded_failure.py",
         "validation/hardening/embedded_miri.py",
         "validation/hardening/embedded_miri_execution.py",
+        "validation/hardening/embedded_miri_shards.py",
+        "validation/hardening/embedded_miri_distribution.py",
         "validation/hardening/miri.sh",
     }
 )

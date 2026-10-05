@@ -81,7 +81,7 @@ jobs:
     needs: inventory
     name: ${{ matrix.id }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 360
+    timeout-minutes: 330
     env:
       RUSTUP_TOOLCHAIN: 1.96.0
     strategy:
@@ -284,13 +284,25 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: release-readiness-embedded-*-${{ github.run_id }}
-          path: target/flash-artifacts/assurance/proofs
+          path: validation-artifacts
           merge-multiple: true
+      - name: Require every embedded proof attempt
+        run: |
+          python3 validation/run.py aggregate \
+            --tier release \
+            --domain hardening \
+            --suite embedded-isa-thumbv7em \
+            --suite embedded-isa-riscv32imac \
+            --suite embedded-isa-xtensa-esp32s3 \
+            --suite embedded-miri-full \
+            --suite embedded-platform-nrf52840 \
+            --suite embedded-platform-esp32s3 \
+            --expected-sha "$GITHUB_SHA"
       - name: Compose complete release embedded assurance
         run: |
           ./tools/prns build embedded assurance summarize \
             --resources target/flash-artifacts/assurance/resources \
-            --proofs target/flash-artifacts/assurance/proofs \
+            --proofs validation-artifacts/results \
             --output target/flash-artifacts/assurance/matrix
       - name: Publish embedded assurance matrix to the job summary
         run: cat target/flash-artifacts/assurance/matrix/matrix.md >> "$GITHUB_STEP_SUMMARY"
@@ -312,6 +324,12 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: 1.96.0
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          shared-key: release-embedded-assurance
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: release-readiness-*-${{ github.run_id }}

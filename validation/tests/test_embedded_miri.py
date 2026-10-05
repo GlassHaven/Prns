@@ -387,12 +387,12 @@ sources = ["prns-interfaces/impls/embassy/src/radios/sx126x.rs"]
 
     def test_full_discovery_unions_overlapping_filters_without_losing_tests(self) -> None:
         outputs = [
-            subprocess.CompletedProcess([], 0, b"b: test\na: test\n", b""),
-            subprocess.CompletedProcess([], 0, b"b: test\nc: test\n", b""),
+            subprocess.CompletedProcess([], 0, b"z: test\ny: test\n", b""),
+            subprocess.CompletedProcess([], 0, b"y: test\na: test\n", b""),
         ]
         with mock.patch.object(execution.subprocess, "run", side_effect=outputs) as run:
             names = execution.discover_tests(("cargo", "miri", "test"), ("one", "two"), ROOT, {})
-        self.assertEqual(names, ("a", "b", "c"))
+        self.assertEqual(names, ("y", "z", "a"))
         self.assertEqual(run.call_count, 2)
         with mock.patch.object(
             execution.subprocess, "run",
@@ -424,6 +424,35 @@ sources = ["prns-interfaces/impls/embassy/src/radios/sx126x.rs"]
             for names in [(), ("duplicate", "duplicate")]:
                 with self.assertRaises(execution.MiriExecutionError):
                     list(execution.run_tests((sys.executable,), names, root, {}, root / "invalid"))
+            for workers in (0, 5, True, "2"):
+                with self.assertRaises(execution.MiriExecutionError):
+                    list(execution.run_tests(
+                        (sys.executable,), ("case",), root, {}, root / "invalid", workers=workers,
+                    ))
+
+    def test_full_shard_executes_only_its_assignment_but_retains_full_inventory(self) -> None:
+        from validation.hardening.embedded_miri_shards import Shard
+        from validation.tests.test_embedded_miri_shards import output_for
+
+        scenario = embedded_miri.load_inventory()[0]
+        identity = embedded_miri.ToolchainIdentity("nightly-test", "rustc test", "miri test")
+        inventory = ("one", "two", "three", "four")
+        results = tuple(execution.TestExecution(name, 0, output_for(name)) for name in ("four", "two"))
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.object(embedded_miri, "discover_tests", return_value=inventory),
+            mock.patch.object(embedded_miri, "run_tests", return_value=iter(results)) as run,
+        ):
+            observed = embedded_miri.execute_full_scenario(
+                scenario, embedded_miri.BorrowModel.TREE, identity, Path(directory),
+                Shard(1, 2), workers=2,
+            )
+            self.assertEqual(observed.inventory, inventory)
+            self.assertEqual(observed.results, results)
+            self.assertEqual(observed.observation.completed_tests, 2)
+            self.assertEqual(run.call_args.args[1], ("two", "four"))
+            self.assertEqual(run.call_args.kwargs, {"workers": 2})
+            self.assertIn(b'assigned-tests=["two", "four"]', observed.observation.log.read_bytes())
 
     def test_full_evidence_requires_each_discovered_test_to_execute(self) -> None:
         scenario = embedded_miri.load_inventory()[0]
@@ -449,7 +478,9 @@ sources = ["prns-interfaces/impls/embassy/src/radios/sx126x.rs"]
         scenario = embedded_miri.load_inventory()[0]
         identity = embedded_miri.ToolchainIdentity("nightly-test", "rustc test", "miri test")
         results = [
-            execution.TestExecution("good", 0, b"test result: ok. 1 passed; 0 failed; 0 ignored;"),
+            execution.TestExecution(
+                "good", 0, b"test good ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored;",
+            ),
             execution.TestExecution("bad", 1, b"Miri rejected the bad case"),
         ]
         with (
@@ -475,7 +506,10 @@ sources = ["prns-interfaces/impls/embassy/src/radios/sx126x.rs"]
                 mock.patch.object(embedded_miri, "discover_tests", return_value=("one", "two")),
                 mock.patch.object(
                     embedded_miri, "run_tests",
-                    return_value=iter(execution.TestExecution(name, 0, passed) for name in names),
+                    return_value=iter(
+                        execution.TestExecution(name, 0, f"test {name} ... ok\n".encode() + passed)
+                        for name in names
+                    ),
                 ),
             ):
                 with self.assertRaises(embedded_miri.EmbeddedMiriError):

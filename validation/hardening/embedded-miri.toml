@@ -45,7 +45,13 @@ quick_filters = [
     "runtime::embedded_persistence::tests::failures_keep_dirty_state_and_raise_the_notice",
     "runtime::embedded_persistence::tests::malformed_newest_discovery_group_record_preserves_the_last_valid_snapshot",
 ]
-full_filters = ["runtime::embedded_persistence::tests"]
+full_filters = [
+    "runtime::embedded_persistence::tests::power_loss::queued_group_compaction_recovers_at_every_torn_io_boundary",
+    "runtime::embedded_persistence::tests::power_loss::grants::interrupted_grant_update_compaction_restores_whole_authority_tables",
+    "runtime::embedded_persistence::tests::power_loss::grants::interrupted_grant_revocation_compaction_restores_whole_authority_tables",
+    "runtime::embedded_persistence::tests::power_loss::compaction_steps::cancelled_arena_erases_wait_for_a_new_wear_budget",
+    "runtime::embedded_persistence::tests",
+]
 sources = [
     "prns-runtime/impls/embassy/Cargo.toml",
     "prns-runtime/impls/embassy/Cargo.lock",

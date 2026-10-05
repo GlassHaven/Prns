@@ -218,11 +218,20 @@ class EmbeddedAssuranceSelectionTests(unittest.TestCase):
         self.assertEqual(len(failure.suites(selection.Lane.PILOTS)), 2)
 
     def test_miri_executor_changes_select_the_miri_lane(self) -> None:
-        path = "validation/hardening/embedded_miri_execution.py"
-        selected = selection.selection_for_paths({path})
+        for path in (
+            "validation/hardening/embedded_miri_execution.py",
+            "validation/hardening/embedded_miri_distribution.py",
+            "validation/hardening/embedded_miri_shards.py",
+        ):
+            with self.subTest(path=path):
+                selected = selection.selection_for_paths({path})
+                self.assertEqual(
+                    selected.selected,
+                    (selection.SelectedSuite(selection.Suite.EMBEDDED_MIRI_QUICK, (path,)),),
+                )
         self.assertEqual(
-            selected.selected,
-            (selection.SelectedSuite(selection.Suite.EMBEDDED_MIRI_QUICK, (path,)),),
+            selection.selection_for_paths({"validation/run.py"}).suite_ids(selection.Lane.MIRI),
+            ("embedded-miri-quick",),
         )
 
     def test_selected_suites_retain_their_matched_path_reasons(self) -> None:

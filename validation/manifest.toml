@@ -850,6 +850,9 @@ command = ["__RUNNER_PYTHON__", "-m", "validation.hardening.embedded_miri", "qui
 inputs = [
     "validation/hardening/embedded_miri.py",
     "validation/hardening/embedded_miri_execution.py",
+    "validation/hardening/embedded_miri_shards.py",
+    "validation/hardening/embedded_miri_distribution.py",
+    "validation/run.py",
     "validation/hardening/embedded-miri.toml",
     "validation/hardening/embedded_failure.py",
     "personal-hopspot/assurance",
@@ -868,11 +871,15 @@ group = "embedded-miri"
 tiers = ["release", "scheduled"]
 platform = "any"
 toolchain = "nightly"
-timeout_seconds = 19800
+timeout_seconds = 18000
+shards = 8
 command = ["__RUNNER_PYTHON__", "-m", "validation.hardening.embedded_miri", "full"]
 inputs = [
     "validation/hardening/embedded_miri.py",
     "validation/hardening/embedded_miri_execution.py",
+    "validation/hardening/embedded_miri_shards.py",
+    "validation/hardening/embedded_miri_distribution.py",
+    "validation/run.py",
     "validation/hardening/embedded-miri.toml",
     "validation/hardening/embedded_failure.py",
     "personal-hopspot/assurance",
