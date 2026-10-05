@@ -406,60 +406,7 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
                                 }
                             }
                         }
-                        if let Some((recovery_mount_label, managed_application)) = nrf_hand_off {
-                            div { class: "mt-3 rounded-lg border border-line/60 bg-surface/40 p-4 text-sm text-soft",
-                                strong { class: "block text-paper", "Switch firmware" }
-                                p { class: "mt-1 text-xs text-mid",
-                                    "Running Personal Hopspot? Enter recovery mode to make the {recovery_mount_label} drive available, then install firmware made for the T1000-E. This button does not erase or install firmware and does not require preparing a Hopspot release. It requires a Hopspot release with recovery entry support."
-                                }
-                                if web_usb() == WebUsbCapability::Unavailable {
-                                    p { class: "mt-1 text-xs text-mid",
-                                        "Use current desktop Chrome or Edge for the recovery button, or follow the manual instructions below."
-                                    }
-                                }
-                                button {
-                                    r#type: "button",
-                                    class: "flash-primary-action mt-3",
-                                    disabled: busy || hand_off_active() || web_usb() != WebUsbCapability::Supported,
-                                    onclick: {
-                                        let event_state = state.clone();
-                                        move |_| {
-                                            invalidate_preparation(event_state.clone(), "Recovery entry selected. Prepare a release again before installing Hopspot.");
-                                            let request = bridge::Uf2HandOffRequest::new(target.slug, managed_application);
-                                            hand_off_active.set(true);
-                                            hand_off_status.set("Select your Personal Hopspot tracker in the USB picker…".to_string());
-                                            spawn(async move {
-                                                let outcome = bridge::hand_off_to_uf2(request).await;
-                                                hand_off_status.set(match outcome {
-                                                    Ok(()) => format!("Recovery request accepted. Look for the {recovery_mount_label} drive and confirm its INFO_UF2.TXT identifies the T1000-E before copying firmware."),
-                                                    Err(message) => message,
-                                                });
-                                                hand_off_active.set(false);
-                                            });
-                                        }
-                                    },
-                                    "Enter recovery mode"
-                                }
-                                if !hand_off_status().is_empty() {
-                                    p { class: "mt-2 text-xs text-mid", role: "status", "aria-live": "polite", "{hand_off_status}" }
-                                }
-                                details { class: "mt-3 text-xs text-mid",
-                                    summary { class: "cursor-pointer text-paper", "Manual recovery and returning to Meshtastic" }
-                                    p { class: "mt-2",
-                                        "On Hopspot firmware with startup recovery: leave the USB end connected to your computer, remove the magnetic connector, hold the upper button near the lanyard, and reconnect once. Keep holding through the hard reset and startup until the drive appears (allow at least 6 seconds). The startup check runs before storage and radio initialization."
-                                    }
-                                    p { class: "mt-2",
-                                        "For older firmware or an unresponsive app: hold the same button and quickly connect, disconnect, and reconnect the magnetic connector. Seeed notes that this timing can take several attempts. Confirm the drive appears; a green light alone does not confirm recovery."
-                                    }
-                                    p { class: "mt-2",
-                                        "To return to Meshtastic, follow its nRF52 erase and install guide, use the erase utility matching the SoftDevice version in INFO_UF2.TXT, then install the T1000-E UF2. Erasing removes device settings."
-                                    }
-                                    a { href: "https://meshtastic.org/docs/getting-started/flashing-firmware/nrf52/nrf52-erase/", target: "_blank", rel: "noopener noreferrer", class: "mt-2 inline-block underline", "Meshtastic erase and install guide" }
-                                    span { " · " }
-                                    a { href: "https://wiki.seeedstudio.com/sensecap_t1000_e/", target: "_blank", rel: "noopener noreferrer", class: "underline", "Seeed button and recovery guide" }
-                                }
-                            }
-                        }
+
                     }
                 }
 
@@ -892,6 +839,71 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
                         } else {
                             "Cancellation unavailable after erase begins"
                         }
+                    }
+                }
+            }
+        }
+        if let Some((recovery_mount_label, managed_application)) = nrf_hand_off {
+            section {
+                id: "flash-recovery",
+                class: "mt-5 rounded-card border border-line/60 bg-layer/40 p-5 text-sm text-soft",
+                "aria-labelledby": "flash-recovery-title",
+                h2 { id: "flash-recovery-title", class: "text-lg font-semibold text-paper", "Recovery" }
+                p { class: "mt-2",
+                    "Restart your T1000-E into recovery mode to reinstall firmware or switch to Meshtastic."
+                }
+                button {
+                    r#type: "button",
+                    class: "mt-4 rounded-lg border border-line px-4 py-3 text-sm font-semibold text-paper transition-colors hover:border-accent/60 disabled:cursor-not-allowed disabled:opacity-50",
+                    disabled: busy || hand_off_active() || web_usb() != WebUsbCapability::Supported,
+                    onclick: {
+                        let event_state = state.clone();
+                        move |_| {
+                            invalidate_preparation(event_state.clone(), "Recovery entry selected. Prepare a release again before installing Hopspot.");
+                            let request = bridge::Uf2HandOffRequest::new(target.slug, managed_application);
+                            hand_off_active.set(true);
+                            hand_off_status.set("Select your Personal Hopspot tracker in the USB picker…".to_string());
+                            spawn(async move {
+                                let outcome = bridge::hand_off_to_uf2(request).await;
+                                hand_off_status.set(match outcome {
+                                    Ok(()) => format!("Recovery requested. Wait for the {recovery_mount_label} drive to appear before copying firmware."),
+                                    Err(message) => message,
+                                });
+                                hand_off_active.set(false);
+                            });
+                        }
+                    },
+                    "Restart into recovery"
+                }
+                if !hand_off_status().is_empty() {
+                    p { class: "mt-2 text-xs text-soft", role: "status", "aria-live": "polite", "{hand_off_status}" }
+                }
+                p { class: "mt-2 text-xs text-soft",
+                    "For trackers running Personal Hopspot. Restarting keeps your firmware and settings in place."
+                }
+                if web_usb() == WebUsbCapability::Unavailable {
+                    p { class: "mt-2 text-xs text-soft",
+                        "Open this page in desktop Chrome or Edge to use the recovery button, or use the device button below."
+                    }
+                }
+                div { class: "mt-5 grid gap-4 border-t border-line/60 pt-4",
+                    details {
+                        summary { class: "cursor-pointer font-semibold text-paper", "Recover with the device button" }
+                        ol { class: "mt-3 list-decimal space-y-2 pl-5",
+                            li { "Keep the USB end connected to your computer and remove the magnetic connector from the tracker." }
+                            li { "Hold the upper button near the lanyard and reconnect the magnetic connector. Keep holding for at least 6 seconds, until the T1000-E drive appears." }
+                        }
+                        p { class: "mt-3 text-xs text-soft",
+                            "If the drive does not appear, keep holding the button and quickly disconnect and reconnect the magnetic connector. Older firmware may need several attempts. Check for the drive on your computer; a green light alone does not confirm recovery."
+                        }
+                        a { href: "https://wiki.seeedstudio.com/sensecap_t1000_e/", target: "_blank", rel: "noopener noreferrer", class: "mt-3 inline-block underline", "Seeed recovery instructions" }
+                    }
+                    details {
+                        summary { class: "cursor-pointer font-semibold text-paper", "Install Meshtastic" }
+                        p { class: "mt-3",
+                            "Once the T1000-E drive appears, follow Meshtastic’s erase and install guide. Choose the erase utility that matches the SoftDevice version in INFO_UF2.TXT, then install the T1000-E firmware. Erasing removes your device settings."
+                        }
+                        a { href: "https://meshtastic.org/docs/getting-started/flashing-firmware/nrf52/nrf52-erase/", target: "_blank", rel: "noopener noreferrer", class: "mt-3 inline-block underline", "Meshtastic erase and install guide" }
                     }
                 }
             }

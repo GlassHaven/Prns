@@ -12,7 +12,7 @@ it cannot recover a damaged bootloader or an application that never starts.
 ## From the flasher
 
 Open the T1000-E page of the Hopspot flasher in current desktop Chrome or Edge,
-connect the tracker, and select **Switch firmware → Enter recovery mode**.
+connect the tracker, and select **Recovery → Restart into recovery**.
 Choose the Personal Hopspot device in the USB picker. This action works without
 preparing a Hopspot release or downloading firmware.
 
@@ -39,7 +39,7 @@ initialization. If USB power is present and the button remains held for two
 seconds, it enters UF2 recovery before initializing persistent storage,
 identity, radio, or the application's USB interface. Normal startup is not
 delayed when the button is released. This startup shortcut is implemented but
-still needs a physical held-button qualification before release.
+has not yet been verified with a physical held-button test.
 
 For older firmware or an unresponsive application, hold the same button while
 rapidly attaching, removing, and reattaching the magnetic connector. Keep the
@@ -77,7 +77,7 @@ presses or cable reconnections. Select the **Seeed/Meshtastic firmware or
 bootloader** entry path after the stock bootloader appears, prepare the
 candidate, and choose **Connect and update tracker**.
 
-After installing Hopspot with recovery support, **Enter recovery mode** on the
+After installing Hopspot with recovery support, **Restart into recovery** on the
 same page provides the direct software path back to the stock UF2 drive.
 
 ## USB contract

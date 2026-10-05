@@ -36,10 +36,10 @@ test("T1000-E recovery is available without preparing or downloading a release",
     if (request.url().includes("/firmware/")) firmwareRequests.push(request.url());
   });
   await page.goto("/flash/t1000-e");
-  const recovery = page.getByRole("button", { name: "Enter recovery mode", exact: true });
+  const recovery = page.getByRole("button", { name: "Restart into recovery", exact: true });
   await expect(recovery).toBeEnabled();
   await recovery.click();
-  await expect(page.getByRole("status").filter({ hasText: "Recovery request accepted" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Recovery requested" })).toBeVisible();
   expect(await page.evaluate(() => window.recoveryEvidence)).toEqual([
     { picker: { filters: [{ vendorId: 0x1209, productId: 0x0001, serialNumber: "PERSONAL-RNS-T1000E-HOP" }] } },
     { claim: 0 },
@@ -47,17 +47,18 @@ test("T1000-E recovery is available without preparing or downloading a release",
     { closed: true },
   ]);
   expect(firmwareRequests).toEqual([]);
-  await page.getByText("Manual recovery and returning to Meshtastic", { exact: true }).click();
+  await page.getByText("Install Meshtastic", { exact: true }).click();
   await expect(page.getByRole("link", { name: "Meshtastic erase and install guide" })).toBeVisible();
+  await page.getByText("Recover with the device button", { exact: true }).click();
   await expect(page.getByText(/green light alone does not confirm recovery/)).toBeVisible();
-  const accessibility = await new AxeBuilder({ page }).include(".flash-wifi-config").analyze();
+  const accessibility = await new AxeBuilder({ page }).include("#flash-recovery").analyze();
   expect(accessibility.violations).toEqual([]);
 });
 
 test("unsupported firmware shows the manual recovery path without claiming a drive appeared", async ({ page }) => {
   await installRecoveryDevice(page, "stall");
   await page.goto("/flash/t1000-e");
-  await page.getByRole("button", { name: "Enter recovery mode", exact: true }).click();
+  await page.getByRole("button", { name: "Restart into recovery", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Older releases do not support" })).toBeVisible();
-  await expect(page.getByText("Recovery request accepted", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Recovery requested", { exact: false })).toHaveCount(0);
 });
