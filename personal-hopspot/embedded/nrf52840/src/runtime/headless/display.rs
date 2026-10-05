@@ -29,6 +29,10 @@ use super::{BLE_MANIFOLD_LANE, COMMANDS, COMPLETION, INTERFACE_STORE, REMOTE_CON
 
 pub(super) const INTERFACE_CAPACITY: usize = 2 + MEMBERS;
 pub(super) const LANE_COUNT: usize = 3;
+// LoRa, USB, every BLE member, and the BLE supervisor itself.
+const STATUS_CAPACITY: usize = INTERFACE_CAPACITY + 1;
+// BLE members roll up into the supervisor card beside LoRa and USB.
+const CARD_CAPACITY: usize = 3;
 const NOTICE_MS: u64 = 900;
 
 fn display_now() -> hopspot::display::MonotonicMillis {
@@ -117,7 +121,7 @@ pub(super) fn face(input: FaceInput) -> impl Future {
             #[cfg(feature = "board-t114")]
             gnss: hopspot::GnssAvailability::Unavailable,
         });
-        let mut activity = hopspot::CardActivityTracker::<{ MEMBERS + 4 }>::new();
+        let mut activity = hopspot::CardActivityTracker::<CARD_CAPACITY>::new();
         let mut battery_gauge = hopspot::BatteryGauge::lipo();
         let mut persistence_notice = hopspot::PersistenceNotice::new();
         let mut working_subg_configuration = subg_configuration;
@@ -545,9 +549,9 @@ enum SnapshotBuildError {
 fn snapshots(
     lora: &EmbassyInterfaceStatus,
     usb: &EmbassyInterfaceStatus,
-) -> Result<heapless::Vec<InterfaceSnapshot, { MEMBERS + 4 }>, SnapshotBuildError> {
+) -> Result<heapless::Vec<InterfaceSnapshot, STATUS_CAPACITY>, SnapshotBuildError> {
     let ble = BluetoothAutoStatus::new(&BLE_SHARED);
-    let mut entries: heapless::Vec<(&dyn InterfaceStatus, Membership), { MEMBERS + 4 }> =
+    let mut entries: heapless::Vec<(&dyn InterfaceStatus, Membership), STATUS_CAPACITY> =
         heapless::Vec::new();
     entries
         .push((lora, Membership::Independent))
@@ -594,7 +598,7 @@ fn cards(
     subg_configuration: SubGConfigurationState,
     lora_id: InterfaceId,
     usb_id: InterfaceId,
-) -> heapless::Vec<hopspot::Card, { MEMBERS + 4 }> {
+) -> heapless::Vec<hopspot::Card, CARD_CAPACITY> {
     hopspot::snapshots_to_cards(snapshots, |id| {
         if id == lora_id {
             Some(hopspot::subg_card(subg_configuration))

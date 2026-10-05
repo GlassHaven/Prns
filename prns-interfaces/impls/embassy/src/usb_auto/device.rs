@@ -69,7 +69,7 @@ pub enum WebUsbControllerEnrollment {
     Supported {
         request: fn(UsbControllerEnrollment) -> Result<(), UsbControllerEnrollmentBusy>,
         status: fn() -> UsbControllerEnrollmentStatus,
-        target_public_key: [u8; prns_core::identity::IDENTITY_PUBLIC_KEY_LEN],
+        target_public_key: &'static [u8; prns_core::identity::IDENTITY_PUBLIC_KEY_LEN],
     },
 }
 
@@ -118,7 +118,7 @@ impl Handler for WebUsbAutoControl {
                 let Some(response) = buf.get_mut(..CONTROLLER_ENROLL_STATUS_BYTES) else {
                     return Some(InResponse::Rejected);
                 };
-                response.copy_from_slice(&status().encode(&target_public_key));
+                response.copy_from_slice(&status().encode(target_public_key));
                 Some(InResponse::Accepted(response))
             }
         }
@@ -379,7 +379,7 @@ mod tests {
         handler.controller_enrollment = WebUsbControllerEnrollment::Supported {
             request: |_| Err(UsbControllerEnrollmentBusy),
             status: || UsbControllerEnrollmentStatus::Pending { transaction: 42 },
-            target_public_key: [42; 64],
+            target_public_key: &[42; 64],
         };
         assert!(matches!(
             handler.control_out(request, &bytes),
@@ -388,7 +388,7 @@ mod tests {
         handler.controller_enrollment = WebUsbControllerEnrollment::Supported {
             request: |_| Ok(()),
             status: || UsbControllerEnrollmentStatus::Saved { transaction: 42 },
-            target_public_key: [42; 64],
+            target_public_key: &[42; 64],
         };
         assert!(matches!(
             handler.control_out(request, &bytes[..67]),

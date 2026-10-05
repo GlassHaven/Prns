@@ -12,11 +12,22 @@ static REQUEST: Signal<CriticalSectionRawMutex, UsbControllerEnrollment> = Signa
 static STATUS: Mutex<CriticalSectionRawMutex, Cell<UsbControllerEnrollmentStatus>> =
     Mutex::new(Cell::new(UsbControllerEnrollmentStatus::Idle));
 
-pub const fn webusb_enrollment(target_public_key: [u8; 64]) -> WebUsbControllerEnrollment {
+pub fn webusb_enrollment(
+    identity: &personal_rns::remote_control::RemoteControlNodeIdentitySecrets,
+) -> WebUsbControllerEnrollment {
+    static TARGET_PUBLIC_KEY: static_cell::StaticCell<
+        [u8; prns_core::identity::IDENTITY_PUBLIC_KEY_LEN],
+    > = static_cell::StaticCell::new();
     WebUsbControllerEnrollment::Supported {
         request,
         status,
-        target_public_key,
+        target_public_key: TARGET_PUBLIC_KEY.init_with(|| {
+            identity
+                .identities()
+                .target()
+                .public_keys()
+                .public_key_bytes()
+        }),
     }
 }
 
