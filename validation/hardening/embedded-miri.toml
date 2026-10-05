@@ -41,6 +41,7 @@ quick_filters = [
     "runtime::embedded_persistence::tests::a_pending_node_name_makes_persistence_due_immediately",
     "runtime::embedded_persistence::tests::node_name_survives_progress_reboot_compaction_and_reboot",
     "runtime::embedded_persistence::tests::node_name_owners_isolate_restore_failure_cancellation_and_retry",
+    "runtime::embedded_persistence::tests::power_loss::names::uncertain_node_name_commit_is_resolved_before_a_queued_group_change",
     "runtime::embedded_persistence::tests::authorization_snapshots_survive_compaction_and_restore_complete_runtime_tables",
     "runtime::embedded_persistence::tests::discovery_group_snapshot_survives_compaction_and_reboot",
     "runtime::embedded_persistence::tests::exact_route_and_ratchet_deadlines_are_distinct",

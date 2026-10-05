@@ -809,7 +809,12 @@ where
         }) {
             return;
         }
-        if let Some(change) = self.groups.as_ref().try_take_request() {
+        // Finish an uncertain name append before a newer group request can claim the writer.
+        let group_change = match self.pending_confirmation {
+            Some((_, FlashJournalRecordKind::NodeName)) => None,
+            _ => self.groups.as_ref().try_take_request(),
+        };
+        if let Some(change) = group_change {
             match self
                 .store_discovery_group_configuration_change(engine, &change, now)
                 .await
