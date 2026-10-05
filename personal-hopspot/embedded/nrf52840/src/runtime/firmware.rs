@@ -124,8 +124,6 @@ pub async fn run(spawner: Spawner) -> ! {
         bootstrap,
         factory_grant,
     } = remote_control_bootstrap;
-    let controller_enrollment =
-        super::controller_enrollment::webusb_enrollment(bootstrap.secrets());
     let (remote_control_identity_secrets, _remote_control_identity_origins) =
         bootstrap.into_parts();
     let ble_identity = Some(ble_bootstrap.into_identity());
@@ -162,7 +160,9 @@ pub async fn run(spawner: Spawner) -> ! {
         &mut builder,
         USB_STATE.init(
             WebUsbAutoState::new(super::bootloader_entry::webusb_entry())
-                .with_controller_enrollment(controller_enrollment),
+                .with_controller_enrollment(super::controller_enrollment::webusb_enrollment(
+                    &remote_control_identity_secrets,
+                )),
         ),
         WEBUSB_AUTO_PACKET_SIZE,
     );

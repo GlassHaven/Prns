@@ -15,19 +15,14 @@ static STATUS: Mutex<CriticalSectionRawMutex, Cell<UsbControllerEnrollmentStatus
 pub fn webusb_enrollment(
     identity: &personal_rns::remote_control::RemoteControlNodeIdentitySecrets,
 ) -> WebUsbControllerEnrollment {
-    static TARGET_PUBLIC_KEY: static_cell::StaticCell<
-        [u8; prns_core::identity::IDENTITY_PUBLIC_KEY_LEN],
-    > = static_cell::StaticCell::new();
     WebUsbControllerEnrollment::Supported {
         request,
         status,
-        target_public_key: TARGET_PUBLIC_KEY.init_with(|| {
-            identity
-                .identities()
-                .target()
-                .public_keys()
-                .public_key_bytes()
-        }),
+        target_public_key: identity
+            .identities()
+            .target()
+            .public_keys()
+            .public_key_bytes(),
     }
 }
 
@@ -50,14 +45,10 @@ fn request(enrollment: UsbControllerEnrollment) -> Result<(), UsbControllerEnrol
 
 pub async fn run(handle: impl RemoteControlControllerGrantControl) -> ! {
     loop {
-        let enrollment = REQUEST.wait().await;
-        let transaction = enrollment.transaction;
+        let UsbControllerEnrollment { transaction, grant } = REQUEST.wait().await;
         // The node restores retained authorizations before servicing this request.
         // Its grant API settles only after the journal commit becomes durable.
-        let outcome = match handle
-            .set_remote_control_controller_grant(enrollment.grant)
-            .await
-        {
+        let outcome = match handle.set_remote_control_controller_grant(grant).await {
             Ok(_) => UsbControllerEnrollmentStatus::Saved { transaction },
             Err(_) => UsbControllerEnrollmentStatus::Failed { transaction },
         };
