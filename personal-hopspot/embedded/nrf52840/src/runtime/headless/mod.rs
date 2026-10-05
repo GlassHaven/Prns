@@ -96,6 +96,10 @@ const LANE_COUNT: usize = selected::LANE_COUNT;
 const LANE_DEPTH: usize = 1;
 const LORA_TX_QUEUE_BYTES: usize = 1024;
 const LORA_OUTBOUND_DEPTH: usize = Storage::MAX_OUTGOING_RESOURCE_REACTION_FRAMES;
+/// An announce fans out to every interface, USB included, and a Remote Control reply is often
+/// emitted in the same engine step (AnnounceSelf). With a single outbound slot that reply found
+/// the lane full and was dropped, so the controller timed out although the announce went out.
+const USB_OUTBOUND_DEPTH: usize = 2;
 #[cfg(any(
     feature = "board-t096",
     feature = "board-t114",
@@ -186,8 +190,12 @@ static BLE_MANIFOLD_LANE: StaticManifoldLane<
     LANE_DEPTH,
     BLE_OUTBOUND_DEPTH,
 > = StaticManifoldLane::new();
-static USB_MANIFOLD_LANE: StaticManifoldLane<Mtx, EMBEDDED_MAX_WIRE_FRAME_LEN, LANE_DEPTH> =
-    StaticManifoldLane::new();
+static USB_MANIFOLD_LANE: StaticManifoldLane<
+    Mtx,
+    EMBEDDED_MAX_WIRE_FRAME_LEN,
+    LANE_DEPTH,
+    USB_OUTBOUND_DEPTH,
+> = StaticManifoldLane::new();
 
 #[embassy_executor::task]
 async fn manifold_task(
