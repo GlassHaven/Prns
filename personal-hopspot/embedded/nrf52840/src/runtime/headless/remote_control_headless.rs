@@ -104,6 +104,8 @@ pub(super) fn capabilities() -> RemoteControlCapabilities {
         RemoteControlRequestKind::InventoryInterfaceConfig,
         RemoteControlRequestKind::SetInterfaceLoRaProfile,
         RemoteControlRequestKind::DescribeBuild,
+        RemoteControlRequestKind::SetNodeName,
+        RemoteControlRequestKind::DescribeNodeName,
         RemoteControlRequestKind::SetSystemPower,
         RemoteControlRequestKind::InventoryControllers,
         RemoteControlRequestKind::AuthorizeController,
@@ -360,6 +362,12 @@ async fn execute(
                 RemoteControlLoRaOutcome::Applied,
             ))
         }
+        RemoteControlHostCommand::SetNodeName { name } => Ok(
+            RemoteControlHostResponse::SetNodeName(super::node_name::set(name).await?),
+        ),
+        RemoteControlHostCommand::DescribeNodeName => Ok(
+            RemoteControlHostResponse::DescribeNodeName(super::node_name::current()),
+        ),
         RemoteControlHostCommand::DescribeBuild => Ok(RemoteControlHostResponse::DescribeBuild(
             hopspot::hopspot_remote_control_build_version()
                 .map_err(|_| RemoteControlHostCommandError::ApplyFailed)?,

@@ -25,8 +25,9 @@ mod subg_configuration_store;
 mod wifi_configuration_store;
 
 pub use destinations::{
-    hopspot_destination_hashes, HopspotDestinationHashes, HopspotDestinationSet,
-    HOPSPOT_DESTINATION_COUNT, HOPSPOT_IDENTITY_COUNT,
+    hopspot_destination_hashes, named_delivery_announce_app_data, named_node_announce_app_data,
+    HopspotDestinationHashes, HopspotDestinationSet, HOPSPOT_DESTINATION_COUNT,
+    HOPSPOT_IDENTITY_COUNT, NAMED_DELIVERY_ANNOUNCE_APP_DATA_CAP,
 };
 pub use flash_identity::{
     bootstrap_flash_ble_identity_with_runtime_entropy,
