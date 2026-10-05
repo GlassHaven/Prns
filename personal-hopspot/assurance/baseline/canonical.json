@@ -17,9 +17,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "aed8db6567711d3e01239332db6f9f07e9626ec31422b4c57c8c19b22a03fdd4",
+          "report_fingerprint": "1b6967646f98b56822b21d0b319a7ce2a73fdfe5253997986913052bf85d9faa",
           "build_fingerprint": "5e7dc98cd4f1cadeb443304fbc483a4d7f5e701ba95d983b9f7c36d8d7e2cbb3",
           "toolchain_fingerprint": "83ed0de60fca12fba07a7148839a28baa3839d982f2f3640d0f5f9c6e7ee0f98",
           "memory_contract_fingerprint": "79b7ebb26fbcf54fed9bbeb4a706a36de1b582cfd207ae28609e86b1c48db552"
@@ -38,9 +38,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "8610670db09cd114361c1bcdb9ffaf28675a4447ce7faa0463bb3eba1f0c2796",
+          "report_fingerprint": "17cd3fe80219d9c3ce4f5074a5a9128c6d82192b4904588882b7e5310b077751",
           "build_fingerprint": "e6d477c8a6aa08bad3c09cd2492f66d2950a3e0b3729560a7ecd1b4c9f0d3730",
           "toolchain_fingerprint": "83ed0de60fca12fba07a7148839a28baa3839d982f2f3640d0f5f9c6e7ee0f98",
           "memory_contract_fingerprint": "1892468145b17702bed6ff0d1fac7859c083bff8467db188a183b1561f39ad44"
@@ -59,9 +59,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "5be28d38d132948a7d22b9c910d9448a3db4d0f9b6c61685d357aee5fa3eb30f",
+          "report_fingerprint": "4cf50dfd497b61463a278468c861d624b8bb48f26f80475efbf00ff6c7c7f729",
           "build_fingerprint": "46fd764c98a816f7d4c6730b12ca34813344db6e95da70e7198e052b961f3b77",
           "toolchain_fingerprint": "83ed0de60fca12fba07a7148839a28baa3839d982f2f3640d0f5f9c6e7ee0f98",
           "memory_contract_fingerprint": "24de7f31cf7ec03e2b429c78caf4715021aab127bb50e37ca0a7fc8f4238f31d"
@@ -80,9 +80,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "06a43a2780fd9ca503dd613a181adfe557ef85bb5f444795f620cca52a87fb71",
+          "report_fingerprint": "a8df3cd53391874476f83562638cb223964f0811529f26cc1ddc92c3dcbd362b",
           "build_fingerprint": "2137e087f7fadc66683af6b8bb2883106d520738c2e7ab45508d604716b2844c",
           "toolchain_fingerprint": "83ed0de60fca12fba07a7148839a28baa3839d982f2f3640d0f5f9c6e7ee0f98",
           "memory_contract_fingerprint": "264427a220750a901bf89edcdfeeb3ce538ab8fec54f92c04d3bffff1fa41de0"
@@ -101,9 +101,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "a9ab643d7c21489520cda4eaefa52b3d70201b8581fe09c57d4cedf74a4550b0",
+          "report_fingerprint": "83236d7cc949bf62b4639975841c8312b7b73df2005c5f9941592d595aee147d",
           "build_fingerprint": "d3e66fc13e0a1e9edd43bdc2c2d48c48ffe26d7dac1736aa4e3cc73205ebdd31",
           "toolchain_fingerprint": "83ed0de60fca12fba07a7148839a28baa3839d982f2f3640d0f5f9c6e7ee0f98",
           "memory_contract_fingerprint": "fe0671d39736d18a48fd2fa7ffa803c8e27e94b167556cd0d7335fb028beb1e7"
@@ -122,9 +122,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "dbb2105537bbbd64b4eb87a521374e619dbf511844a03f38b678ee77a3025920",
+          "report_fingerprint": "a7d8ad405cd7b01bbf2102f67c8982e38efb8fe7a629f4f4f9b9e6f08440f4d9",
           "build_fingerprint": "eaa7871ad50aeec9b92f3ff1c6651efb30684b674c63bdf6949ca54ea3c7e983",
           "toolchain_fingerprint": "05df86ce3c2a86bd89a98f1c4228c28cd12ba41314a6c80bbb51cb14de8b73fc",
           "memory_contract_fingerprint": "a7c69198c8c6721c99b5b6f654de59e0f652e5a0474b9b195d35da1e90832dbb"
@@ -143,9 +143,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "3c075a1576a29e48925d4b045a9970e46a0701504d6cd50571131ce5bc5202a2",
+          "report_fingerprint": "1540c2ed577cb1e133e950c32dea2d04facfcf621b3592b2231330a268ddcbc0",
           "build_fingerprint": "0d3663feb22a19ff6bc860cfd647ae1ce7f62e8c2e74918648beaca9ff8e052d",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "7d726b15f5339a3c519d79fe5d9258727bbbbf2d59d9de545fc56872dd1ef966"
@@ -164,9 +164,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "5a1b19366ec9a1a445c970fe16ace6eb7ba89280890271301b7e572c4b2afe4e",
+          "report_fingerprint": "4b50c97687717caae4b4d68b36c7cf819a37d52933bf1ec23499a8e63b553a8c",
           "build_fingerprint": "da8c99d909b9892430ebdb10afca7e14ba809a4d0b06a00f6458e8a2fa7a4dba",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "5031137380b84665145c00f57a0d1884a34c9d141b1716c08c846cc06f5764ae"
@@ -185,9 +185,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "d15a7078b912414a6b95fb1cd3de2742929ceb10d3b231cf03acdb8f738cbfb7",
+          "report_fingerprint": "dc332dc6cc9b5701252095202cfc7bb1431c2de93ebf68f1f5d12c7fb0e75648",
           "build_fingerprint": "a08232dda6e4e1f4b941350b22cf772e84bdce1a04536c5221d0de19d5595d0e",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "84fd98e0890d45d58fda9c9016a3a9f29a6597290522b917fd53c307350e6e74"
@@ -206,9 +206,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "b72d58300a9ea4b9cd7592bbb54e95082c7f82edcb911ac7e876e96cecbfec6f",
+          "report_fingerprint": "2f11dd61209d70d655bb2388d17f2c35497df571af04d035363db8a6e6af6f07",
           "build_fingerprint": "5c02e4093572e6eb57b2df05c21501cbf453ce1b314ec472d4c789662c31563f",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "67d46a84dbb0457acb7ab7eec2d788be69bad1c0321b532ea89eac04503e29b0"
@@ -227,9 +227,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "f68c08a18c8f4a3d1fbd329d306f1cf088f06b3b3b2a088ebc2464b177d63d0f",
+          "report_fingerprint": "902f18af5e4f65f6ee409d69d4dbecc09351187d5525239073e271bea1231596",
           "build_fingerprint": "759b3e991e5c14cf96448432c0902ed5ee12059ee146142a9cd9f420de05d7a8",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "61ca3603b893f24cfe8089db6fdb476fb2247a08731089bcc27c8c243a78335d"
@@ -248,9 +248,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "06af92e1b646fa8998880937a30c97f5492115f88ee05ea0f4e62d3c7809edfd",
+          "report_fingerprint": "9d03617c4131d7bc1a22df5579788b24a057e63c106b3db499be651b0daacd28",
           "build_fingerprint": "c5ebeb321e8849e0b1fc3bfbb758d579d7bdc350d5b00cce77930a330709a869",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "4202531688f76435d00b5616607a680308941b8e5de9b81d4e7240a5fbe278f0"
@@ -269,9 +269,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "8d11b672b0cd8f0f452e03e6968dfb23997e78c6007f86fcc687c18c06dda984",
+          "report_fingerprint": "a188336c36997413cb314e703bea64e1470109539e2f11c6855b2ac611be53d3",
           "build_fingerprint": "739f4f9885cebb6490e1e142626ac0ed81663d5df870d0c5284d4dfb69678a91",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "bd98f74f9b8eee59bdcd2e7025f62cf730988024f871b8f25f47226aeaf14ad8"
@@ -290,9 +290,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "23062668db399c385b188be2dd138ac8b4a94ecec68affc9e98c2615f1648e6a",
+          "report_fingerprint": "75cf3820a3fbea0365a2f8d4df070a54740b4130ebb6d32811bcb702be767a0a",
           "build_fingerprint": "f5442f283503d50509d0d8abb7d1fde444b4406b5e3d37d2b9f253ced1e5b27a",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "ce83c631b8ceb78d9a65b6c88c69fba01d8367a4c09fe25940bea7f1a6f21135"
@@ -311,9 +311,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "d373b4044fead8af69a16e3d12a2671e446089dc2f73420dfab58d2da1c2054b",
+          "report_fingerprint": "0d6c7be21fc5f928ef0fc65716b2590041e0c111915663c3ed715d46f60df077",
           "build_fingerprint": "6d7fa53ad227ea51855ba8f885fe688258e161c336c933d8b3c0d57416305402",
           "toolchain_fingerprint": "83ed0de60fca12fba07a7148839a28baa3839d982f2f3640d0f5f9c6e7ee0f98",
           "memory_contract_fingerprint": "646ea081174bf01bbd71be3550864dd07ad487954fa0ea4cf1e3f4428ccdc191"
@@ -332,9 +332,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "3fb22f228fe3242d25e204e97906e4229544f93fd9a25a0b8289908860e1a18d",
+          "report_fingerprint": "6eaeaa0e0480357e0bb6aa8567bddf02fdad0e34c6c04175c04cb089ef4926c3",
           "build_fingerprint": "68151676eeff2cd71721871ec148040712de6bcd4715a41f7566711de1628ee9",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "c2cfd903ddc7fc298ea4f1ce899363929ac8ae864454773919c2afc220ecb788"
@@ -353,9 +353,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "ffe130d124fd933ca709a2ea7a14312246754cf52a7aba993f35fe532f3f5c1f",
+          "report_fingerprint": "6b2e52f1f45a82d106ff84ed2b4f11a48323576154aaa43d79a8744201e21666",
           "build_fingerprint": "d309d09b2fbceba79f80870aa005896bb211a3daa54ce7fd8452a1213db57bd2",
           "toolchain_fingerprint": "83ed0de60fca12fba07a7148839a28baa3839d982f2f3640d0f5f9c6e7ee0f98",
           "memory_contract_fingerprint": "cabac317c347b98862029796966984defd6ab2b6f095c704ac8e1e31baaf98b3"
@@ -374,9 +374,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "deb4672cbb3fb6586059bc01c7baf53c8f249b4d13ccf0b2b674ce2fa92eafbe",
+          "report_fingerprint": "56e6903985f96da91b392c0c44a29056eba9dba39d1f3e37cdc0450b8519dde6",
           "build_fingerprint": "a602b57b1e6838db6e34faf5633e5c7229c58489ca2670d3013e23954ba6963b",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "799ebdc435796a0e65857dec10e62300ac29b35ce6c4b67e66d42f2581b80a3a"
@@ -395,9 +395,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "7eacc62f77ec6fa89b5a33cddb8f656ef31a30adf7868fd935897305b040909f",
+          "report_fingerprint": "212bdaf4f7fb8320d260ecbb5cd56d2b00164383bc4a057fee0ca36da95529cc",
           "build_fingerprint": "78e086e0edd4f061fc1a95871d809bab4f59be31615205bb687c7a37546229ed",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "5ce73a78b647a5abb1f7a3a6db8356acbbc29bd9abba904c81104d6e0473fc97"
@@ -416,9 +416,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "3fbc443e38df4a25b05738f7e9d55cfe00a88b6f9f6c42fa56d9985b0bf683f5",
+          "report_fingerprint": "48f35dd1b13593751cb34538b1e6c1a9306b69106c9a7a87958fe73262fb83fa",
           "build_fingerprint": "3c26b36627cb9c2dbf6589a76626f63e9b528fe6008311830aa5b5161a3865b4",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "c14eb1226e7eccf4babbf20bc1cfde7f879c930ca6e9d30404605e9f2b33ca7c"
@@ -437,9 +437,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "0212b30232865eae71910ad7406e5e248ef675f0467bdcda10a5a4d0be44e4d8",
+          "report_fingerprint": "522da02763d8234f9598702166c310f291de447c8e6614d4dcc3cbdff93dd822",
           "build_fingerprint": "a45afbc42c0b84a8495a80f3c63240a86bf3c25be8b8e7a6c52cd9973141354e",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "1b1a074bda0aa501328a58969799dcf6fbef4a832cfcd2097ba0bfd7e6d88fad"
@@ -458,9 +458,9 @@
         "evidence": {
           "source": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "report_fingerprint": "e4a43a4247cd54a91939340b9a8f2076e46905a76e648a6b38263b05c9742ffe",
+          "report_fingerprint": "272f51befdbdcc01273be9c9fc594b00a49bf116f4fe80eccb4e97b7eb9d8cff",
           "build_fingerprint": "d39700a7146f4167306b235bfda45805798ded11ef6bfeca2b6424580c4a7728",
           "toolchain_fingerprint": "75a6259eaebb5273ab6bf620ea36e19f31bda7caff1a56a239816a600f70e5f2",
           "memory_contract_fingerprint": "c2cfd903ddc7fc298ea4f1ce899363929ac8ae864454773919c2afc220ecb788"
@@ -494,9 +494,9 @@
         "source": {
           "custody": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "scenario_fingerprint": "ef2e472e8b2bbfbfc401c187e7c073eab7fe1effde4dc54fb7f90c17e31e3806"
+          "scenario_fingerprint": "82a70974a8cb1951b6a0578dd8b294f383ed2cffc4fe19129d17268516508aa3"
         },
         "tools": [
           {
@@ -521,8 +521,8 @@
           {
             "kind": "log",
             "path": "sx126x-stacked.log",
-            "bytes": 2571,
-            "fingerprint": "051506bc532e14ad2ebb78f2540d2f5e39089f1118aa491dc731e15d6d801291"
+            "bytes": 2379,
+            "fingerprint": "701098fcece0cf4866837579f17502fd320c28d457c304055837e1771dcf7bf1"
           }
         ]
       }
@@ -552,9 +552,9 @@
         "source": {
           "custody": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "scenario_fingerprint": "ce7473403d7ce437fc56b2c8e59116426c2a5cf30b7e62302c6143696cded860"
+          "scenario_fingerprint": "acb1e2fb2f391555f8f268518f1db5df1210c94333ed728776883c33bd9401df"
         },
         "tools": [
           {
@@ -580,7 +580,7 @@
             "kind": "log",
             "path": "lr1110-stacked.log",
             "bytes": 2307,
-            "fingerprint": "81bff2ea6121bc48266c25f035d79bb80005e5d96ecc31c22733eba3628dfbeb"
+            "fingerprint": "e015787ddb207fc63950f99e4b8f6d894601a9af474bcfdb06687ad9d4747a01"
           }
         ]
       }
@@ -610,9 +610,9 @@
         "source": {
           "custody": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
-          "scenario_fingerprint": "187c3287618bdf6fc20939b797138a16a3671e9732cba7256fc43a7d4af95118"
+          "scenario_fingerprint": "6d06755b044b7f72519f7b17851eb4bdd34667fb28580583c9ffb558cb33dc3b"
         },
         "tools": [
           {
@@ -630,15 +630,15 @@
             "kind": "miri",
             "coverage": "stacked",
             "scope": "focused",
-            "completed_tests": 11
+            "completed_tests": 15
           }
         },
         "artifacts": [
           {
             "kind": "log",
             "path": "embedded-persistence-stacked.log",
-            "bytes": 7103,
-            "fingerprint": "99d5b56eba92a5c814ed9863a0a6e17651b84ea349ebb4507d2d3f6e53142103"
+            "bytes": 9297,
+            "fingerprint": "6283f2644302fa472f87d7c642430947ee320e8e7a773aeae16a40675a87b8e5"
           }
         ]
       }
@@ -668,7 +668,7 @@
         "source": {
           "custody": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
           "scenario_fingerprint": "d775ed847c4c15a75dcd207a5e592b9efa7cdd8442ed2828d3c41c126c1765a9"
         },
@@ -711,8 +711,8 @@
           {
             "kind": "log",
             "path": "thumbv7em.log",
-            "bytes": 9413,
-            "fingerprint": "2e59f895379a9fc7587390176154ceba37dc49f88b505917b5ca7523958be0ac"
+            "bytes": 9222,
+            "fingerprint": "aa2ef004fb1f85ef97c04db584d70d137b0f4c202b68b934795f1319dca83d0c"
           }
         ]
       }
@@ -742,7 +742,7 @@
         "source": {
           "custody": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
           "scenario_fingerprint": "d775ed847c4c15a75dcd207a5e592b9efa7cdd8442ed2828d3c41c126c1765a9"
         },
@@ -785,8 +785,8 @@
           {
             "kind": "log",
             "path": "riscv32imac.log",
-            "bytes": 8879,
-            "fingerprint": "3393e48a86ea841e7a22bfb29b8c6a60cec21cd22872287bc1f64893c1875c83"
+            "bytes": 9639,
+            "fingerprint": "b121fcec9b40d5449cbcca03fac3c89384d4127d56b6ecee575bfb99de2bd925"
           }
         ]
       }
@@ -816,7 +816,7 @@
         "source": {
           "custody": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
           "scenario_fingerprint": "5895eeb7767a0da25c3bcac7991ae5d37751882944252281d7eb71cad7936a56"
         },
@@ -859,8 +859,8 @@
           {
             "kind": "log",
             "path": "xtensa-esp32s3.log",
-            "bytes": 11470,
-            "fingerprint": "5809b675205130f1876a80938b42a5f613eeb83b754803d89e5b039a0dfda3a5"
+            "bytes": 11161,
+            "fingerprint": "f46097f872298d70ecf4a49922f7e1cc8906749e512878089cdc7eb540a7eb20"
           }
         ]
       }
@@ -890,7 +890,7 @@
         "source": {
           "custody": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
           "scenario_fingerprint": "e60292da3a0f7b9850b940fa47ea5461c255af58dfd53189af7adec391323cbb"
         },
@@ -938,7 +938,7 @@
             "kind": "log",
             "path": "nrf52840.log",
             "bytes": 4535,
-            "fingerprint": "913781799848700e8bb408688de306ffd599651bb21a92450a1558f4134b30bd"
+            "fingerprint": "4adf33d28d088c0c9bd34ab796786aef09ebfdd1b60c6d9e84ed97e92be0acb3"
           }
         ]
       }
@@ -968,7 +968,7 @@
         "source": {
           "custody": {
             "kind": "clean-commit",
-            "commit": "fc3c50708ab510c01c9b00433aef6dc7fa90ebfd"
+            "commit": "875203b20a6f73648f347b3c6ab04db3c5c5082d"
           },
           "scenario_fingerprint": "f4b6695cd779129021f0d4edcb6d3e0273835c2617e9bebe22ceae8fa47ce624"
         },
@@ -1009,14 +1009,14 @@
           {
             "kind": "executable",
             "path": "esp32s3.elf",
-            "bytes": 700056,
-            "fingerprint": "1754cacebbe85c0a234c59ec457a3be11f453c7ac53b689bff422e26be26d1a7"
+            "bytes": 699884,
+            "fingerprint": "be0be009e02fe233459e935b8b951ae46d907a229b90dc6315250911bba17799"
           },
           {
             "kind": "log",
             "path": "esp32s3.log",
-            "bytes": 4613,
-            "fingerprint": "42f313136d890662a7def71d474ef702d3397a01b39e09eb2e3764620662f841"
+            "bytes": 4332,
+            "fingerprint": "9a090c2e7250647cce90d2e4bd8b1c4b42f306e6af2190f8411bd54fb88498a4"
           }
         ]
       }

@@ -224,6 +224,7 @@ pub async fn run(spawner: Spawner) -> ! {
     )
     .destination_hashes()
     .expect("the hopspot destination names are valid");
+    super::node_name::set_destinations(destination_hashes);
     let node_page_destination = destination_hashes.node_page;
     static FACTORY_GRANT_STORAGE: StaticCell<Option<[RemoteControlControllerGrant; 1]>> =
         StaticCell::new();
@@ -363,6 +364,7 @@ pub async fn run(spawner: Spawner) -> ! {
 
     let ui_handle = PrnsNodeHandle::new(COMMANDS.sender(), &COMPLETION);
     let render = async move {
+        super::node_name::restore().await;
         let mut battery_probe = battery;
         let mut display = display.into_runtime(board::retained_policy());
         let mut ui_state = hopspot::UiState::new(hopspot::UiConfiguration {

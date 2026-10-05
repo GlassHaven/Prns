@@ -109,6 +109,7 @@ pub(super) fn face(input: FaceInput) -> impl Future {
     } = input;
     let ui_handle = PrnsNodeHandle::new(COMMANDS.sender(), &COMPLETION);
     async move {
+        super::node_name::restore().await;
         let mut display = display.into_runtime(display_now());
         let mut ui_state = hopspot::UiState::new(hopspot::UiConfiguration {
             storage_limits: <board::Storage as StorageLayout>::LIMITS,
