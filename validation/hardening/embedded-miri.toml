@@ -71,4 +71,5 @@ sources = [
     "prns-core/src/remote_control/core.rs",
     "prns-core/src/remote_control/test_support.rs",
     "prns-runtime/impls/embassy/src/runtime/node_facade/mod.rs",
+    "prns-runtime/impls/embassy/src/runtime/node_facade/node_lifecycle",
 ]

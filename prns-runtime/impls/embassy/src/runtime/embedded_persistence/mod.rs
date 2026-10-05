@@ -395,13 +395,14 @@ where
         compaction_route_keys: Keys,
         observe_diagnostic: Observe,
     ) -> Self {
-        Self::with_discovery_group_store(
+        Self::with_configuration_stores(
             flash,
             layout,
             policy,
             compaction_route_keys,
             observe_diagnostic,
             GlobalDiscoveryGroupStore,
+            GlobalNodeNameStore,
         )
     }
 }
@@ -414,8 +415,9 @@ where
     Observe: FnMut(EmbeddedPersistenceDiagnostic),
     Groups: AsRef<DiscoveryGroupConfigurationStoreExchange>,
 {
-    /// Uses one node's exchange for restore publication and all group persistence work.
-    /// The exchange must not be shared with another active persistence owner.
+    /// Uses one node's group exchange and owns a private name exchange.
+    /// Use `with_configuration_stores` to expose both exchanges to controllers.
+    /// The group exchange must not be shared with another active persistence owner.
     #[must_use]
     pub fn with_discovery_group_store(
         flash: F,
@@ -424,15 +426,15 @@ where
         compaction_route_keys: Keys,
         observe_diagnostic: Observe,
         groups: Groups,
-    ) -> Self {
-        Self::with_configuration_stores(
+    ) -> EmbeddedFlashPersistence<F, Keys, Observe, PENDING, Groups, NodeNameStoreExchange> {
+        EmbeddedFlashPersistence::with_configuration_stores(
             flash,
             layout,
             policy,
             compaction_route_keys,
             observe_diagnostic,
             groups,
-            GlobalNodeNameStore,
+            NodeNameStoreExchange::new(),
         )
     }
 }
