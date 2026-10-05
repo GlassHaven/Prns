@@ -181,25 +181,29 @@ enum GrantChange {
 
 #[test]
 fn interrupted_grant_update_append_restores_whole_authority_tables() {
-    exercise_grant_change(Campaign::Append, GrantChange::Update);
+    exercise_grant_change(Campaign::Append, GrantChange::Update, FaultPartition::All);
 }
 
-#[test]
-fn interrupted_grant_update_compaction_restores_whole_authority_tables() {
-    exercise_grant_change(Campaign::CompactThenAppend, GrantChange::Update);
-}
+partitioned_campaign!(
+    interrupted_grant_update_compaction_restores_whole_authority_tables,
+    exercise_grant_change,
+    Campaign::CompactThenAppend,
+    GrantChange::Update,
+);
 
 #[test]
 fn interrupted_grant_revocation_append_restores_whole_authority_tables() {
-    exercise_grant_change(Campaign::Append, GrantChange::Revoke);
+    exercise_grant_change(Campaign::Append, GrantChange::Revoke, FaultPartition::All);
 }
 
-#[test]
-fn interrupted_grant_revocation_compaction_restores_whole_authority_tables() {
-    exercise_grant_change(Campaign::CompactThenAppend, GrantChange::Revoke);
-}
+partitioned_campaign!(
+    interrupted_grant_revocation_compaction_restores_whole_authority_tables,
+    exercise_grant_change,
+    Campaign::CompactThenAppend,
+    GrantChange::Revoke,
+);
 
-fn exercise_grant_change(campaign: Campaign, change: GrantChange) {
+fn exercise_grant_change(campaign: Campaign, change: GrantChange, partition: FaultPartition) {
     embassy_futures::block_on(async {
         let administrator = grant(11, Authority::Administrator, Request::Describe);
         let operator = grant(22, Authority::Operator, Request::Describe);
@@ -229,12 +233,18 @@ fn exercise_grant_change(campaign: Campaign, change: GrantChange) {
             .unwrap();
         assert!(matches!(trace[commit], Operation::Write { len: 4, .. }));
         let mut cuts = 0;
+        let mut boundary = 0;
         for (operation, event) in trace.iter().enumerate() {
             let prefixes: Vec<_> = match event {
                 Operation::Read { len, .. } => std::vec![0, *len],
                 Operation::Write { len, .. } | Operation::Erase { len, .. } => (0..=*len).collect(),
             };
             for completed_bytes in prefixes {
+                let selected = partition.includes(boundary);
+                boundary += 1;
+                if !selected {
+                    continue;
+                }
                 let cut = Cut {
                     operation,
                     completed_bytes,
@@ -259,6 +269,7 @@ fn exercise_grant_change(campaign: Campaign, change: GrantChange) {
                 cuts += 1;
             }
         }
+        assert!(cuts > 0);
         std::eprintln!(
             "verified {cuts} {campaign:?} grant cuts, candidate table size {}",
             candidate.len()

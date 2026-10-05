@@ -64,9 +64,11 @@ both borrow models concurrently, with at most four independent interpreter proce
 per model. Each discovered test must execute exactly once in each model; ignored tests,
 empty selections, failed tests, and incomplete results cannot produce passing evidence.
 Per-test logs and the discovered test lists remain in the suite artifact directory while
-execution is in progress. The full suite has a four-hour limit for the exhaustive
-power-loss campaigns. Test identity fixtures reuse derived keys, while each simulated
-node still owns fresh keys, engine state, and authorization tables.
+execution is in progress. The longest power-loss campaigns divide their boundaries
+into four disjoint partitions, retaining every interruption point and assertion.
+The full suite has a five-and-a-half-hour limit. Test identity fixtures reuse derived
+keys, while each simulated node still owns fresh keys, engine state, and authorization
+tables.
 
 
 ## Build and combine the full evidence

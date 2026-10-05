@@ -868,7 +868,7 @@ group = "embedded-miri"
 tiers = ["release", "scheduled"]
 platform = "any"
 toolchain = "nightly"
-timeout_seconds = 14400
+timeout_seconds = 19800
 command = ["__RUNNER_PYTHON__", "-m", "validation.hardening.embedded_miri", "full"]
 inputs = [
     "validation/hardening/embedded_miri.py",

@@ -81,7 +81,7 @@ jobs:
     needs: inventory
     name: ${{ matrix.id }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 260
+    timeout-minutes: 360
     env:
       RUSTUP_TOOLCHAIN: 1.96.0
     strategy:

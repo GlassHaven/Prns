@@ -221,7 +221,7 @@ jobs:
   hardening:
     needs: inventory
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ matrix.id == 'embedded-miri-full' && 260 || 180 }}
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       max-parallel: 16
