@@ -27,6 +27,16 @@ GRAPHS = (
     ("desktop Linux", "personal-hopspot/desktop/Cargo.toml", "x86_64-unknown-linux-gnu"),
     ("desktop macOS", "personal-hopspot/desktop/Cargo.toml", "aarch64-apple-darwin"),
     ("desktop Windows", "personal-hopspot/desktop/Cargo.toml", "x86_64-pc-windows-msvc"),
+    (
+        "HaLoW headless",
+        "personal-hopspot/headless/Cargo.toml",
+        "mipsel-unknown-linux-musl",
+    ),
+    (
+        "HaLoW appliance manager",
+        "personal-hopspot/appliance/Cargo.toml",
+        "mipsel-unknown-linux-musl",
+    ),
     ("Android", "personal-hopspot/mobile/android/rust/Cargo.toml", "aarch64-linux-android"),
     ("iOS", "personal-hopspot/mobile/ios/rust/Cargo.toml", "aarch64-apple-ios"),
     ("Node addon Linux", "prns-napi/Cargo.toml", "x86_64-unknown-linux-gnu"),
@@ -46,6 +56,16 @@ GRAPHS = (
     (
         "ESP32-S3 Heltec E290",
         "personal-hopspot/embedded/esp32/boards/heltec-e290/Cargo.toml",
+        "xtensa-esp32s3-none-elf",
+    ),
+    (
+        "ESP32-S3 Heltec V3",
+        "personal-hopspot/embedded/esp32/boards/heltec-v3/Cargo.toml",
+        "xtensa-esp32s3-none-elf",
+    ),
+    (
+        "ESP32-S3 XIAO Wio-SX1262",
+        "personal-hopspot/embedded/esp32/boards/xiao-esp32s3-wio-sx1262/Cargo.toml",
         "xtensa-esp32s3-none-elf",
     ),
     (

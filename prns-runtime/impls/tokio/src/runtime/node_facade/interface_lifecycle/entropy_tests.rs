@@ -83,7 +83,7 @@ async fn handles_supervisors_and_interface_seams_share_only_their_node_entropy()
             observations.lock().unwrap().push(first);
             PrnsNodeRecipe {
                 transport_identity: None,
-                remote_control: crate::remote_control::RemoteControlService::Unavailable,
+                remote_control: crate::remote_control::RemoteControlService::Unavailable.into(),
                 pre_configured_destinations: [] as [PreConfiguredDestination<'static>; 0],
                 app_state: NoRemoteControlHostControls,
                 storage: crate::storage::GrowableHeap,

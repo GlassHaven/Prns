@@ -95,7 +95,7 @@ async fn real_nodes_complete_a_link_request_over_the_virtual_medium() -> Result<
         .map_err(|error| scenario_error(format!("test destination is invalid: {error:?}")))?;
 
     let node_a = PrnsNode::new(PrnsNodeRecipe {
-        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable.into(),
         transport_identity: None,
         pre_configured_destinations: [responder_destination],
         app_state: Responder,
@@ -128,7 +128,7 @@ async fn real_nodes_complete_a_link_request_over_the_virtual_medium() -> Result<
 
     let (heard_tx, mut heard_rx) = tokio::sync::mpsc::unbounded_channel();
     let node_b = PrnsNode::new(PrnsNodeRecipe {
-        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable.into(),
         transport_identity: None,
         pre_configured_destinations: [PreConfiguredDestination::Single {
             resource_strategy:

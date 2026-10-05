@@ -5,6 +5,9 @@ pub enum Tier {
     Shipping,
     SdkPreview,
     Flashable,
+    InstallationPreview,
+    // Constructed only when the generated catalog contains qualification targets.
+    #[allow(dead_code)]
     Qualification,
     BringUp,
     Roadmap,
@@ -16,6 +19,7 @@ impl Tier {
             Tier::Shipping => None,
             Tier::SdkPreview => Some("SDK preview"),
             Tier::Flashable => Some("flashable"),
+            Tier::InstallationPreview => Some("preview"),
             Tier::Qualification => Some("qualification"),
             Tier::BringUp => Some("bring-up"),
             Tier::Roadmap => Some("roadmap"),
@@ -30,7 +34,7 @@ impl Tier {
         match self {
             Tier::Shipping | Tier::SdkPreview => "flash-board-card--runtime",
             Tier::Flashable => "flash-board-card--flashable",
-            Tier::Qualification => "flash-board-card--qualification",
+            Tier::InstallationPreview | Tier::Qualification => "flash-board-card--qualification",
             Tier::BringUp => "flash-board-card--bringup",
             Tier::Roadmap => "flash-board-card--roadmap",
         }
@@ -82,6 +86,7 @@ pub struct BoardImage {
 }
 
 pub const ESPRESSIF_NATIVE_USB_VENDOR_ID: u16 = 0x303a;
+pub const SILICON_LABS_USB_VENDOR_ID: u16 = 0x10c4;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum PreparationProfile {
@@ -92,10 +97,30 @@ pub enum PreparationProfile {
     MeshPocketUf2,
     #[cfg_attr(not(feature = "local-dev-flasher"), allow(dead_code))]
     MuziBaseDuoUf2,
+    MeshTowerV2Uf2,
+    WioTrackerL1Uf2,
     #[cfg_attr(not(feature = "local-dev-flasher"), allow(dead_code))]
     Rak4631Uf2,
+    Rak10724Uf2,
+    SensecapSolarNodeUf2,
     T096Uf2,
     T1000eNrfSerialDfu,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct NrfManagedApplicationIdentity {
+    pub vendor_id: u16,
+    pub product_id: u16,
+    pub manufacturer: &'static str,
+    pub product: &'static str,
+    pub serial_number: &'static str,
+    pub interface_number: u8,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Uf2BoardIdentityRule {
+    pub kind: Uf2BoardIdMatchKind,
+    pub value: &'static str,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -110,11 +135,13 @@ pub enum BoardFlashTarget {
         mount_label: &'static str,
         board_id_match_kind: Uf2BoardIdMatchKind,
         board_id: &'static str,
+        alternative_board_identities: &'static [Uf2BoardIdentityRule],
     },
     NrfSerialDfu {
         recovery_mount_label: &'static str,
         recovery_board_id_match_kind: Uf2BoardIdMatchKind,
         recovery_board_id: &'static str,
+        managed_application: NrfManagedApplicationIdentity,
     },
 }
 
@@ -150,16 +177,22 @@ impl BoardFlashTarget {
         )
     }
 
-    pub const fn shared_uf2_identity(self) -> Option<&'static str> {
+    pub fn shared_uf2_identity(self) -> Option<&'static str> {
         match self {
             Self::EspSerial { .. } => None,
             Self::Uf2MassStorage {
                 board_id_match_kind,
                 board_id,
+                alternative_board_identities,
                 ..
             } => match board_id_match_kind {
                 Uf2BoardIdMatchKind::ExactShared => Some(board_id),
-                Uf2BoardIdMatchKind::Exact | Uf2BoardIdMatchKind::RevisionPrefix => None,
+                Uf2BoardIdMatchKind::Exact | Uf2BoardIdMatchKind::RevisionPrefix => {
+                    alternative_board_identities
+                        .iter()
+                        .find(|identity| identity.kind == Uf2BoardIdMatchKind::ExactShared)
+                        .map(|identity| identity.value)
+                }
             },
             Self::NrfSerialDfu {
                 recovery_board_id_match_kind,
@@ -196,6 +229,10 @@ pub struct BoardTarget {
 }
 
 impl BoardTarget {
+    pub fn is_linux_appliance(&self) -> bool {
+        matches!(self.tier, Tier::InstallationPreview)
+    }
+
     pub fn is_flashable(&self) -> bool {
         matches!(self.tier, Tier::Flashable)
             || (cfg!(feature = "local-dev-flasher")
@@ -206,9 +243,13 @@ impl BoardTarget {
 
     pub fn image(&self) -> Option<&'static BoardImage> {
         match self.slug {
+            "heltec-v3" => Some(&board_images::HELTEC_V3),
+            "seeed-wio-tracker-l1" => Some(&board_images::WIO_TRACKER_L1),
             "heltec-v4" => Some(&board_images::HELTEC_V4),
             "heltec-v4-r8" => Some(&board_images::HELTEC_V4),
             "t-beam-supreme" => Some(&board_images::T_BEAM_SUPREME),
+            "xiao-esp32s3-wio-sx1262" => Some(&board_images::XIAO_ESP32S3_WIO_SX1262),
+            "seeed-sensecap-solar-node-p1" => Some(&board_images::SENSECAP_SOLAR_NODE_P1),
             "xiao-esp32-c6" => Some(&board_images::XIAO_ESP32_C6),
             "t-echo" => Some(&board_images::T_ECHO),
             "t114" => Some(&board_images::T114),
@@ -216,6 +257,15 @@ impl BoardTarget {
             "t1000-e" => Some(&board_images::SEEED_CARD_TRACKER_T1000_E),
             "t096" => Some(&board_images::HELTEC_MESH_NODE_T096),
             "mesh-tower-v2" => Some(&board_images::MESH_TOWER_V2),
+            "thinknode-g4" => Some(&board_images::THINKNODE_G4),
+            "thinknode-m7" => Some(&board_images::THINKNODE_M7),
+            "heltec-ht-hd01-v2" => Some(&board_images::HELTEC_HT_HD01),
+            "heltec-e290" => Some(&board_images::HELTEC_E290),
+            "heltec-wireless-stick-lite-v3" => Some(&board_images::HELTEC_WIRELESS_STICK_LITE_V3),
+            "rak4631" => Some(&board_images::RAK4631),
+            "rak10724" => Some(&board_images::RAK10724),
+            "raspberry-pi-zero-2-w" => Some(&board_images::RASPBERRY_PI_ZERO_2_W),
+            "muzi-base-duo" => Some(&board_images::MUZI_BASE_DUO),
             _ => None,
         }
     }
@@ -244,32 +294,12 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
         flash_target: None,
     },
     BoardTarget {
-        name: "Heltec V3/V3.1",
-        slug: "heltec-v3",
-        silicon: "ESP32-S3 + SX1262",
-        tier: Tier::Roadmap,
+        name: "Elecrow ThinkNode M7",
+        slug: "thinknode-m7",
+        silicon: "ESP32-S3 + LR1110 + CH390D Ethernet",
+        tier: Tier::BringUp,
         interfaces: &[],
         icon: Some("espressif"),
-        preparation_profile: None,
-        flash_target: None,
-    },
-    BoardTarget {
-        name: "Seeed Wio Tracker L1",
-        slug: "seeed-wio-tracker-l1",
-        silicon: "nRF52840 + SX1262",
-        tier: Tier::Roadmap,
-        interfaces: &[],
-        icon: Some("nordicsemiconductor"),
-        preparation_profile: None,
-        flash_target: None,
-    },
-    BoardTarget {
-        name: "SenseCAP Solar Node P1",
-        slug: "seeed-sensecap-solar-node-p1",
-        silicon: "nRF52840 + SX1262",
-        tier: Tier::Roadmap,
-        interfaces: &[],
-        icon: Some("nordicsemiconductor"),
         preparation_profile: None,
         flash_target: None,
     },
@@ -305,22 +335,34 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
     },
 ];
 
-pub const IN_PROGRESS_BOARD_TARGETS: &[BoardTarget] = &[BoardTarget {
-    name: "Heltec MeshTower V2",
-    slug: "mesh-tower-v2",
-    silicon: "nRF52840 + SX1262 + KCT8103L PA",
-    tier: Tier::Qualification,
-    interfaces: &[],
-    icon: Some("nordicsemiconductor"),
-    preparation_profile: None,
-    flash_target: None,
-}];
+pub const LINUX_APPLIANCE_BOARD_TARGETS: &[BoardTarget] = &[
+    BoardTarget {
+        name: "Elecrow ThinkNode G4",
+        slug: "thinknode-g4",
+        silicon: "MT7628 + MM6108",
+        tier: Tier::InstallationPreview,
+        interfaces: &["Ethernet", "Wi-Fi", "Wi-Fi HaLow"],
+        icon: Some("mediatek"),
+        preparation_profile: None,
+        flash_target: None,
+    },
+    BoardTarget {
+        name: "Heltec HT-HD01-V2",
+        slug: "heltec-ht-hd01-v2",
+        silicon: "MT7628",
+        tier: Tier::InstallationPreview,
+        interfaces: &["Ethernet", "Wi-Fi", "Wi-Fi HaLow"],
+        icon: Some("mediatek"),
+        preparation_profile: None,
+        flash_target: None,
+    },
+];
 
 pub fn all_board_targets() -> impl Iterator<Item = &'static BoardTarget> {
     SHIPPING_BOARD_TARGETS
         .iter()
         .chain(QUALIFICATION_BOARD_TARGETS.iter())
-        .chain(IN_PROGRESS_BOARD_TARGETS.iter())
+        .chain(LINUX_APPLIANCE_BOARD_TARGETS.iter())
         .chain(UPCOMING_BOARD_TARGETS.iter())
 }
 
@@ -698,7 +740,10 @@ mod tests {
             .map(|board| board.name)
             .collect::<Vec<_>>();
 
-        assert_eq!(bring_up, vec!["Raspberry Pi Zero 2 W"]);
+        assert_eq!(
+            bring_up,
+            vec!["Raspberry Pi Zero 2 W", "Elecrow ThinkNode M7"]
+        );
         assert!(
             UPCOMING_BOARD_TARGETS
                 .iter()
@@ -709,12 +754,53 @@ mod tests {
     }
 
     #[test]
-    fn in_progress_boards_sit_in_the_main_grid_with_their_status() {
-        let cards = IN_PROGRESS_BOARD_TARGETS
+    fn every_catalog_board_has_a_thumbnail() {
+        let missing = SHIPPING_BOARD_TARGETS
             .iter()
-            .map(|board| (board.slug, board.tier, board.image().is_some()))
+            .chain(QUALIFICATION_BOARD_TARGETS)
+            .filter(|board| board.image().is_none())
+            .map(|board| board.slug)
             .collect::<Vec<_>>();
-        assert_eq!(cards, vec![("mesh-tower-v2", Tier::Qualification, true)]);
+        assert_eq!(missing, Vec::<&str>::new());
+    }
+
+    #[test]
+    fn v3_selects_its_cp2102_serial_adapter() {
+        let board = board_target_by_slug("heltec-v3").expect("release V3 board");
+        assert!(matches!(
+            board.flash_target,
+            Some(BoardFlashTarget::EspSerial {
+                web_serial_vendor_id: SILICON_LABS_USB_VENDOR_ID,
+                supports_provisioning: false,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn automated_release_boards_are_flashable_in_public_builds() {
+        for slug in [
+            "heltec-e290",
+            "heltec-wireless-stick-lite-v3",
+            "mesh-pocket-5000",
+            "mesh-pocket-10000",
+            "rak4631",
+            "muzi-base-duo",
+            "mesh-tower-v2",
+            "heltec-v3",
+            "seeed-wio-tracker-l1",
+        ] {
+            let board = board_target_by_slug(slug).expect("release board");
+            assert_eq!(board.tier, Tier::Flashable);
+            assert!(board.is_flashable());
+            assert!(board.preparation_profile.is_some());
+            assert!(board.flash_target.is_some());
+        }
+        for board in LINUX_APPLIANCE_BOARD_TARGETS {
+            assert_eq!(board.tier, Tier::InstallationPreview);
+            assert!(board.is_linux_appliance());
+            assert!(!board.is_flashable());
+        }
     }
 
     #[test]

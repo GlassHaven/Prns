@@ -1991,14 +1991,14 @@ dependencies = [
 
 [[package]]
 name = "hopspot"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "personal-rns",
 ]
 
 [[package]]
 name = "hopspot-flash"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "clap",
  "ctrlc",
@@ -3049,6 +3049,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "personal-hopspot-appliance"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "flate2",
+ "hex",
+ "prns-flash-manifest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "personal-hopspot-assurance"
 version = "0.1.0"
 dependencies = [
@@ -3142,7 +3157,7 @@ version = "0.1.0"
 
 [[package]]
 name = "personal-rns"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "cfg-if",
  "prns-core",
@@ -3279,7 +3294,7 @@ dependencies = [
 
 [[package]]
 name = "prns-config"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "home",
  "prns-core",
@@ -3289,7 +3304,7 @@ dependencies = [
 
 [[package]]
 name = "prns-core"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "aes",
  "allocator-api2",
@@ -3327,7 +3342,7 @@ dependencies = [
 
 [[package]]
 name = "prns-ffi"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "cfg-if",
  "dispatch2",
@@ -3338,6 +3353,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
  "objc2-io-kit",
+ "portable-atomic",
  "prns-core",
  "tokio",
  "windows 0.58.0",
@@ -3359,14 +3375,14 @@ dependencies = [
 
 [[package]]
 name = "prns-host"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "prns-runtime",
 ]
 
 [[package]]
 name = "prns-interfaces-embassy"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "embassy-futures",
  "embassy-net",
@@ -3387,7 +3403,7 @@ dependencies = [
 
 [[package]]
 name = "prns-interfaces-tokio"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "bluer",
  "btleplug",
@@ -3420,7 +3436,7 @@ dependencies = [
 
 [[package]]
 name = "prns-macros"
-version = "0.3.7"
+version = "0.3.8"
 
 [[package]]
 name = "prns-nrf-dfu"
@@ -3440,7 +3456,7 @@ dependencies = [
 
 [[package]]
 name = "prns-runtime"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "bzip2",
  "cfg-if",
@@ -3454,7 +3470,7 @@ dependencies = [
 
 [[package]]
 name = "prns-runtime-embassy"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "critical-section",
  "embassy-futures",
@@ -3471,12 +3487,13 @@ dependencies = [
 
 [[package]]
 name = "prns-runtime-tokio"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "heapless 0.8.0",
  "nix 0.31.3",
+ "portable-atomic",
  "prns-core",
  "prns-runtime",
  "rtrb",
@@ -3487,7 +3504,7 @@ dependencies = [
 
 [[package]]
 name = "prns-simulation"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "critical-section",
  "dhat",
@@ -3496,12 +3513,16 @@ dependencies = [
  "embassy-time-driver",
  "embassy-time-queue-utils",
  "embedded-storage-async",
+ "personal-hopspot-core",
  "personal-rns",
  "prns-core",
  "prns-interfaces-embassy",
  "prns-interfaces-tokio",
  "prns-runtime",
  "prns-runtime-embassy",
+ "prns-runtime-tokio",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

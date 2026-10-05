@@ -1,7 +1,11 @@
 mod connection;
 mod pairing;
+mod watch;
 
 pub use connection::RemoteControlTargetHandle;
+pub use watch::{
+    RemoteControlInterfaceWatch, RemoteControlWatchOpenError, RemoteControlWatchReadError,
+};
 
 use crate::engine::RequestResponseTimeout;
 use crate::identity::IdentityHash;
@@ -10,27 +14,27 @@ use crate::routing::links::LinkId;
 use crate::runtime::request_endpoints::RequestEndpointId;
 use crate::runtime::{
     RemoteControlActivateWifiCredentials, RemoteControlAnnounceSelf,
-    RemoteControlAuthorizeController, RemoteControlCancelWifiCredentials,
-    RemoteControlConfirmWifiCredentials, RemoteControlDescribe, RemoteControlDescribeBuild,
-    RemoteControlDescribePower, RemoteControlError, RemoteControlInspectWifiTransaction,
-    RemoteControlInventoryControllers, RemoteControlInventoryInterfaceConfig,
-    RemoteControlInventoryInterfaceDiscoveryGroups, RemoteControlInventoryInterfacePeers,
-    RemoteControlInventoryInterfaces, RemoteControlReplaceInterfaceDiscoveryGroups,
-    RemoteControlRevokeController, RemoteControlSetDisplayAutoOff,
-    RemoteControlSetDisplayVisibility, RemoteControlSetEspRadioMode, RemoteControlSetGnssPower,
-    RemoteControlSetInterfaceGroup, RemoteControlSetInterfaceLoRaProfile,
-    RemoteControlSetInterfaceMode, RemoteControlSetInterfacePower,
-    RemoteControlSetInterfaceWifiStation, RemoteControlSetStationUplink,
-    RemoteControlSetSystemPower, RemoteControlSleepRadios, RemoteControlStageWifiCredentials,
-    RemoteControlWakeRadios,
+    RemoteControlAppMessageExchange, RemoteControlAuthorizeController,
+    RemoteControlCancelWifiCredentials, RemoteControlConfirmWifiCredentials, RemoteControlDescribe,
+    RemoteControlDescribeBuild, RemoteControlDescribePower, RemoteControlError,
+    RemoteControlInspectWifiTransaction, RemoteControlInventoryControllers,
+    RemoteControlInventoryInterfaceConfig, RemoteControlInventoryInterfaceDiscoveryGroups,
+    RemoteControlInventoryInterfacePeers, RemoteControlInventoryInterfaces,
+    RemoteControlReplaceInterfaceDiscoveryGroups, RemoteControlRevokeController,
+    RemoteControlSetDisplayAutoOff, RemoteControlSetDisplayVisibility,
+    RemoteControlSetEspRadioMode, RemoteControlSetGnssPower, RemoteControlSetInterfaceGroup,
+    RemoteControlSetInterfaceLoRaProfile, RemoteControlSetInterfaceMode,
+    RemoteControlSetInterfacePower, RemoteControlSetInterfaceWifiStation,
+    RemoteControlSetStationUplink, RemoteControlSetSystemPower, RemoteControlSleepRadios,
+    RemoteControlStageWifiCredentials, RemoteControlWakeRadios, RemoteControlWatchInterfaces,
 };
 use crate::units::RttMillis;
 use prns_core::capabilities::power::PowerSnapshot;
 use prns_core::interfaces::{InterfaceId, InterfaceMode};
 use prns_core::remote_control::{
-    RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome, RemoteControlBuildVersion,
-    RemoteControlControllerIdentity, RemoteControlControllerInventory, RemoteControlControllerPage,
-    RemoteControlDescription, RemoteControlDiscoveryGroups,
+    RemoteControlAppMessage, RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome,
+    RemoteControlBuildVersion, RemoteControlControllerIdentity, RemoteControlControllerInventory,
+    RemoteControlControllerPage, RemoteControlDescription, RemoteControlDiscoveryGroups,
     RemoteControlDiscoveryGroupsInventoryOutcome, RemoteControlDiscoveryGroupsReplaceOutcome,
     RemoteControlDisplayAutoOff, RemoteControlDisplayVisibility, RemoteControlEspRadioMode,
     RemoteControlGnssPower, RemoteControlGroupOutcome, RemoteControlInterfaceConfigOutcome,
@@ -43,7 +47,7 @@ use prns_core::remote_control::{
     RemoteControlWifiStation, RemoteControlWifiStationOutcome, RemoteControlWifiTransactionStatus,
 };
 
-use super::{PrnsNodeHandle, RequestOptions};
+use super::{PrnsNodeHandle, RequestOptions, StreamId};
 
 pub struct RemoteControlHandle<'a> {
     node: &'a PrnsNodeHandle,
@@ -89,6 +93,59 @@ impl PrnsNodeHandle {
 }
 
 impl RemoteControlHandle<'_> {
+    /// Register the reader before requesting the stream so the first frame cannot race registration.
+    pub async fn watch_interfaces(
+        &self,
+        stream_id: StreamId,
+    ) -> Result<(RemoteControlInterfaceWatch, RttMillis), RemoteControlWatchOpenError> {
+        let reader = self
+            .node
+            .try_byte_stream_reader(self.link_id, stream_id)
+            .await
+            .map_err(RemoteControlWatchOpenError::Registration)?;
+        let mut encoded = [0; RemoteControlRequest::MAX_ENCODED_LEN];
+        let len = RemoteControlWatchInterfaces::write_request(stream_id, &mut encoded)?;
+        let (response, rtt) = self
+            .node
+            .request_owned_with_options(
+                self.link_id,
+                RequestEndpointId::of(REMOTE_CONTROL_REQUEST_ENDPOINT_ID),
+                encoded[..len].to_vec(),
+                RequestOptions {
+                    response_timeout: RequestResponseTimeout::LinkDefault,
+                    maximum_response_bytes: RemoteControlWatchInterfaces::MAXIMUM_RESPONSE_BYTES,
+                },
+            )
+            .await
+            .map_err(RemoteControlError::Request)?;
+        RemoteControlWatchInterfaces::parse_response(&response, stream_id)?;
+        Ok((RemoteControlInterfaceWatch::new(reader), rtt))
+    }
+
+    pub async fn app_message(
+        &self,
+        payload: RemoteControlAppMessage,
+    ) -> Result<(RemoteControlAppMessage, RttMillis), RemoteControlError> {
+        let mut encoded = std::vec![0u8; 2 + payload.len()];
+        RemoteControlAppMessageExchange::write_request(&payload, &mut encoded)?;
+        let (response, rtt) = self
+            .node
+            .request_owned_with_options(
+                self.link_id,
+                RequestEndpointId::of(REMOTE_CONTROL_REQUEST_ENDPOINT_ID),
+                encoded,
+                RequestOptions {
+                    response_timeout: RequestResponseTimeout::LinkDefault,
+                    maximum_response_bytes: RemoteControlAppMessageExchange::MAXIMUM_RESPONSE_BYTES,
+                },
+            )
+            .await
+            .map_err(RemoteControlError::Request)?;
+        Ok((
+            RemoteControlAppMessageExchange::parse_response(&response)?,
+            rtt,
+        ))
+    }
     remote_control_apply_method!(
         set_system_power,
         RemoteControlSetSystemPower,

@@ -220,7 +220,6 @@ impl<S: StorageLayout> EngineState<S> {
         let protocol_violation = ProtocolViolationKind::of_outcome(&outcome);
 
         wake_schedule_changes.held_announce_release = effects.held_announce_release;
-        let accepted_observation = effects.accepted_announce.take();
         let remote_control_pairing_availability =
             effects.remote_control_pairing_availability.take();
         if let Some(expiry) = effects.destination_identity_expiry {
@@ -238,7 +237,7 @@ impl<S: StorageLayout> EngineState<S> {
             IngestPacketOutcome::Announce(ingest) => {
                 self.apply_announce_ingest(
                     ingest,
-                    accepted_observation,
+                    &mut effects,
                     source,
                     interfaces,
                     &mut wake_schedule_changes,

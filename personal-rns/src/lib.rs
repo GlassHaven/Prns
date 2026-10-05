@@ -60,7 +60,7 @@ pub use interface_families::udp;
 pub use interface_families::usb_auto;
 #[cfg(all(feature = "weave", feature = "tokio-host"))]
 pub use interface_families::weave;
-#[cfg(all(feature = "websocket", feature = "tokio-host"))]
+#[cfg(all(feature = "websocket-server", feature = "tokio-host"))]
 pub use interface_families::websocket;
 #[cfg(all(
     feature = "wifi-auto",
@@ -92,13 +92,15 @@ pub use prns_runtime::runtime::{
     OpenRemoteControlPairingControlError, PreConfiguredDestination, PrnsEvent, PrnsNodeApi,
     PrnsNodeRecipe, RejectRemoteControlControllerPairingControlError,
     RejectRemoteControlTargetPairingControlError, RemoteControlAnnounceSelf,
-    RemoteControlAnnounceSelfFailure, RemoteControlControllerGrantControl,
-    RemoteControlControllerPairingConfirmation, RemoteControlControllerPairingInitiationControl,
+    RemoteControlAnnounceSelfFailure, RemoteControlAppMessages,
+    RemoteControlControllerGrantControl, RemoteControlControllerPairingConfirmation,
+    RemoteControlControllerPairingInitiationControl,
     RemoteControlControllerPairingInitiationTransport, RemoteControlDescribe, RemoteControlError,
     RemoteControlHostCommand, RemoteControlHostCommandError, RemoteControlHostControls,
-    RemoteControlHostResponse, RemoteControlPairingConfirmation, RemoteControlPairingControl,
+    RemoteControlHostResponse, RemoteControlNodeControls, RemoteControlNodeSetup,
+    RemoteControlPairingConfirmation, RemoteControlPairingControl,
     RemoteControlPairingControlError, RemoteControlPairingLinkCleanupOutcome,
-    RemoteControlTargetAccessControl, RemoteControlTargetConnection,
+    RemoteControlSupportedHost, RemoteControlTargetAccessControl, RemoteControlTargetConnection,
     RemoteControlTargetConnectionControl, RemoteControlTargetConnectionTransport,
     RemoteControlTargetInventory, RemoteControlTargetInventoryControlError,
     RemoteControlTargetInventoryError, RemoteControlTargetInventoryServiceError,
@@ -125,7 +127,8 @@ pub use prns_runtime_tokio::runtime::{
     try_generate_identity_secret, AttachIntent, Attachable, AttachedInterface, AttachedSupervisor,
     Fleet, IdentitySecretFileError, LocalIdentityFileError, OsEntropyError, OsRuntimeEntropy,
     PrnsNode, PrnsNodeHandle, RemoteControlFileIdentityBootstrapError, RemoteControlHandle,
-    RemoteControlIdentityDirectory, RemoteControlTargetHandle,
+    RemoteControlIdentityDirectory, RemoteControlInterfaceWatch, RemoteControlTargetHandle,
+    RemoteControlWatchOpenError, RemoteControlWatchReadError,
 };
 
 #[cfg(all(feature = "embassy-host", not(feature = "tokio-host")))]
@@ -198,3 +201,6 @@ pub use prns_interfaces_tokio::from_plan::{
 
 #[cfg(feature = "shared-instance")]
 pub use prns_runtime::runtime::rns_remote_management;
+
+#[cfg(all(feature = "wifi-halow", feature = "tokio-host"))]
+pub use interface_families::wifi_halow;

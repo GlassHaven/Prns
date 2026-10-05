@@ -230,7 +230,7 @@ impl<const RESPONSE_BYTES: usize, const REQUEST_BYTES: usize>
         );
         let recipe = PrnsNodeRecipe {
             transport_identity: None,
-            remote_control: RemoteControlService::Unavailable,
+            remote_control: RemoteControlService::Unavailable.into(),
             pre_configured_destinations: destinations,
             app_state: NoRemoteControlHostControls,
             storage,

@@ -615,3 +615,33 @@ async fn a_panicking_supervisor_stops_its_members() {
     expected.sort_unstable();
     assert_eq!(removed, expected);
 }
+
+#[test]
+fn concurrent_command_ids_and_attachment_epochs_cross_u32_boundary() {
+    let (handle, _receiver) = handle();
+    let start = u64::from(u32::MAX) - 10;
+    handle.ids.store(start, Ordering::Relaxed);
+    handle.attachment_epochs.store(start, Ordering::Relaxed);
+    let mut results = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..4)
+            .map(|_| {
+                let handle = &handle;
+                scope.spawn(move || {
+                    (0..1_000)
+                        .map(|_| (handle.mint().0, handle.next_attachment_epoch()))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    let mut epochs: Vec<_> = results.iter().map(|(_, epoch)| *epoch).collect();
+    results.sort_unstable_by_key(|(id, _)| *id);
+    epochs.sort_unstable();
+    let ids: Vec<_> = results.into_iter().map(|(id, _)| id).collect();
+    let expected: Vec<_> = (start..start + 4_000).collect();
+    assert_eq!((ids, epochs), (expected.clone(), expected));
+}

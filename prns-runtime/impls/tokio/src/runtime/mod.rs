@@ -3,6 +3,7 @@ mod entropy;
 mod identity_blackhole_commands;
 mod identity_bootstrap;
 mod interface_store;
+mod interface_watch;
 mod node_facade;
 pub mod node_introspection;
 #[cfg(feature = "rnx")]
@@ -18,6 +19,12 @@ mod tracing_events;
 
 pub use prns_runtime::runtime::*;
 
+#[cfg(feature = "simulation-control")]
+pub use crate::manifold::driver::{
+    ControlledCrypto, ControlledCryptoError, ControlledCryptoEvent, ControlledCryptoSnapshot,
+    ControlledCryptoStep, ControlledJobId, ControlledWorkKind, ControlledWorkerId,
+    CryptoWorkBoundary,
+};
 pub use crate::manifold::driver::{CryptoPoolConfig, CryptoWorkerPlacement, PoolWorkers};
 #[cfg(feature = "scheduler-tuning")]
 pub use crate::manifold::driver::{SchedulerPolicy, SchedulerPolicyError, SchedulerPolicyInput};
@@ -44,16 +51,18 @@ pub use node_facade::{
     FlushFailurePolicy, FlushMark, FlushReport, InterfaceArbitration, InterfaceAttachmentMetadata,
     InterfaceEventSource, InterfaceSupervisor, NodePersistence, NodeRunError,
     NonRoutingIdentityError, PersistenceEvent, PersistenceFlushStatus, PersistenceIntent,
-    PersistenceRestoreReport, PersistenceTrigger, PersistenceWorker, PrepareFlushError,
-    PreparedFlush, PreparedResourceReceiver, PrnsNode, PrnsNodeHandle, PrnsNodeLocalHandle,
-    RatchetSeedReport, RegionFlush, RegisterRequestEndpointError,
+    PersistenceIo, PersistenceIoCompletion, PersistenceIoError, PersistenceIoOperation,
+    PersistenceIoTask, PersistenceRestoreReport, PersistenceTrigger, PersistenceWorker,
+    PrepareFlushError, PreparedFlush, PreparedResourceReceiver, PrnsNode, PrnsNodeHandle,
+    PrnsNodeLocalHandle, RatchetSeedReport, RegionFlush, RegisterRequestEndpointError,
     RemoteControlAuthorizationPersistence, RemoteControlAuthorizationSeedReport,
-    RemoteControlHandle, RemoteControlTargetHandle, RequestOptions, RequestPathError,
+    RemoteControlHandle, RemoteControlInterfaceWatch, RemoteControlTargetHandle,
+    RemoteControlWatchOpenError, RemoteControlWatchReadError, RequestOptions, RequestPathError,
     ResourceAdmissionPeer, ResourceOfferAdmission, ResourceOfferMonitor, ResourceProgress,
     ResourceReceipt, ResourceReceiveError, ResourceSendError, ResponseSendError, RouteSeedProgress,
     RouteSeedReport, RuntimeRequestHandlerError, SaveOnLearn, SaveOnLearnWiring,
-    SegmentCompression, SharedInstanceIdentityError, StreamId, TunnelSeedReport,
-    AUTO_COMPRESS_MAX_LEN,
+    SegmentCompression, SharedInstanceIdentityError, StreamId, StreamReaderRegistrationError,
+    TunnelSeedReport, AUTO_COMPRESS_MAX_LEN,
 };
 #[cfg(feature = "rnx")]
 pub use process_commands::ProcessCommands;

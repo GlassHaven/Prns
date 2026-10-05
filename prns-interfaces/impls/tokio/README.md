@@ -4,6 +4,12 @@ This crate is one package in the Personal RNS public Rust graph. Quick overviews
 
 All public packages use the same engine, release version, and dual MIT/Apache-2.0 license.
 
+## HaLoW data plane
+
+The Linux-only `wifi-halow` feature provides an Ethernet datagram backend for
+an already configured HaLoW device. Runtime attachment remains unfinished.
+See the [backend contract and hardware evidence](src/wifi_halow/README.md).
+
 ## BLE full-duplex progress
 
 `BluetoothPeer` uses the no-std core's `send_frame_duplex` to receive and forward

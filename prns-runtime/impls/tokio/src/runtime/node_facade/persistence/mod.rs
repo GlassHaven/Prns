@@ -1,6 +1,11 @@
 mod authorization;
 mod host;
+mod io;
 pub(crate) use authorization::{AuthorizationOwnerError, AuthorizationTransaction};
+pub use io::{
+    PersistenceIo, PersistenceIoCompletion, PersistenceIoError, PersistenceIoOperation,
+    PersistenceIoTask,
+};
 
 #[cfg(test)]
 mod test_directory;
@@ -170,7 +175,8 @@ impl PrnsNodeHandle {
     }
 }
 
-impl<St, R, F, S: StorageLayout, E: prns_core::entropy::EntropySource> PrnsNode<St, R, F, S, E>
+impl<St, R, F, S: StorageLayout, E: prns_core::entropy::EntropySource, C>
+    PrnsNode<St, R, F, S, E, C>
 where
     R: RequestEndpointSet<St>,
     F: FnMut(PrnsEvent<'_>, &St),

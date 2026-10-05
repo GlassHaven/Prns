@@ -3,6 +3,7 @@ use std::num::NonZeroUsize;
 use std::sync::{Mutex, MutexGuard};
 
 use embassy_time::Instant;
+use prns_runtime_tokio::runtime::{ControlledCrypto, ControlledCryptoError, ControlledCryptoStep};
 use prns_simulation::{
     ManualAdvance, ManualTaskId, ManualTaskPoll, ManualTaskRunner, ManualTimeDriver,
     ManualTimeError, ManualTimeSnapshot, SimulationTick,
@@ -45,7 +46,14 @@ pub(super) struct EmbassyTasks<'driver> {
     runner: ManualTaskRunner<'driver, ()>,
     _clock: ClockLease,
     settlement_poll_budget: NonZeroUsize,
+    crypto: Vec<ControlledCrypto>,
 }
+
+enum CryptoProgress {
+    Idle,
+    Advanced,
+}
+const CRYPTO_GENERATION_CAPACITY: usize = 256;
 
 pub(super) struct CompletionBudget {
     pub deadline: SimulationTick,
@@ -74,6 +82,7 @@ impl<'driver> EmbassyTasks<'driver> {
             runner: ManualTaskRunner::new_with_scheduling(driver, actors, scheduling),
             _clock: clock,
             settlement_poll_budget,
+            crypto: Vec::new(),
         };
         assert_eq!(tasks.snapshot().runtime_elapsed, std::time::Duration::ZERO);
         tasks
@@ -81,6 +90,33 @@ impl<'driver> EmbassyTasks<'driver> {
 
     pub(super) fn insert(&mut self, future: impl Future<Output = ()> + 'static) -> ManualTaskId {
         self.runner.insert(future).unwrap()
+    }
+
+    pub(super) fn register_crypto(&mut self, control: ControlledCrypto) {
+        assert!(
+            self.crypto.len() < CRYPTO_GENERATION_CAPACITY,
+            "bounded crypto generations"
+        );
+        self.crypto.push(control);
+    }
+
+    fn step_crypto(&self) -> CryptoProgress {
+        let mut progress = CryptoProgress::Idle;
+        for control in &self.crypto {
+            match control.step() {
+                Ok(ControlledCryptoStep::Executed(_) | ControlledCryptoStep::Published(_)) => {
+                    progress = CryptoProgress::Advanced;
+                }
+                Ok(
+                    ControlledCryptoStep::Idle
+                    | ControlledCryptoStep::Held
+                    | ControlledCryptoStep::Backpressured,
+                )
+                | Err(ControlledCryptoError::NotAttached | ControlledCryptoError::Retired) => {}
+                Err(error) => unreachable!("controlled worker ownership: {error}"),
+            }
+        }
+        progress
     }
 
     pub(super) fn cancel(&mut self, task: ManualTaskId) -> prns_simulation::ManualTaskCancellation {
@@ -122,6 +158,7 @@ impl<'driver> EmbassyTasks<'driver> {
         });
         let mut polls_at_tick = 0;
         for _ in 0..COMPLETION_POLL_BUDGET {
+            let _ = self.step_crypto();
             polls_at_tick += 1;
             assert!(
                 polls_at_tick <= budget.polls_per_tick.get(),
@@ -136,6 +173,9 @@ impl<'driver> EmbassyTasks<'driver> {
                     return result.try_recv().unwrap();
                 }
                 ManualTaskPoll::Idle => {
+                    if matches!(self.step_crypto(), CryptoProgress::Advanced) {
+                        continue;
+                    }
                     let now = self.snapshot().tick.get();
                     assert!(
                         now < budget.deadline.get(),
@@ -215,14 +255,30 @@ impl<'driver> EmbassyTasks<'driver> {
     pub(super) fn settle(&mut self) -> usize {
         let _ = self.snapshot();
         for polls in 0..self.settlement_poll_budget.get() {
+            let _ = self.step_crypto();
             match self.runner.poll_next().unwrap() {
-                ManualTaskPoll::Idle => return polls,
+                ManualTaskPoll::Idle => match self.step_crypto() {
+                    CryptoProgress::Idle => return polls,
+                    CryptoProgress::Advanced => {}
+                },
                 ManualTaskPoll::Pending { .. } => {}
                 ManualTaskPoll::Completed { .. } => unreachable!("supervisors must remain live"),
             }
             let _ = self.snapshot();
         }
         unreachable!("supervisors exceeded the explicit settlement poll budget")
+    }
+
+    pub(super) fn poll_turns(&mut self, turns: NonZeroUsize) {
+        let before = self.snapshot();
+        for _ in 0..turns.get() {
+            let _ = self.step_crypto();
+            match self.runner.poll_next().unwrap() {
+                ManualTaskPoll::Pending { .. } | ManualTaskPoll::Idle => {}
+                ManualTaskPoll::Completed { .. } => unreachable!("tracked actors stay live"),
+            }
+        }
+        assert_eq!(self.snapshot(), before);
     }
 }
 

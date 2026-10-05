@@ -4,6 +4,7 @@ use crate::{AdvanceReport, MediumSchedule, SimulationTick, VirtualMedium};
 
 pub enum ManualMedium {
     Frames(VirtualMedium),
+    HaLow(crate::halow::VirtualHaLowMedium),
     Ble(VirtualBleLab),
     /// Both media must start at the same tick. Neither may be advanced outside
     /// the driver; same-tick effects settle before any actor is polled again.
@@ -23,7 +24,7 @@ impl ManualMedium {
             });
         }
         match self {
-            Self::Frames(_) => Ok(()),
+            Self::Frames(_) | Self::HaLow(_) => Ok(()),
             Self::Ble(ble) | Self::FramesAndBle { ble, .. } => {
                 ble.check_advance(target).map_err(ManualTimeError::Ble)
             }
@@ -33,6 +34,7 @@ impl ManualMedium {
     pub(super) fn now(&self) -> Result<SimulationTick, ManualTimeError> {
         match self {
             Self::Frames(medium) => Ok(medium.now()),
+            Self::HaLow(medium) => Ok(medium.now()),
             Self::Ble(lab) => Ok(lab.now()),
             Self::FramesAndBle { frames, ble } => {
                 let frames = frames.now();
@@ -48,6 +50,7 @@ impl ManualMedium {
     pub(super) fn schedule(&self) -> Result<MediumSchedule, ManualTimeError> {
         match self {
             Self::Frames(medium) => Ok(medium.schedule()),
+            Self::HaLow(medium) => Ok(medium.schedule()),
             Self::Ble(lab) => Ok(lab.schedule()),
             Self::FramesAndBle { frames, ble } => {
                 let frames = frames.schedule();
@@ -75,6 +78,10 @@ impl ManualMedium {
         not_after: SimulationTick,
     ) -> Result<ManualAdvance, ManualTimeError> {
         match self {
+            Self::HaLow(medium) => medium
+                .advance_to_next_event(not_after)
+                .map(ManualAdvance::HaLow)
+                .map_err(ManualTimeError::HaLow),
             Self::Frames(medium) => medium
                 .advance_to_next_event(not_after)
                 .map(ManualAdvance::Frames)
@@ -107,6 +114,7 @@ impl ManualMedium {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ManualAdvance {
     Frames(AdvanceReport),
+    HaLow(AdvanceReport),
     Ble(BleAdvanceReport),
     FramesAndBle {
         frames: AdvanceReport,
@@ -117,7 +125,7 @@ pub enum ManualAdvance {
 impl ManualAdvance {
     pub(super) fn bounds(&self) -> (SimulationTick, SimulationTick) {
         match self {
-            Self::Frames(report) => (report.from, report.to),
+            Self::Frames(report) | Self::HaLow(report) => (report.from, report.to),
             Self::Ble(report) => (report.from, report.to),
             Self::FramesAndBle { frames, .. } => (frames.from, frames.to),
         }

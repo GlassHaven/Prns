@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless an exact signed candidate has truthful physical evidence."""
+"""Validate exact-candidate automated or historical physical acceptance."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 
 from flasher_acceptance_contract import (  # noqa: E402
     ACCEPTANCE_SCHEMA,
+    SOFTWARE_ACCEPTANCE_SCHEMA,
+    software_qualification,
     CLI_TARGETS,
     ESP_SERIAL_BOARDS,
     FALLBACK_SCENARIOS,
@@ -1141,11 +1143,11 @@ def validate(arguments: argparse.Namespace, now: datetime | None = None) -> list
     current = current.astimezone(timezone.utc)
     version_value = manifest.get("release")
     version = version_value.get("version") if isinstance(version_value, dict) else ""
+    if software_qualification(version) and acceptance.get("schema") != SOFTWARE_ACCEPTANCE_SCHEMA:
+        return ["pre-1.0 releases from 0.3.8 require schema-7 automated acceptance"]
     hotfix_spec: HotfixSpec | None = None
-    acceptance_schema = acceptance.get("schema")
-    if acceptance_schema in {
-        HOTFIX_ACCEPTANCE_SCHEMA,
-        MAINTAINER_OVERRIDE_SCHEMA,
+    if acceptance.get("schema") in {
+        HOTFIX_ACCEPTANCE_SCHEMA, SOFTWARE_ACCEPTANCE_SCHEMA, MAINTAINER_OVERRIDE_SCHEMA,
     }:
         try:
             hotfix_spec = verify_hotfix_candidate(
@@ -1154,19 +1156,12 @@ def validate(arguments: argparse.Namespace, now: datetime | None = None) -> list
             )
         except ValueError as error:
             errors.append(str(error))
-        if acceptance_schema == HOTFIX_ACCEPTANCE_SCHEMA and hotfix_spec is None:
-            errors.append("schema-6 acceptance requires a scoped hotfix candidate")
+        if hotfix_spec is None and (acceptance.get("schema") == HOTFIX_ACCEPTANCE_SCHEMA or "-hotfix." in str(version)):
+            errors.append("hotfix acceptance requires a scoped hotfix candidate")
     roster_version = hotfix_spec.roster_version if hotfix_spec is not None else str(version)
     tester_roster, roster_errors = validate_roster(roster, roster_version)
     errors.extend(f"signed tester roster: {error}" for error in roster_errors)
-    if acceptance_schema == MAINTAINER_OVERRIDE_SCHEMA:
-        errors.extend(
-            validate_maintainer_override(
-                acceptance, roster, manifest, arguments, published_at, current
-            )
-        )
-        return errors
-    if hotfix_spec is not None:
+    if hotfix_spec is not None and acceptance.get("schema") == HOTFIX_ACCEPTANCE_SCHEMA:
         errors.extend(
             validate_hotfix_acceptance(
                 acceptance,
@@ -1177,6 +1172,25 @@ def validate(arguments: argparse.Namespace, now: datetime | None = None) -> list
                 hotfix_spec,
                 published_at,
                 current,
+            )
+        )
+        return errors
+    if acceptance.get("schema") == SOFTWARE_ACCEPTANCE_SCHEMA:
+        from flasher_software_acceptance import validate_record
+
+        validated_version, _ = validate_candidate_identity(
+            acceptance, manifest, arguments.manifest, arguments.manifest_signature,
+            arguments.signed_bundle, arguments.prerelease_published_at, errors,
+        )
+        errors.extend(validate_record(
+            acceptance, manifest["release"]["commit"], validated_version,
+            EvidenceStore(arguments.evidence_root), current,
+        ))
+        return errors
+    if acceptance.get("schema") == MAINTAINER_OVERRIDE_SCHEMA:
+        errors.extend(
+            validate_maintainer_override(
+                acceptance, roster, manifest, arguments, published_at, current
             )
         )
         return errors
@@ -1255,7 +1269,9 @@ def main() -> int:
             print(f"acceptance validation failed: {error}", file=sys.stderr)
         return 1
     document = json.loads(arguments.acceptance.read_text(encoding="utf-8"))
-    if isinstance(document, dict) and document.get("schema") == MAINTAINER_OVERRIDE_SCHEMA:
+    if isinstance(document, dict) and document.get("schema") == SOFTWARE_ACCEPTANCE_SCHEMA:
+        print("exact-source automated acceptance is complete; physical qualification is not required")
+    elif isinstance(document, dict) and document.get("schema") == MAINTAINER_OVERRIDE_SCHEMA:
         print("version-bound maintainer override is bound to the exact signed candidate")
     elif isinstance(document, dict) and document.get("schema") == HOTFIX_ACCEPTANCE_SCHEMA:
         print(
