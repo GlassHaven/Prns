@@ -27,6 +27,27 @@ dx serve
 First-time Rust or Dioxus dependency downloads may require network access. Once
 present, the essential guide content comes from the repository.
 
+## Device cards
+
+The flasher lists ThinkNode G4 and Heltec HT-HD01-V2 individually alongside the
+firmware boards, with their existing product photos. Their **Set up** actions
+open the current device guides; preview cards do not claim browser flashing or
+a signed public download.
+
+The 0.3.8 release catalog enables Flash for Vision Master E290-HF, Wireless Stick
+Lite V3, both MeshPocket capacities, RAK WisBlock 4631, muzi Base Duo, and
+MeshTower V2 under the automated pre-1.0 acceptance policy.
+
+MeshTower V2 currently assumes the stock `HT-n5262` recovery volume and Board-ID,
+with S140 6.1.1. The volume and SoftDevice are documented in [the original
+firmware PR](https://github.com/KenAKAFrosty/Prns/pull/122); the Board-ID is present
+in [Heltec's published 0.9.0 bootloader](https://github.com/HelTecAutomation/Heltec_nRF52/tree/main/bootloader/HT-n5262).
+The release owner accepted this mapping for 0.3.8 pending Tony's device-level
+`INFO_UF2.TXT` confirmation. It is an explicit assumption, not a hardware test
+receipt. The shared identity cannot distinguish MeshTower, T114, or MeshPocket;
+the public flasher requires model confirmation and a matching SoftDevice.
+MeshTower's release build preserves the thin-LTO setting of its developer build.
+
 ## Test
 
 ```console

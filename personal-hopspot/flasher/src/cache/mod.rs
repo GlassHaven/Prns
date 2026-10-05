@@ -1088,7 +1088,7 @@ mod tests {
 
         assert_eq!(imported.version, "0.2.6");
         assert_eq!(imported.channel, "preview");
-        assert_eq!(imported.artifact_count, 19);
+        assert_eq!(imported.artifact_count, 30);
         assert!(cache
             .path()
             .join("releases/0.2.6/heltec-v4/application.bin")

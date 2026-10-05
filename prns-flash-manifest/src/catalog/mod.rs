@@ -731,6 +731,26 @@ const T096_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
     }],
 };
 
+const MESH_TOWER_V2_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
+    preparation_profile: PreparationProfile::MeshTowerV2Uf2,
+    package: "t-echo",
+    binary: "heltec-mesh-tower-v2",
+    board_feature: "board-mesh-tower-v2",
+    manufacturer: "Stay Personal",
+    product: "Personal Hopspot (Heltec MeshTower V2)",
+    serial_number: "PERSONAL-RNS-MTWR-HOP",
+    variants: &[PinnedUf2Variant {
+        softdevice_family: "s140",
+        softdevice_version: "6.1.1",
+        fwid: "0x00b6",
+        memory_profile: "mesh-tower-v2",
+        family_id: "0xada52840",
+        application_link: Uf2ApplicationLink::SoftdeviceS140V6,
+        target_directory: "target/mesh-tower-v2",
+        filename: "heltec-mesh-tower-v2-s140-6.1.1.uf2",
+    }],
+};
+
 const MUZI_BASE_DUO_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
     preparation_profile: PreparationProfile::MuziBaseDuoUf2,
     package: "t-echo",
@@ -778,6 +798,7 @@ fn pinned_uf2_recipe(slug: &str) -> Option<&'static PinnedUf2Recipe> {
         "mesh-pocket-10000" => Some(&MESH_POCKET_10000_UF2_RECIPE),
         "t096" => Some(&T096_UF2_RECIPE),
         "t114" => Some(&T114_UF2_RECIPE),
+        "mesh-tower-v2" => Some(&MESH_TOWER_V2_UF2_RECIPE),
         "muzi-base-duo" => Some(&MUZI_BASE_DUO_UF2_RECIPE),
         "rak4631" => Some(&RAK4631_UF2_RECIPE),
         _ => None,
@@ -976,7 +997,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn embedded_catalog_has_shipping_and_qualification_boards() -> Result<(), CatalogError> {
+    fn embedded_catalog_has_all_release_ready_boards() -> Result<(), CatalogError> {
         let catalog = board_catalog()?;
         assert_eq!(catalog.schema_version, 5);
         let slugs = catalog
@@ -988,18 +1009,25 @@ mod tests {
             [
                 "heltec-v4",
                 "heltec-v4-r8",
+                "heltec-e290",
+                "heltec-wireless-stick-lite-v3",
                 "t-beam-supreme",
                 "xiao-esp32-c6",
                 "t-echo",
                 "t114",
+                "mesh-pocket-5000",
+                "mesh-pocket-10000",
                 "t096",
-                "t1000-e"
+                "rak4631",
+                "t1000-e",
+                "mesh-tower-v2",
+                "muzi-base-duo"
             ]
         );
         assert!(catalog
             .boards
             .iter()
-            .any(|board| board.availability == BoardAvailability::Qualification));
+            .all(|board| board.availability == BoardAvailability::Shipping));
         Ok(())
     }
 
@@ -1079,6 +1107,7 @@ mod tests {
                 ("t096", None, None),
                 ("rak4631", None, None),
                 ("t1000-e", None, None),
+                ("mesh-tower-v2", None, None),
                 ("muzi-base-duo", None, None),
             ]
         );
@@ -1157,6 +1186,7 @@ mod tests {
                 ("t096", "t096", "thumbv7em-none-eabihf"),
                 ("rak4631", "rak4631", "thumbv7em-none-eabihf"),
                 ("t1000-e", "t1000-e", "thumbv7em-none-eabihf"),
+                ("mesh-tower-v2", "mesh-tower-v2", "thumbv7em-none-eabihf"),
                 ("muzi-base-duo", "muzi-base-duo", "thumbv7em-none-eabihf"),
             ]
         );
@@ -1175,15 +1205,15 @@ mod tests {
     }
 
     #[test]
-    fn e290_qualification_contract_is_complete_and_not_shipping() -> Result<(), CatalogError> {
+    fn e290_shipping_contract_is_complete() -> Result<(), CatalogError> {
         let catalog = board_catalog()?;
         let board = catalog
             .board("heltec-e290")
             .ok_or_else(|| CatalogError::InvalidBoard {
                 board: "heltec-e290".to_string(),
-                message: "missing qualification target".to_string(),
+                message: "missing release target".to_string(),
             })?;
-        assert_eq!(board.availability, BoardAvailability::Qualification);
+        assert_eq!(board.availability, BoardAvailability::Shipping);
         assert_eq!(board.display_name, "Heltec Vision Master E290-HF");
         assert_eq!(board.expected_chip.as_deref(), Some("esp32s3"));
         assert_eq!(board.flash_size, Some(16_777_216));
@@ -1210,7 +1240,7 @@ mod tests {
         assert_eq!(build.flash_frequency, "40m");
         assert_eq!(build.before_reset, "usb-reset");
         assert_eq!(build.after_reset, "watchdog-reset");
-        assert!(!catalog
+        assert!(catalog
             .shipping_boards()
             .any(|entry| entry.slug == board.slug));
         Ok(())
@@ -1223,7 +1253,7 @@ mod tests {
             .board("heltec-wireless-stick-lite-v3")
             .ok_or_else(|| CatalogError::InvalidBoard {
                 board: "heltec-wireless-stick-lite-v3".to_string(),
-                message: "missing qualification target".to_string(),
+                message: "missing release target".to_string(),
             })?;
         assert_eq!(board.display_name, "Heltec Wireless Stick Lite V3");
         assert_eq!(board.expected_chip.as_deref(), Some("esp32s3"));
@@ -1296,19 +1326,19 @@ mod tests {
     }
 
     #[test]
-    fn rak4631_qualification_contract_matches_the_hardware_receipt() -> Result<(), CatalogError> {
+    fn rak4631_shipping_contract_matches_the_hardware_receipt() -> Result<(), CatalogError> {
         let catalog = board_catalog()?;
         let board = catalog
             .board("rak4631")
             .ok_or_else(|| CatalogError::InvalidBoard {
                 board: "rak4631".to_string(),
-                message: "missing qualification target".to_string(),
+                message: "missing release target".to_string(),
             })?;
         let BoardBuild::Uf2(build) = &board.build else {
             return Err(invalid(board, "expected a UF2 build"));
         };
 
-        assert_eq!(board.availability, BoardAvailability::Qualification);
+        assert_eq!(board.availability, BoardAvailability::Shipping);
         assert_eq!(board.preparation_profile, "rak4631-uf2");
         assert_eq!(build.package, "t-echo");
         assert_eq!(build.binary, "rak4631");
@@ -1494,7 +1524,7 @@ mod tests {
             .board("t1000-e")
             .ok_or_else(|| CatalogError::InvalidBoard {
                 board: "t1000-e".to_string(),
-                message: "missing qualification target".to_string(),
+                message: "missing release target".to_string(),
             })?;
         let BoardBuild::NrfSerialDfu(build) = &board.build else {
             return Err(invalid(board, "expected Nordic serial DFU build"));
@@ -1632,7 +1662,7 @@ mod tests {
             ("mesh-pocket-10000", "10000", "PERSONAL-RNS-MSPK10-HOP"),
         ] {
             let board = catalog.board(slug).ok_or("expected MeshPocket target")?;
-            assert_eq!(board.availability, BoardAvailability::Qualification);
+            assert_eq!(board.availability, BoardAvailability::Shipping);
             assert_eq!(board.preparation_profile, "mesh-pocket-uf2");
             let BoardBuild::Uf2(build) = &board.build else {
                 return Err("expected a UF2 build".into());

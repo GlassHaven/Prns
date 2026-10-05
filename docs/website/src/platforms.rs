@@ -5,6 +5,9 @@ pub enum Tier {
     Shipping,
     SdkPreview,
     Flashable,
+    InstallationPreview,
+    // Constructed only when the generated catalog contains qualification targets.
+    #[allow(dead_code)]
     Qualification,
     BringUp,
     Roadmap,
@@ -16,6 +19,7 @@ impl Tier {
             Tier::Shipping => None,
             Tier::SdkPreview => Some("SDK preview"),
             Tier::Flashable => Some("flashable"),
+            Tier::InstallationPreview => Some("preview"),
             Tier::Qualification => Some("qualification"),
             Tier::BringUp => Some("bring-up"),
             Tier::Roadmap => Some("roadmap"),
@@ -30,7 +34,7 @@ impl Tier {
         match self {
             Tier::Shipping | Tier::SdkPreview => "flash-board-card--runtime",
             Tier::Flashable => "flash-board-card--flashable",
-            Tier::Qualification => "flash-board-card--qualification",
+            Tier::InstallationPreview | Tier::Qualification => "flash-board-card--qualification",
             Tier::BringUp => "flash-board-card--bringup",
             Tier::Roadmap => "flash-board-card--roadmap",
         }
@@ -92,6 +96,7 @@ pub enum PreparationProfile {
     MeshPocketUf2,
     #[cfg_attr(not(feature = "local-dev-flasher"), allow(dead_code))]
     MuziBaseDuoUf2,
+    MeshTowerV2Uf2,
     #[cfg_attr(not(feature = "local-dev-flasher"), allow(dead_code))]
     Rak4631Uf2,
     T096Uf2,
@@ -196,6 +201,10 @@ pub struct BoardTarget {
 }
 
 impl BoardTarget {
+    pub fn is_linux_appliance(&self) -> bool {
+        matches!(self.tier, Tier::InstallationPreview)
+    }
+
     pub fn is_flashable(&self) -> bool {
         matches!(self.tier, Tier::Flashable)
             || (cfg!(feature = "local-dev-flasher")
@@ -216,6 +225,8 @@ impl BoardTarget {
             "t1000-e" => Some(&board_images::SEEED_CARD_TRACKER_T1000_E),
             "t096" => Some(&board_images::HELTEC_MESH_NODE_T096),
             "mesh-tower-v2" => Some(&board_images::MESH_TOWER_V2),
+            "thinknode-g4" => Some(&board_images::THINKNODE_G4),
+            "heltec-ht-hd01-v2" => Some(&board_images::HELTEC_HT_HD01),
             "heltec-e290" => Some(&board_images::HELTEC_E290),
             "heltec-wireless-stick-lite-v3" => Some(&board_images::HELTEC_WIRELESS_STICK_LITE_V3),
             "rak4631" => Some(&board_images::RAK4631),
@@ -251,7 +262,7 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
         name: "Heltec V3/V3.1",
         slug: "heltec-v3",
         silicon: "ESP32-S3 + SX1262",
-        tier: Tier::Roadmap,
+        tier: Tier::BringUp,
         interfaces: &[],
         icon: Some("espressif"),
         preparation_profile: None,
@@ -261,7 +272,7 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
         name: "Seeed Wio Tracker L1",
         slug: "seeed-wio-tracker-l1",
         silicon: "nRF52840 + SX1262",
-        tier: Tier::Roadmap,
+        tier: Tier::BringUp,
         interfaces: &[],
         icon: Some("nordicsemiconductor"),
         preparation_profile: None,
@@ -271,7 +282,7 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
         name: "SenseCAP Solar Node P1",
         slug: "seeed-sensecap-solar-node-p1",
         silicon: "nRF52840 + SX1262",
-        tier: Tier::Roadmap,
+        tier: Tier::BringUp,
         interfaces: &[],
         icon: Some("nordicsemiconductor"),
         preparation_profile: None,
@@ -309,22 +320,34 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
     },
 ];
 
-pub const IN_PROGRESS_BOARD_TARGETS: &[BoardTarget] = &[BoardTarget {
-    name: "Heltec MeshTower V2",
-    slug: "mesh-tower-v2",
-    silicon: "nRF52840 + SX1262 + KCT8103L PA",
-    tier: Tier::Qualification,
-    interfaces: &[],
-    icon: Some("nordicsemiconductor"),
-    preparation_profile: None,
-    flash_target: None,
-}];
+pub const LINUX_APPLIANCE_BOARD_TARGETS: &[BoardTarget] = &[
+    BoardTarget {
+        name: "Elecrow ThinkNode G4",
+        slug: "thinknode-g4",
+        silicon: "MT7628 + MM6108",
+        tier: Tier::InstallationPreview,
+        interfaces: &["Ethernet", "Wi-Fi", "Wi-Fi HaLow"],
+        icon: None,
+        preparation_profile: None,
+        flash_target: None,
+    },
+    BoardTarget {
+        name: "Heltec HT-HD01-V2",
+        slug: "heltec-ht-hd01-v2",
+        silicon: "MT7628",
+        tier: Tier::InstallationPreview,
+        interfaces: &["Ethernet", "Wi-Fi", "Wi-Fi HaLow"],
+        icon: None,
+        preparation_profile: None,
+        flash_target: None,
+    },
+];
 
 pub fn all_board_targets() -> impl Iterator<Item = &'static BoardTarget> {
     SHIPPING_BOARD_TARGETS
         .iter()
         .chain(QUALIFICATION_BOARD_TARGETS.iter())
-        .chain(IN_PROGRESS_BOARD_TARGETS.iter())
+        .chain(LINUX_APPLIANCE_BOARD_TARGETS.iter())
         .chain(UPCOMING_BOARD_TARGETS.iter())
 }
 
@@ -702,7 +725,15 @@ mod tests {
             .map(|board| board.name)
             .collect::<Vec<_>>();
 
-        assert_eq!(bring_up, vec!["Raspberry Pi Zero 2 W"]);
+        assert_eq!(
+            bring_up,
+            vec![
+                "Raspberry Pi Zero 2 W",
+                "Heltec V3/V3.1",
+                "Seeed Wio Tracker L1",
+                "SenseCAP Solar Node P1",
+            ]
+        );
         assert!(
             UPCOMING_BOARD_TARGETS
                 .iter()
@@ -710,15 +741,6 @@ mod tests {
                 .all(|board| board.tier == Tier::Roadmap),
             "every other non-shipping board should remain on the roadmap"
         );
-    }
-
-    #[test]
-    fn in_progress_boards_sit_in_the_main_grid_with_their_status() {
-        let cards = IN_PROGRESS_BOARD_TARGETS
-            .iter()
-            .map(|board| (board.slug, board.tier, board.image().is_some()))
-            .collect::<Vec<_>>();
-        assert_eq!(cards, vec![("mesh-tower-v2", Tier::Qualification, true)]);
     }
 
     #[test]
@@ -730,6 +752,30 @@ mod tests {
             .map(|board| board.slug)
             .collect::<Vec<_>>();
         assert_eq!(missing, Vec::<&str>::new());
+    }
+
+    #[test]
+    fn automated_release_boards_are_flashable_in_public_builds() {
+        for slug in [
+            "heltec-e290",
+            "heltec-wireless-stick-lite-v3",
+            "mesh-pocket-5000",
+            "mesh-pocket-10000",
+            "rak4631",
+            "muzi-base-duo",
+            "mesh-tower-v2",
+        ] {
+            let board = board_target_by_slug(slug).expect("release board");
+            assert_eq!(board.tier, Tier::Flashable);
+            assert!(board.is_flashable());
+            assert!(board.preparation_profile.is_some());
+            assert!(board.flash_target.is_some());
+        }
+        for board in LINUX_APPLIANCE_BOARD_TARGETS {
+            assert_eq!(board.tier, Tier::InstallationPreview);
+            assert!(board.is_linux_appliance());
+            assert!(!board.is_flashable());
+        }
     }
 
     #[test]

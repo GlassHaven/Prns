@@ -925,7 +925,7 @@ pub(super) fn BoardTargetCard(board: &'static BoardTarget, selected: bool) -> El
                 }
                 p { class: "flash-board-silicon font-mono text-xs", "{board.silicon}" }
             }
-            if board.is_flashable() && included {
+            if board.is_linux_appliance() || (board.is_flashable() && included) {
                 div { class: "mt-5 flex justify-end",
                     if selected {
                         span { class: "py-2.5 text-xs font-bold uppercase tracking-wider text-accent", "Selected" }
@@ -933,7 +933,7 @@ pub(super) fn BoardTargetCard(board: &'static BoardTarget, selected: bool) -> El
                         Link {
                             to: Route::FlashBoardPage { board: board.slug.to_string() },
                             class: "flash-card-action",
-                            "Flash "
+                            if board.is_linux_appliance() { "Set up " } else { "Flash " }
                             span { class: "flash-card-action__arrow", "→" }
                         }
                     }
@@ -945,10 +945,10 @@ pub(super) fn BoardTargetCard(board: &'static BoardTarget, selected: bool) -> El
             } else {
                 p { class: "flash-interfaces-pending mt-4",
                     match board.tier {
-                        Tier::Qualification => "Hardware qualification in progress",
+                        Tier::Qualification => "Release preparation in progress",
                         Tier::BringUp => "Bring-up in progress",
                         Tier::Roadmap => "Planned",
-                        Tier::Shipping | Tier::SdkPreview | Tier::Flashable => "Coming later",
+                        Tier::Shipping | Tier::SdkPreview | Tier::Flashable | Tier::InstallationPreview => "Coming later",
                     }
                 }
             }
@@ -974,7 +974,7 @@ pub(super) fn UnavailablePanel() -> Element {
     rsx! {
         section { class: "rounded-card border border-line/60 bg-layer/40 p-5",
             h2 { class: "text-xl font-semibold text-paper", "Not flashable yet" }
-            p { class: "mt-3 text-soft", "This target is still in hardware qualification, bring-up, or roadmap tracking. It becomes flashable here once its signed release lane opens." }
+            p { class: "mt-3 text-soft", "Flashing support for this target is still in development." }
         }
     }
 }

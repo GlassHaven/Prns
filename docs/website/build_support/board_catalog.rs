@@ -83,6 +83,7 @@ fn preparation_profile(board: &BoardCatalogEntry) -> &'static str {
         "techo-uf2" => "PreparationProfile::TechoUf2",
         "t114-uf2" => "PreparationProfile::T114Uf2",
         "mesh-pocket-uf2" => "PreparationProfile::MeshPocketUf2",
+        "mesh-tower-v2-uf2" => "PreparationProfile::MeshTowerV2Uf2",
         "muzi-base-duo-uf2" => "PreparationProfile::MuziBaseDuoUf2",
         "t096-uf2" => "PreparationProfile::T096Uf2",
         "rak4631-uf2" => "PreparationProfile::Rak4631Uf2",
