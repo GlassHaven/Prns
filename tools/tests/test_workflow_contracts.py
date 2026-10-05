@@ -131,6 +131,32 @@ class WorkflowSchedulingTests(unittest.TestCase):
                 # Without status overrides, GitHub requires successful prerequisites.
                 self.assertNotRegex(condition, r"\b(?:always|failure|cancelled)\s*\(")
 
+    def test_javascript_browser_runs_independently_but_both_lanes_gate_release(self) -> None:
+        jobs = self.workflow_jobs("napi.yml")
+        self.assertNotRegex(jobs["javascript-browser"], r"(?m)^    (?:needs|if):")
+        self.assertNotIn("actions/download-artifact@", jobs["javascript-browser"])
+        self.assertEqual(self.needs(jobs["javascript-native"]), {"napi-build"})
+        self.assertIn("bindings-x86_64-unknown-linux-gnu", jobs["javascript-native"])
+        aggregate = jobs["javascript-hosts"]
+        self.assertEqual(self.needs(aggregate), {"javascript-browser", "javascript-native"})
+        self.assertIn("    if: always()\n", aggregate)
+        self.assertIn("BROWSER_RESULT: ${{ needs.javascript-browser.result }}", aggregate)
+        self.assertIn("NATIVE_RESULT: ${{ needs.javascript-native.result }}", aggregate)
+        script = textwrap.dedent(aggregate.split("        run: |\n", 1)[1])
+        for browser in ("success", "failure", "cancelled", "skipped"):
+            for native in ("success", "failure", "cancelled", "skipped"):
+                with self.subTest(browser=browser, native=native):
+                    result = subprocess.run(
+                        ["bash", "-e", "-o", "pipefail", "-c", script],
+                        env={**os.environ, "BROWSER_RESULT": browser, "NATIVE_RESULT": native},
+                        capture_output=True, text=True,
+                    )
+                    expected = 0 if browser == native == "success" else 1
+                    self.assertEqual(result.returncode, expected, result.stderr)
+        self.assertIn("- javascript-hosts\n", jobs["napi-release-critical"])
+        self.assertIn("napi-release-critical", self.needs(jobs["npm-stage"]))
+        self.assertEqual(self.needs(jobs["napi-publish"]), {"npm-stage"})
+
 
 if __name__ == "__main__":
     unittest.main()
