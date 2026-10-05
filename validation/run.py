@@ -779,7 +779,7 @@ def selected_suites(
     return sorted(selected, key=lambda suite: suite["id"])
 
 
-def ci_matrix(suites: list[dict]) -> dict:
+def ci_matrix(suites: list[dict], emulators: str | None = None) -> dict:
     runners = {
         "any": "ubuntu-24.04",
         "linux": "ubuntu-24.04",
@@ -789,6 +789,10 @@ def ci_matrix(suites: list[dict]) -> dict:
     }
     include = []
     for suite in suites:
+        # These are the same groups that restore prepared emulators in CI.
+        requires_emulators = suite.get("group") in {"embedded-isa", "embedded-platform"}
+        if emulators is not None and requires_emulators != (emulators == "required"):
+            continue
         entry = dict(suite)
         entry["runner"] = runners[suite["platform"]]
         include.append(entry)
@@ -1618,6 +1622,10 @@ def build_parser() -> argparse.ArgumentParser:
     matrix.add_argument("--domain")
     matrix.add_argument("--tier", choices=sorted(VALID_TIERS))
     matrix.add_argument("--platform", choices=["current", *sorted(VALID_PLATFORMS)])
+    matrix.add_argument(
+        "--emulators", choices=["required", "none"],
+        help="partition CI suites by their dependency on prepared embedded emulators",
+    )
     run = subcommands.add_parser("run")
     run.add_argument("--suite", action="append", default=[])
     run.add_argument("--domain")
@@ -1665,17 +1673,18 @@ def main() -> int:
                 arguments.platform,
             )
             if arguments.command == "matrix":
+                matrix = ci_matrix(suites, arguments.emulators)
                 runners = set()
-                for entry in ci_matrix(suites)["include"]:
+                for entry in matrix["include"]:
                     runner = entry["runner"]
                     runners.add(" + ".join(runner) if isinstance(runner, list) else runner)
                 print(
-                    f"[matrix] {len(suites)} suites selected; "
+                    f"[matrix] {len(matrix['include'])} suites selected; "
                     f"runners={', '.join(sorted(runners))}; "
                     "stdout remains CI-ready JSON.",
                     file=sys.stderr,
                 )
-                print(json.dumps(ci_matrix(suites), sort_keys=True))
+                print(json.dumps(matrix, sort_keys=True))
             else:
                 filters = []
                 if arguments.domain:

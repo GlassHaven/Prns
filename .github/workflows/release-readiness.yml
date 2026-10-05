@@ -30,6 +30,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       matrix: ${{ steps.inventory.outputs.matrix }}
+      emulated: ${{ steps.inventory.outputs.emulated }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -45,7 +46,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
           test -z "$(git status --porcelain --untracked-files=no)"
           python3 validation/run.py verify
-          echo "matrix=$(python3 validation/run.py matrix --tier release)" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(python3 validation/run.py matrix --tier release --emulators none)" >> "$GITHUB_OUTPUT"
+          echo "emulated=$(python3 validation/run.py matrix --tier release --emulators required)" >> "$GITHUB_OUTPUT"
 
   embedded-emulators:
     needs: inventory
@@ -76,7 +78,7 @@ jobs:
           path: ${{ runner.temp }}/prns-embedded-assurance.tar.xz
 
   qualify:
-    needs: [inventory, embedded-emulators]
+    needs: inventory
     name: ${{ matrix.id }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 260
@@ -89,7 +91,8 @@ jobs:
     defaults:
       run:
         shell: bash
-    steps:
+    # Both lanes use identical preparation, suite execution, and evidence uploads.
+    steps: &qualification-steps
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.sha }}
@@ -233,9 +236,25 @@ jobs:
             target/flash-artifacts/resources/configured/work/*/function-boundaries.json
             target/flash-artifacts/resources/configured/work/*/stack-evidence.json
 
+  qualify-emulated:
+    needs: [inventory, embedded-emulators]
+    name: ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 260
+    env:
+      RUSTUP_TOOLCHAIN: 1.96.0
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix: ${{ fromJSON(needs.inventory.outputs.emulated) }}
+    defaults:
+      run:
+        shell: bash
+    steps: *qualification-steps
+
   embedded-assurance:
     if: always()
-    needs: [inventory, qualify]
+    needs: [inventory, qualify, qualify-emulated]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -277,7 +296,7 @@ jobs:
 
   aggregate:
     if: always()
-    needs: [inventory, qualify, embedded-assurance]
+    needs: [inventory, qualify, qualify-emulated, embedded-assurance]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

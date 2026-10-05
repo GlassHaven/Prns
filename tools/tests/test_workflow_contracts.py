@@ -86,6 +86,53 @@ class WorkflowSchedulingTests(unittest.TestCase):
         self.assertIsNotNone(match, "job must declare its prerequisites")
         return {job.strip() for job in match.group(1).strip("[]").split(",")}
 
+    def test_only_emulated_suites_wait_for_emulator_preparation(self) -> None:
+        for workflow, lane, output, anchor, selector in (
+            ("release-readiness.yml", "qualify", "emulated", "qualification-steps",
+             "--tier release"),
+            ("deep-validation.yml", "hardening", "hardening_emulated", "hardening-steps",
+             '--domain hardening --tier "$VALIDATION_TIER"'),
+        ):
+            with self.subTest(workflow=workflow):
+                jobs = self.workflow_jobs(workflow)
+                emulated = f"{lane}-emulated"
+                self.assertEqual(self.needs(jobs[lane]), {"inventory"})
+                self.assertEqual(self.needs(jobs[emulated]), {"inventory", "embedded-emulators"})
+                self.assertIn(f"steps: &{anchor}\n", jobs[lane])
+                self.assertIn(f"steps: *{anchor}\n", jobs[emulated])
+                self.assertIn(f"fromJSON(needs.inventory.outputs.{output})", jobs[emulated])
+                self.assertIn(f"{selector} --emulators none)", jobs["inventory"])
+                self.assertIn(f"{selector} --emulators required)", jobs["inventory"])
+                self.assertTrue({lane, emulated} <= self.needs(jobs["embedded-assurance"]))
+                gate = "aggregate" if lane == "qualify" else "deep-validation"
+                self.assertTrue({lane, emulated, "embedded-assurance"} <= self.needs(jobs[gate]))
+                self.assertIn("    if: always()\n", jobs[gate])
+                if lane == "qualify":
+                    self.assertIn(
+                        'validation/run.py aggregate --tier release --expected-sha "${{ github.sha }}"',
+                        jobs[gate],
+                    )
+
+    def test_deep_validation_rejects_every_unsuccessful_lane(self) -> None:
+        aggregate = self.workflow_jobs("deep-validation.yml")["deep-validation"]
+        bindings = dict(re.findall(
+            r"(?m)^      (\w+): \$\{\{ needs\.([\w-]+)\.result \}\}$", aggregate
+        ))
+        self.assertEqual(set(bindings.values()), self.needs(aggregate))
+        script = textwrap.dedent(aggregate.split("      - run: |\n", 1)[1])
+        successful = dict.fromkeys(bindings, "success")
+        scenarios = [("all successful", successful, 0)]
+        for variable in bindings:
+            for status in ("failure", "cancelled", "skipped"):
+                scenarios.append((f"{variable}={status}", {**successful, variable: status}, 1))
+        for name, results, expected in scenarios:
+            with self.subTest(name=name):
+                result = subprocess.run(
+                    ["bash", "-e", "-o", "pipefail", "-c", script],
+                    env={**os.environ, **results}, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, expected, result.stderr)
+
     def test_feature_aggregate_rejects_every_unsuccessful_lane(self) -> None:
         jobs = self.workflow_jobs("ci.yml")
         aggregate = jobs["feature-configs"]

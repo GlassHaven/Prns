@@ -454,7 +454,7 @@ def validate() -> list[str]:
         "release-embedded-resources-${{ matrix.id }}-${{ github.run_id }}",
         "release-readiness-embedded-*-${{ github.run_id }}",
         "release-embedded-assurance-${{ github.sha }}",
-        "needs: [inventory, qualify, embedded-assurance]",
+        "needs: [inventory, qualify, qualify-emulated, embedded-assurance]",
     ):
         if assurance_gate not in readiness:
             errors.append(
