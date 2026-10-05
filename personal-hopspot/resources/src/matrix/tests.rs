@@ -141,6 +141,13 @@ fn canonical_matrix_has_all_unique_profile_bound_targets() -> Result<(), Box<dyn
                 TargetPlatform::Esp
             ),
             (
+                "rak10724",
+                "rak10724",
+                "thumbv7em-none-eabihf",
+                "thumbv7em-rust-lld",
+                TargetPlatform::Nrf52840
+            ),
+            (
                 "sensecap-solar-node",
                 "sensecap-solar-node",
                 "thumbv7em-none-eabihf",

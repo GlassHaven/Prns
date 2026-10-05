@@ -22,7 +22,7 @@ pub(crate) fn enter_t1000e_bootloader(mode: WebUsbBootloaderMode) -> ! {
     feature = "board-t1000e",
     feature = "board-mesh-pocket",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631"
+    any(feature = "board-rak4631", feature = "board-rak10724")
 ))]
 mod request {
     use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -75,7 +75,7 @@ pub const fn webusb_entry() -> WebUsbBootloaderEntry {
         feature = "board-t1000e",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
-        feature = "board-rak4631"
+        any(feature = "board-rak4631", feature = "board-rak10724")
     ))]
     return WebUsbBootloaderEntry::Supported {
         request: request::request,
@@ -87,7 +87,7 @@ pub const fn webusb_entry() -> WebUsbBootloaderEntry {
         feature = "board-t1000e",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
-        feature = "board-rak4631"
+        any(feature = "board-rak4631", feature = "board-rak10724")
     )))]
     WebUsbBootloaderEntry::Unsupported
 }
@@ -99,7 +99,7 @@ pub async fn wait() -> ! {
         feature = "board-t1000e",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
-        feature = "board-rak4631"
+        any(feature = "board-rak4631", feature = "board-rak10724")
     ))]
     request::wait().await;
 
@@ -109,7 +109,7 @@ pub async fn wait() -> ! {
         feature = "board-t1000e",
         feature = "board-mesh-pocket",
         feature = "board-muzi-base-duo",
-        feature = "board-rak4631"
+        any(feature = "board-rak4631", feature = "board-rak10724")
     )))]
     core::future::pending().await
 }

@@ -4,7 +4,7 @@ enum Polarity {
     #[cfg(any(
         feature = "board-t096",
         any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
-        feature = "board-rak4631",
+        any(feature = "board-rak4631", feature = "board-rak10724"),
         feature = "board-wio-tracker-l1"
     ))]
     ActiveHigh,
@@ -25,7 +25,7 @@ impl StatusLed {
     #[cfg(any(
         feature = "board-t096",
         any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
-        feature = "board-rak4631",
+        any(feature = "board-rak4631", feature = "board-rak10724"),
         feature = "board-wio-tracker-l1"
     ))]
     pub(crate) fn active_high(output: Output<'static>) -> Self {
@@ -52,7 +52,7 @@ impl StatusLed {
             #[cfg(any(
                 feature = "board-t096",
                 any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
-                feature = "board-rak4631",
+                any(feature = "board-rak4631", feature = "board-rak10724"),
                 feature = "board-wio-tracker-l1"
             ))]
             Polarity::ActiveHigh => self.output.set_high(),
@@ -70,7 +70,7 @@ impl StatusLed {
             #[cfg(any(
                 feature = "board-t096",
                 any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
-                feature = "board-rak4631",
+                any(feature = "board-rak4631", feature = "board-rak10724"),
                 feature = "board-wio-tracker-l1"
             ))]
             Polarity::ActiveHigh => self.output.set_low(),
@@ -84,7 +84,7 @@ impl StatusLed {
     }
 
     /// Two short flashes make successful runtime entry visible on the headless RAK4631.
-    #[cfg(feature = "board-rak4631")]
+    #[cfg(any(feature = "board-rak4631", feature = "board-rak10724"))]
     pub(crate) async fn boot_splash(&mut self) {
         use embassy_time::Timer;
 

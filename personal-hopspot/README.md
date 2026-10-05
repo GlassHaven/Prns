@@ -176,3 +176,7 @@ The port adapts [PR #227](https://github.com/KenAKAFrosty/Prns/pull/227) to the 
 The `hopspot-xiao-esp32s3-wio-sx1262` ESP workspace package builds the headless 8 MiB flash / 8 MiB Octal PSRAM board. Its flash catalog and memory profile use the normal ESP32-S3 resource and assurance gates. The SX1262 receive-enable pin and GPIO48 activity LED use the shared driver lifecycle callbacks, including cancellation cleanup.
 
 The board port comes from [PR #239](https://github.com/KenAKAFrosty/Prns/pull/239). Current Remote Control owns regional radio configuration; the PR's older standalone flasher `configure` command and radio-profile storage format are not imported. That PR therefore still contains separate provisioning work beyond this board integration.
+
+### RAK WisMesh 1W
+
+`./tools/prns build hopspot rak10724` builds the RAK3401 / RAK13302 developer firmware adapted from [PR #247](https://github.com/KenAKAFrosty/Prns/pull/247). It uses the current S140 6.1.1 startup and regional radio controls, with the contributor's SKY66122 power mapping. Its memory profile participates in the canonical resource and architecture assurance matrix. The PR's older factory-grant enrollment and standalone flasher changes remain separate; the new target is not yet a public flash catalog entry.

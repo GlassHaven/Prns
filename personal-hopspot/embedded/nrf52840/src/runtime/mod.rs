@@ -6,7 +6,7 @@
     feature = "board-mesh-pocket",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631"
+    any(feature = "board-rak4631", feature = "board-rak10724")
 ))]
 mod bluetooth_auto;
 #[cfg(any(
@@ -17,7 +17,7 @@ mod bluetooth_auto;
     feature = "board-mesh-pocket",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631"
+    any(feature = "board-rak4631", feature = "board-rak10724")
 ))]
 mod bluetooth_gatt_server;
 #[cfg(any(
@@ -29,7 +29,7 @@ mod bluetooth_gatt_server;
     feature = "board-mesh-pocket",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631"
+    any(feature = "board-rak4631", feature = "board-rak10724")
 ))]
 pub(crate) mod bootloader_entry;
 mod entropy;
@@ -48,7 +48,7 @@ pub(crate) mod gnss;
     any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631"
+    any(feature = "board-rak4631", feature = "board-rak10724")
 ))]
 mod headless;
 mod heartbeat;
@@ -67,7 +67,7 @@ mod remote_control;
     feature = "board-mesh-pocket",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631"
+    any(feature = "board-rak4631", feature = "board-rak10724")
 ))]
 pub(crate) mod software_vbus;
 
@@ -80,6 +80,6 @@ pub use firmware::run;
     any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631"
+    any(feature = "board-rak4631", feature = "board-rak10724")
 ))]
 pub use headless::run;

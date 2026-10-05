@@ -13,7 +13,7 @@ use prns_core::entropy::{EntropySource, RuntimeEntropy};
     feature = "board-sensecap-solar-node",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
-    feature = "board-rak4631",
+    any(feature = "board-rak4631", feature = "board-rak10724"),
     feature = "board-wio-tracker-l1"
 ))]
 mod status_led;
@@ -50,7 +50,7 @@ pub(crate) struct RemoteControlIdentityFlash {
 }
 
 impl RemoteControlIdentityFlash {
-    #[cfg(not(feature = "board-rak4631"))]
+    #[cfg(not(any(feature = "board-rak4631", feature = "board-rak10724")))]
     pub(crate) const fn at(offset: u32) -> Self {
         Self { offset }
     }
@@ -58,7 +58,7 @@ impl RemoteControlIdentityFlash {
     /// Use when a recovery UF2 replaces an application without erasing the page newly assigned to
     /// the Remote Control identity vault. This recovers only a structurally corrupt load; storage,
     /// verification, and identity-pair failures remain fatal and preserve the page for diagnosis.
-    #[cfg(feature = "board-rak4631")]
+    #[cfg(any(feature = "board-rak4631", feature = "board-rak10724"))]
     pub(crate) const fn at_with_stale_application_page_recovery(offset: u32) -> Self {
         Self { offset }
     }
@@ -73,7 +73,7 @@ impl RemoteControlIdentityFlash {
         let bootstrap = RemoteControlNodeIdentityBootstrap::load_or_generate_with_runtime_entropy(
             &mut vault, entropy,
         );
-        #[cfg(feature = "board-rak4631")]
+        #[cfg(any(feature = "board-rak4631", feature = "board-rak10724"))]
         if matches!(
             bootstrap,
             Err(RemoteControlNodeIdentityBootstrapError::ControllerLoad(
@@ -121,6 +121,7 @@ pub(crate) mod wio_tracker_l1;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
@@ -135,6 +136,7 @@ pub(crate) use mesh_pocket as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
@@ -148,6 +150,7 @@ pub(crate) use mesh_tower_v2 as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-rak4631"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
@@ -161,6 +164,7 @@ pub(crate) use muzi_base_duo as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
@@ -174,6 +178,7 @@ pub(crate) use rak4631 as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
@@ -188,6 +193,7 @@ pub(crate) use t096 as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
@@ -201,6 +207,7 @@ pub(crate) use t1000e as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
@@ -214,6 +221,7 @@ pub(crate) use t114 as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
@@ -228,6 +236,7 @@ pub(crate) use t_echo as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-rak10724"),
     not(feature = "board-sensecap-solar-node")
 ))]
 pub(crate) use wio_tracker_l1 as selected;
@@ -236,3 +245,8 @@ pub(crate) use wio_tracker_l1 as selected;
 pub(crate) mod sensecap_solar_node;
 #[cfg(feature = "board-sensecap-solar-node")]
 pub(crate) use sensecap_solar_node as selected;
+
+#[cfg(feature = "board-rak10724")]
+pub(crate) mod rak10724;
+#[cfg(feature = "board-rak10724")]
+pub(crate) use rak10724 as selected;

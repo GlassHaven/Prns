@@ -602,7 +602,12 @@ pub const SENSECAP_SOLAR_NODE: MemoryProfile = MemoryProfile {
     ..T1000_E
 };
 
-const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 12] = [
+pub const RAK10724: MemoryProfile = MemoryProfile {
+    id: MemoryProfileId("rak10724"),
+    ..RAK4631
+};
+
+const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 13] = [
     T_ECHO_S140_V6.id,
     T_ECHO_S140_V7.id,
     T096.id,
@@ -614,6 +619,7 @@ const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 12] = [
     MESH_TOWER_V2.id,
     MUZI_BASE_DUO.id,
     RAK4631.id,
+    RAK10724.id,
     WIO_TRACKER_L1.id,
 ];
 

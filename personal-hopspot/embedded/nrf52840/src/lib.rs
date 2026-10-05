@@ -10,6 +10,7 @@
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
     feature = "board-rak4631",
+    feature = "board-rak10724",
     feature = "board-wio-tracker-l1"
 )))]
 compile_error!(
@@ -64,7 +65,17 @@ compile_error!(
     all(
         feature = "board-sensecap-solar-node",
         feature = "board-wio-tracker-l1"
-    )
+    ),
+    all(feature = "board-rak10724", feature = "board-t-echo"),
+    all(feature = "board-rak10724", feature = "board-t096"),
+    all(feature = "board-rak10724", feature = "board-t114"),
+    all(feature = "board-rak10724", feature = "board-mesh-pocket"),
+    all(feature = "board-rak10724", feature = "board-t1000e"),
+    all(feature = "board-rak10724", feature = "board-mesh-tower-v2"),
+    all(feature = "board-rak10724", feature = "board-muzi-base-duo"),
+    all(feature = "board-rak10724", feature = "board-rak4631"),
+    all(feature = "board-rak10724", feature = "board-wio-tracker-l1"),
+    all(feature = "board-rak10724", feature = "board-sensecap-solar-node")
 ))]
 compile_error!("nRF52840 board features are mutually exclusive");
 
@@ -244,7 +255,7 @@ mod retained_display;
         not(feature = "board-wio-tracker-l1")
     ),
     all(
-        feature = "board-rak4631",
+        any(feature = "board-rak4631", feature = "board-rak10724"),
         not(feature = "board-t-echo"),
         not(feature = "board-t096"),
         not(feature = "board-t114"),
@@ -348,7 +359,7 @@ mod storage;
         not(feature = "board-wio-tracker-l1")
     ),
     all(
-        feature = "board-rak4631",
+        any(feature = "board-rak4631", feature = "board-rak10724"),
         not(feature = "board-t-echo"),
         not(feature = "board-t096"),
         not(feature = "board-t114"),
@@ -371,3 +382,8 @@ mod storage;
     )
 ))]
 pub use runtime::run;
+
+#[cfg(all(feature = "board-rak10724", not(feature = "softdevice-s140-v6")))]
+compile_error!("RAK10724 requires softdevice-s140-v6");
+#[cfg(all(feature = "board-rak10724", feature = "softdevice-s140-v7"))]
+compile_error!("RAK10724 does not support S140 7.x");
