@@ -181,7 +181,33 @@ The board port comes from [PR #239](https://github.com/KenAKAFrosty/Prns/pull/23
 
 `./tools/prns build hopspot rak10724` builds the RAK3401 / RAK13302 release UF2 adapted from [PR #247](https://github.com/KenAKAFrosty/Prns/pull/247). It uses the current S140 6.1.1 startup and regional radio controls, with the contributor's SKY66122 power mapping. Its memory profile participates in the canonical resource and architecture assurance matrix. The public catalog uses the shared `RAK4631` volume and `WisBlock-RAK4631-Board` identity with S140 6.1.1. The website requires kit confirmation because the WisBlock RAK4631 and WisMesh 1W recipes have different radio hardware and USB application identities.
 
-The nRF runtime now loads the contributor's optional factory controller grant from the Remote Control identity vault. Retained permission snapshots replace initial grants before the node starts, including an empty table after revocation. This supports pre-provisioned identity pages; it does not provision a controller during an ordinary browser firmware installation. A complete first-use pairing flow for headless nRF boards remains separate work. The PR's unsigned developer-artifact flasher path is also separate from the signed public-release flow.
+The nRF runtime now loads the contributor's optional factory controller grant from the Remote Control identity vault. Retained permission snapshots replace initial grants before the node starts, including an empty table after revocation. This supports pre-provisioned identity pages; it does not provision a controller during an ordinary browser firmware installation. For ordinary browser installs, use the USB controller authorization flow below. The PR's unsigned developer-artifact flasher path is also separate from the signed public-release flow.
+
+### USB replies and retained radio configuration
+
+The nRF USB lane retains an announce and its control reply together, including
+T-Echo and MeshPocket as well as the headless runtime. This incorporates the
+fault identified and hardware-tested by Idan in [PR #261](https://github.com/KenAKAFrosty/Prns/pull/261).
+Both USB endpoints advertise the packet size that the current USB Auto protocol
+actually encodes; nRF lane buffers follow that same bound. The ESP runtimes
+already reserve larger outbound bursts and enforce this minimum too.
+
+The screenless RAK4631, WisMesh 1W, MeshTower V2, muzi Base Duo, T1000-E and
+SenseCAP Solar Node now save remotely selected LoRa profiles and restore them
+at startup, extending the RAK prototype from [issue #260](https://github.com/KenAKAFrosty/Prns/issues/260).
+A successful change confirms durable storage. Failed writes restore the previous
+radio profile; an uncertain commit also requires durably restoring that previous
+profile before reporting a recovered failure. An unsuccessful rollback is
+reported explicitly.
+
+The memory profiles reserve two radio pages at `0xE0000..0xE2000` for the
+RAK/MeshTower/Base Duo family and `0xE7000..0xE9000` for T1000-E/Solar.
+Firmware bounds and flasher validation exclude these pages. Identity, journal,
+factory and bootloader addresses stay fixed; the former unused single radio
+page on the RAK/MeshTower family remains reserved. Display-equipped nRF and
+ESP boards already retain profiles; all nRF and ESP remote profile changes now use the
+same tested persistence and rollback implementation. This handles failed writes;
+it does not add a timed confirmation protocol for changes made over the radio.
 
 ### First controller on an nRF board
 

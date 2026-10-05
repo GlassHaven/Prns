@@ -1,3 +1,4 @@
+pub(super) use super::super::subg_configuration::apply_subg_configuration;
 use embassy_time::{Duration, Instant};
 use personal_hopspot_core as hopspot;
 use personal_rns::bluetooth_auto::BluetoothAutoStatus;
@@ -616,60 +617,6 @@ pub(super) async fn apply_scheduled<D: ImmediateDisplayDevice>(
             #[cfg(any(feature = "board-t096", feature = "board-wio-tracker-l1"))]
             board::control_gnss(hopspot::GnssReceiverCommand::Disable);
             system.set_awake(false);
-        }
-    }
-}
-
-pub(super) async fn apply_subg_configuration(
-    controller: &mut personal_rns::lora::LoRaController<'static>,
-    store: &mut ConfigurationStore,
-    active: &mut SubGConfigurationState,
-    requested: SubGConfigurationState,
-) -> Result<(), RemoteControlHostCommandError> {
-    if *active == requested {
-        return Ok(());
-    }
-    let previous = *active;
-    if controller.apply_configuration(requested).await
-        == personal_rns::lora::LoRaApplyOutcome::Rejected
-    {
-        return Err(RemoteControlHostCommandError::ApplyFailed);
-    }
-    *active = requested;
-    let persistence = match requested {
-        SubGConfigurationState::Configured(configuration) => store.save(configuration).await,
-        SubGConfigurationState::Unconfigured => store.clear().await,
-    };
-    match persistence {
-        hopspot::SubGConfigurationCommitOutcome::Committed => Ok(()),
-        hopspot::SubGConfigurationCommitOutcome::Indeterminate(_) => {
-            if controller.apply_configuration(previous).await
-                != personal_rns::lora::LoRaApplyOutcome::Applied
-            {
-                return Err(RemoteControlHostCommandError::RollbackFailed);
-            }
-            *active = previous;
-            let rollback = match previous {
-                SubGConfigurationState::Configured(configuration) => {
-                    store.save(configuration).await
-                }
-                SubGConfigurationState::Unconfigured => store.clear().await,
-            };
-            if rollback == hopspot::SubGConfigurationCommitOutcome::Committed {
-                Err(RemoteControlHostCommandError::PersistenceFailed)
-            } else {
-                Err(RemoteControlHostCommandError::RollbackFailed)
-            }
-        }
-        hopspot::SubGConfigurationCommitOutcome::NotCommitted(_) => {
-            if controller.apply_configuration(previous).await
-                == personal_rns::lora::LoRaApplyOutcome::Applied
-            {
-                *active = previous;
-                Err(RemoteControlHostCommandError::PersistenceFailed)
-            } else {
-                Err(RemoteControlHostCommandError::RollbackFailed)
-            }
         }
     }
 }

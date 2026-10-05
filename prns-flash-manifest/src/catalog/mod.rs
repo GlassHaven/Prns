@@ -1522,7 +1522,7 @@ mod tests {
             .expect("RAK4631 memory profile")
             .transport_envelope();
         assert_eq!(application.start(), 0x0002_6000);
-        assert_eq!(application.end_exclusive(), 0x000e_2000);
+        assert_eq!(application.end_exclusive(), 0x000e_0000);
         assert_eq!(variant.family_id, "0xada52840");
         assert_eq!(
             variant.application_link,

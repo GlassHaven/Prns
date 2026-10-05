@@ -37,6 +37,7 @@ use personal_rns::runtime::{
 #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
 use crate::boards::selected as board;
 
+use super::super::subg_configuration::{apply_subg_configuration, ConfigurationStore};
 #[cfg(any(
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
@@ -90,6 +91,7 @@ struct Context<'a> {
     scheduled_effect: &'a mut Option<ScheduledEffect>,
     lora_controller: &'a mut personal_rns::lora::LoRaController<'static>,
     subg_configuration: &'a mut SubGConfigurationState,
+    subg_store: &'a mut ConfigurationStore,
     #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     gnss_wanted: &'a mut bool,
 }
@@ -135,6 +137,7 @@ pub(super) async fn run_headless(
     usb_status: &'static EmbassyInterfaceStatus,
     mut lora_controller: personal_rns::lora::LoRaController<'static>,
     mut subg_configuration: SubGConfigurationState,
+    mut subg_store: ConfigurationStore,
 ) -> ! {
     let mut system_awake = true;
     let mut desired_interfaces = enabled_interfaces(lora_status, usb_status);
@@ -180,6 +183,7 @@ pub(super) async fn run_headless(
                         scheduled_effect: &mut scheduled_effect,
                         lora_controller: &mut lora_controller,
                         subg_configuration: &mut subg_configuration,
+                        subg_store: &mut subg_store,
                         #[cfg(any(
                             feature = "board-t1000e",
                             feature = "board-sensecap-solar-node"
@@ -351,14 +355,13 @@ async fn execute(
                 .ok_or(RemoteControlHostCommandError::ApplyFailed)?;
             let requested =
                 SubGConfigurationState::Configured(SubGConfiguration::manual_lora(profile));
-            if *context.subg_configuration != requested {
-                if context.lora_controller.apply_configuration(requested).await
-                    == personal_rns::lora::LoRaApplyOutcome::Rejected
-                {
-                    return Err(RemoteControlHostCommandError::ApplyFailed);
-                }
-                *context.subg_configuration = requested;
-            }
+            apply_subg_configuration(
+                context.lora_controller,
+                context.subg_store,
+                context.subg_configuration,
+                requested,
+            )
+            .await?;
             Ok(RemoteControlHostResponse::SetInterfaceLoRaProfile(
                 RemoteControlLoRaOutcome::Applied,
             ))

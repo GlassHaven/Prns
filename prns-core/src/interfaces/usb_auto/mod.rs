@@ -8,8 +8,9 @@ mod policy;
 mod protocol;
 
 pub use policy::{
-    device_descriptor, host_descriptor, DEVICE_DEFAULTS, DEVICE_USB_BITRATE_BPS, DEVICE_USB_HW_MTU,
-    HOST_DEFAULTS, HOST_USB_BITRATE_BPS, HOST_USB_HW_MTU,
+    device_descriptor, host_descriptor, DEVICE_DEFAULTS, DEVICE_MIN_OUTBOUND_FRAMES,
+    DEVICE_USB_BITRATE_BPS, DEVICE_USB_HW_MTU, HOST_DEFAULTS, HOST_USB_BITRATE_BPS,
+    HOST_USB_HW_MTU,
 };
 pub use protocol::{
     decode_message, host_react, node_tag_for, Capabilities, Decoder, HostInbound, MalformedMessage,

@@ -98,18 +98,18 @@ UF2_MEMORY_CONTRACTS = {
     },
     ("rak4631", "s140", "6.1.1", "0x00b6", 0x00026000, "0xada52840"): {
         "profile": "rak4631",
-        "firmware_owned": (0x00026000, 0x000e2000),
-        "transport_envelope": (0x00026000, 0x000e2000),
+        "firmware_owned": (0x00026000, 0x000e0000),
+        "transport_envelope": (0x00026000, 0x000e0000),
     },
     ("mesh-tower-v2", "s140", "6.1.1", "0x00b6", 0x00026000, "0xada52840"): {
         "profile": "mesh-tower-v2",
-        "firmware_owned": (0x00026000, 0x000e2000),
-        "transport_envelope": (0x00026000, 0x000e2000),
+        "firmware_owned": (0x00026000, 0x000e0000),
+        "transport_envelope": (0x00026000, 0x000e0000),
     },
     ("muzi-base-duo", "s140", "6.1.1", "0x00b6", 0x00026000, "0xada52840"): {
         "profile": "muzi-base-duo",
-        "firmware_owned": (0x00026000, 0x000e2000),
-        "transport_envelope": (0x00026000, 0x000e2000),
+        "firmware_owned": (0x00026000, 0x000e0000),
+        "transport_envelope": (0x00026000, 0x000e0000),
     },
     ("seeed-wio-tracker-l1", "s140", "7.3.0", "0x0123", 0x00027000, "0xada52840"): {
         "profile": "wio-tracker-l1",
@@ -118,12 +118,12 @@ UF2_MEMORY_CONTRACTS = {
     },
     ("rak10724", "s140", "6.1.1", "0x00b6", 0x00026000, "0xada52840"): {
         "profile": "rak10724",
-        "firmware_owned": (0x00026000, 0x000e2000),
-        "transport_envelope": (0x00026000, 0x000e2000),
+        "firmware_owned": (0x00026000, 0x000e0000),
+        "transport_envelope": (0x00026000, 0x000e0000),
     },
     ("seeed-sensecap-solar-node-p1", "s140", "7.3.0", "0x0123", 0x00027000, "0xada52840"): {
         "profile": "sensecap-solar-node",
-        "firmware_owned": (0x00027000, 0x000e9000),
+        "firmware_owned": (0x00027000, 0x000e7000),
         "transport_envelope": (0x00027000, 0x000ea000),
     },
 }
@@ -147,7 +147,7 @@ NRF_SERIAL_DFU_MEMORY_CONTRACTS = {
             "board_id_prefix": "nrf52840-t1000-e-v1",
             "family_id": "0xada52840",
         },
-        "firmware_owned": (0x00027000, 0x000e9000),
+        "firmware_owned": (0x00027000, 0x000e7000),
         "transport_envelope": (0x00027000, 0x000ea000),
     },
 }

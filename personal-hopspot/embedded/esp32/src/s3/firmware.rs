@@ -387,9 +387,9 @@ pub(super) async fn run_core<B: Esp32S3Board>(
     let tcp_cfg = tcp_built.as_ref().map(|(t, _, _)| t.descriptor());
     let has_wifi = wifi.is_some();
 
-    let usb_outbound = crate::storage::allocate_manifold_outbound::<EMBEDDED_MAX_WIRE_FRAME_LEN>(
-        OUTBOUND_BURST_DEPTH,
-    );
+    let usb_outbound = crate::storage::allocate_manifold_outbound::<
+        { personal_rns::interfaces::usb_auto::MAX_DATA_BYTES },
+    >(OUTBOUND_BURST_DEPTH);
     let usb_lane = manifold_lanes
         .claim_accounted_interface_with_outbound_buffer(
             &USB_MANIFOLD_LANE,

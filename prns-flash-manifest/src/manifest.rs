@@ -712,7 +712,7 @@ mod tests {
             0x000e_a000
         );
         assert_eq!(target.firmware_owned().start(), 0x0002_7000);
-        assert_eq!(target.firmware_owned().end_exclusive(), 0x000e_9000);
+        assert_eq!(target.firmware_owned().end_exclusive(), 0x000e_7000);
         Ok(())
     }
 

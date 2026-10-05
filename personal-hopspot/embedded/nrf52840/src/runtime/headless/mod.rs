@@ -19,7 +19,7 @@ use personal_rns::interfaces::usb_auto::{WEBUSB_PRODUCT_ID, WEBUSB_VENDOR_ID};
 use personal_rns::interfaces::{ConnectionState, InterfaceId};
 use personal_rns::lora::{LoRaControl, LoRaInterface, LoRaInterfaceInput, LoRaSpectrumStatus};
 use personal_rns::manifold::embassy::{EmbassyHost, EmbassyInterfaceStatus, InterfaceLifecycle};
-use personal_rns::manifold::interface_seam::{Interface, EMBEDDED_MAX_WIRE_FRAME_LEN};
+use personal_rns::manifold::interface_seam::Interface;
 use personal_rns::remote_control::{
     RemoteControlControllerGrant, RemoteControlSelfAnnouncement, RemoteControlService,
 };
@@ -207,8 +207,12 @@ static BLE_MANIFOLD_LANE: StaticManifoldLane<
     LANE_DEPTH,
     BLE_OUTBOUND_DEPTH,
 > = StaticManifoldLane::new();
-static USB_MANIFOLD_LANE: StaticManifoldLane<Mtx, EMBEDDED_MAX_WIRE_FRAME_LEN, LANE_DEPTH> =
-    StaticManifoldLane::new();
+static USB_MANIFOLD_LANE: StaticManifoldLane<
+    Mtx,
+    { personal_rns::interfaces::usb_auto::MAX_DATA_BYTES },
+    LANE_DEPTH,
+    { personal_rns::interfaces::usb_auto::DEVICE_MIN_OUTBOUND_FRAMES },
+> = StaticManifoldLane::new();
 
 #[embassy_executor::task]
 async fn manifold_task(
@@ -443,7 +447,15 @@ pub async fn run(spawner: Spawner) -> ! {
         feature = "board-t114",
         feature = "board-wio-tracker-l1"
     )))]
-    let subg_configuration = SubGConfigurationState::Unconfigured;
+    let (subg_configuration, subg_configuration_store) = {
+        let mut store =
+            hopspot::SubGConfigurationStore::new(shared_flash, board::RADIO_PROFILE_PAGES);
+        let state = match store.load().await {
+            Ok(loaded) => loaded.state,
+            Err(_) => SubGConfigurationState::Unconfigured,
+        };
+        (state, store)
+    };
     static LORA_STATUS: StaticCell<EmbassyInterfaceStatus> = StaticCell::new();
     let lora_status: &'static EmbassyInterfaceStatus =
         LORA_STATUS.init(EmbassyInterfaceStatus::new_accounted(
@@ -629,7 +641,13 @@ pub async fn run(spawner: Spawner) -> ! {
     selected::run(
         io,
         lora.run(lora_seam),
-        remote_control::run_headless(lora_status, usb_status, lora_controller, subg_configuration),
+        remote_control::run_headless(
+            lora_status,
+            usb_status,
+            lora_controller,
+            subg_configuration,
+            subg_configuration_store,
+        ),
         gnss,
         node_page_destination,
     )
@@ -643,7 +661,13 @@ pub async fn run(spawner: Spawner) -> ! {
         io,
         lora.run(lora_seam),
         bluetooth::run(sd, bluetooth),
-        remote_control::run_headless(lora_status, usb_status, lora_controller, subg_configuration),
+        remote_control::run_headless(
+            lora_status,
+            usb_status,
+            lora_controller,
+            subg_configuration,
+            subg_configuration_store,
+        ),
         button,
         node_page_destination,
     )

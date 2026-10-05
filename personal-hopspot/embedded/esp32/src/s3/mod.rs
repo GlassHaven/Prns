@@ -222,6 +222,8 @@ const LANE_DEPTH: usize = 1;
 /// hashmap update. Derive every S3 lane's PSRAM backlog from the engine storage recipe: the compact
 /// build can hold only eighteen parts, rather than the protocol-wide seventy-five-part window.
 const OUTBOUND_BURST_DEPTH: usize = EngineStorageType::MAX_OUTGOING_RESOURCE_REACTION_FRAMES;
+const _: () =
+    assert!(OUTBOUND_BURST_DEPTH >= personal_rns::interfaces::usb_auto::DEVICE_MIN_OUTBOUND_FRAMES);
 pub const NOTIFY_CAP: usize = minimum_manifold_notification_capacity(LANE_COUNT, LANE_DEPTH);
 const _: () = assert!(EngineStorageType::LINK_SESSIONS > MEMBERS + BLE_PEER_CAPACITY);
 const _: () = assert!(BLE_CONTROLLER_ACTIVITY_CAPACITY <= 10);
@@ -256,8 +258,13 @@ type Mtx = CriticalSectionRawMutex;
 type Handle = PrnsNodeHandle<'static, Mtx, COMMANDS_CAP, COMPLETIONS_CAP>;
 type RemoteControlHandle =
     screen::HopspotCommandHandle<{ remote_control::REMOTE_CONTROL_COMMAND_DEPTH }>;
-type UsbSeam =
-    EmbassyInterfaceSeam<'static, Mtx, S3EntropySource, NOTIFY_CAP, EMBEDDED_MAX_WIRE_FRAME_LEN>;
+type UsbSeam = EmbassyInterfaceSeam<
+    'static,
+    Mtx,
+    S3EntropySource,
+    NOTIFY_CAP,
+    { personal_rns::interfaces::usb_auto::MAX_DATA_BYTES },
+>;
 #[cfg(feature = "lora")]
 type S3LoraInterface = LoRaInterface<'static, LoraRadio>;
 #[cfg(feature = "lora")]
@@ -326,8 +333,12 @@ static BLE_SHARED: BluetoothAutoShared<BLE_PEER_CAPACITY> =
     BluetoothAutoShared::new(BLE_SUPERVISOR_ID);
 #[cfg(feature = "lora")]
 static LORA_CONTROL: StaticCell<LoRaControl> = StaticCell::new();
-static USB_MANIFOLD_LANE: StaticManifoldLane<Mtx, EMBEDDED_MAX_WIRE_FRAME_LEN, LANE_DEPTH, 0> =
-    StaticManifoldLane::new();
+static USB_MANIFOLD_LANE: StaticManifoldLane<
+    Mtx,
+    { personal_rns::interfaces::usb_auto::MAX_DATA_BYTES },
+    LANE_DEPTH,
+    0,
+> = StaticManifoldLane::new();
 static TCP_MANIFOLD_LANE: StaticManifoldLane<Mtx, EMBEDDED_MAX_WIRE_FRAME_LEN, LANE_DEPTH, 0> =
     StaticManifoldLane::new();
 static WIFI_MANIFOLD_LANE: StaticManifoldLane<
