@@ -144,6 +144,8 @@ pub(super) async fn run_headless(
     #[cfg(feature = "board-t1000e")]
     let mut gnss_wanted = true;
 
+    super::node_name::restore().await;
+
     loop {
         let pending = match scheduled_effect.as_ref() {
             Some(effect) => match select(

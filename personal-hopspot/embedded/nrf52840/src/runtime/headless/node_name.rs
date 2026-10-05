@@ -84,9 +84,9 @@ pub(super) async fn set(
     Ok(RemoteControlApplyOutcome::Applied)
 }
 
-/// Re-apply a stored name once the journal has been restored at boot.
-#[embassy_executor::task]
-pub(super) async fn restore_task() {
+/// Re-apply a stored name once the journal has been restored at boot. Awaited at the start of
+/// the Remote Control loop rather than in its own task, so it shares that loop's future memory.
+pub(super) async fn restore() {
     let Some(name) = restored_node_name().await else {
         return;
     };
