@@ -23,14 +23,9 @@ pub fn PlatformChip(
             if let Some(slug) = icon {
                 {
                     let logo = logo_asset(&slug);
-                    let icon_class = if slug == "mediatek" {
-                        "platform-chip__icon platform-chip__icon--wide"
-                    } else {
-                        "platform-chip__icon"
-                    };
                     rsx! {
                         span {
-                            class: icon_class,
+                            class: "platform-chip__icon",
                             style: "--logo: url('{logo}')",
                         }
                     }
