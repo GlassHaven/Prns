@@ -1,3 +1,9 @@
+mod enrollment;
+pub use enrollment::{
+    UsbControllerEnrollment, UsbControllerEnrollmentBusy, UsbControllerEnrollmentStatus,
+    CONTROLLER_ENROLL_CONTROL_REQUEST, CONTROLLER_ENROLL_REQUEST_BYTES,
+    CONTROLLER_ENROLL_STATUS_BYTES, CONTROLLER_ENROLL_STATUS_REQUEST,
+};
 mod policy;
 mod protocol;
 

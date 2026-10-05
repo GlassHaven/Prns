@@ -15,5 +15,6 @@ pub use prns_interfaces_embassy::usb_auto::{
     HostPresenceVerdict, PhysicalHostPresence, ProtocolHostPresence, UsbAutoDevice,
     UsbAutoDeviceInput, UsbAutoHostPresence, WebUsbAutoClass, WebUsbAutoError, WebUsbAutoRx,
     WebUsbAutoState, WebUsbAutoTx, WebUsbBootloaderEntry, WebUsbBootloaderMode,
-    WEBUSB_AUTO_CONTROL_BUFFER_BYTES, WEBUSB_AUTO_MSOS_DESCRIPTOR_BYTES, WEBUSB_AUTO_PACKET_SIZE,
+    WebUsbControllerEnrollment, WEBUSB_AUTO_CONTROL_BUFFER_BYTES,
+    WEBUSB_AUTO_MSOS_DESCRIPTOR_BYTES, WEBUSB_AUTO_PACKET_SIZE,
 };

@@ -53,6 +53,7 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
     let mut nrf_entry = use_signal(|| NrfSerialDfuEntry::ManagedApplication);
     let mut nrf_recovery = use_signal(|| false);
     let mut hand_off_active = use_signal(|| false);
+    let enrollment_active = use_signal(|| false);
     let mut hand_off_status = use_signal(String::new);
     let mut uf2_identity = use_signal(|| None::<prns_flash_manifest::Uf2BootloaderIdentity>);
     let mut uf2_identity_status = use_signal(|| {
@@ -98,7 +99,10 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
         }
     });
 
-    let busy = preparation_active() || hand_off_active() || bridge::is_busy(phase());
+    let busy = preparation_active()
+        || hand_off_active()
+        || enrollment_active()
+        || bridge::is_busy(phase());
     let device_operation_active = busy && !preparation_active();
     let nrf_recovery_selected = is_nrf && nrf_recovery();
     let direct_serial_selected = flash_target.uses_web_serial() && !nrf_recovery_selected;
@@ -799,7 +803,7 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
                     },
                     "{action_label}"
                 }
-                if busy && !hand_off_active() {
+                if busy && !hand_off_active() && !enrollment_active() {
                     if phase() == BridgePhase::AwaitingBootloaderPort {
                         button {
                             r#type: "button",
@@ -840,6 +844,15 @@ pub(super) fn GuidedFlasher(target: &'static BoardTarget) -> Element {
                             "Cancellation unavailable after erase begins"
                         }
                     }
+                }
+            }
+        }
+        if !is_esp {
+            super::enrollment::ControllerEnrollment {
+                board_slug: target.slug, busy, active: enrollment_active,
+                on_start: {
+                    let event_state = state.clone();
+                    move |_| invalidate_preparation(event_state.clone(), "Controller setup selected. Prepare a release again before installing firmware.")
                 }
             }
         }

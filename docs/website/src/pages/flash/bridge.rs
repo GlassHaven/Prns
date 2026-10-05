@@ -1659,6 +1659,7 @@ mod tests {
                 mount_label: "TECHOBOOT",
                 board_id_match_kind: prns_flash_manifest::Uf2BoardIdMatchKind::RevisionPrefix,
                 board_id: "nrf52840-techo-v",
+                alternative_board_identities: &[],
             },
             &compatibility,
         )

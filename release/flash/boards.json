@@ -858,11 +858,17 @@
         "binary": "sensecap-solar-node",
         "board_feature": "board-sensecap-solar-node",
         "rust_target": "thumbv7em-none-eabihf",
-        "mount_label": "XIAO-BOOT",
+        "mount_label": "SENSECAP",
         "board_identity": {
-          "match": "exact-shared",
-          "value": "nrf52840-seeedxiao-v1"
+          "match": "exact",
+          "value": "nrf52840-seeedsensecapsolarp1-v1"
         },
+        "alternative_board_identities": [
+          {
+            "match": "exact-shared",
+            "value": "nrf52840-seeedxiao-v1"
+          }
+        ],
         "application_usb": {
           "usb": {
             "vendor_id": "0x1209",

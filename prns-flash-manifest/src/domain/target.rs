@@ -1,6 +1,7 @@
 use prns_core::interfaces::usb_auto::{
     BOOTLOADER_ENTRY_CONTROL_INDEX, BOOTLOADER_ENTRY_CONTROL_REQUEST,
-    BOOTLOADER_ENTRY_CONTROL_VALUE, UF2_HAND_OFF_CONTROL_REQUEST,
+    BOOTLOADER_ENTRY_CONTROL_VALUE, CONTROLLER_ENROLL_CONTROL_REQUEST,
+    CONTROLLER_ENROLL_STATUS_REQUEST, UF2_HAND_OFF_CONTROL_REQUEST,
 };
 
 use crate::{
@@ -366,7 +367,7 @@ impl UsbVidPid {
     }
 }
 
-/// A PRNS vendor control request with fixed signature values and no data stage.
+/// A PRNS vendor control request with fixed signature values.
 #[derive(Clone, Copy)]
 pub struct WebUsbControlRequest {
     request: u8,
@@ -385,6 +386,18 @@ impl WebUsbControlRequest {
     /// Requests the stock bootloader's UF2 drive for switching firmware.
     pub const UF2_HAND_OFF: Self = Self {
         request: UF2_HAND_OFF_CONTROL_REQUEST,
+        value: BOOTLOADER_ENTRY_CONTROL_VALUE,
+        index: BOOTLOADER_ENTRY_CONTROL_INDEX,
+    };
+
+    pub const CONTROLLER_ENROLLMENT: Self = Self {
+        request: CONTROLLER_ENROLL_CONTROL_REQUEST,
+        value: BOOTLOADER_ENTRY_CONTROL_VALUE,
+        index: BOOTLOADER_ENTRY_CONTROL_INDEX,
+    };
+
+    pub const CONTROLLER_ENROLLMENT_STATUS: Self = Self {
+        request: CONTROLLER_ENROLL_STATUS_REQUEST,
         value: BOOTLOADER_ENTRY_CONTROL_VALUE,
         index: BOOTLOADER_ENTRY_CONTROL_INDEX,
     };

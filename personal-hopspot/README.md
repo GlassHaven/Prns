@@ -169,7 +169,7 @@ The first firmware update carrying the board-sized flash layout moves learned-st
 
 `./tools/prns build hopspot sensecap-solar-node` builds the headless nRF52840 / Wio-SX1262 release UF2. The P1-Pro GNSS adapter controls the L76K receiver; LoRa starts unconfigured and uses the current Remote Control regional configuration rather than a board-wide fixed European channel. The node page announces after 15 seconds and every six hours.
 
-The port adapts [PR #227](https://github.com/KenAKAFrosty/Prns/pull/227) to the shared memory-profile and Remote Control owners. Its firmware participates in the resource and architecture assurance matrix. The contributor's historical physical-board observations are recorded in that PR; automated evidence does not prove GNSS, RF, power, or physical-board behavior. The public catalog uses the Seeed XIAO recovery family: `XIAO-BOOT`, Board-ID `nRF52840-SeeedXiao-v1`, S140 7.3.0. These values were checked against the [official Seeed recovery package](https://files.seeedstudio.com/wiki/SenseCAP/Meshtastic/xiao_nrf52840_ble_bootloader.zip) linked by the [Solar Node guide](https://wiki.seeedstudio.com/get_started_with_meshtastic_solar_node/). The application runs without the SoftDevice at `0x27000`; browser recovery requests set the UF2 flag directly before resetting. Confirm the Solar enclosure label because other XIAO products share that bootloader identity.
+The port adapts [PR #227](https://github.com/KenAKAFrosty/Prns/pull/227) to the shared memory-profile and Remote Control owners. Its firmware participates in the resource and architecture assurance matrix. The contributor's historical physical-board observations are recorded in that PR; automated evidence does not prove GNSS, RF, power, or physical-board behavior. The public catalog primarily identifies the contributor’s recorded Solar bootloader: `SENSECAP`, Board-ID `nRF52840-SeeedSenseCAPSolarP1-v1`, bootloader `0.9.2-OTAFIX2.2-BP1.3`, S140 7.3.0. It also accepts the exact Seeed recovery identity `nRF52840-SeeedXiao-v1` on `XIAO-BOOT`, verified against the [official Seeed recovery package](https://files.seeedstudio.com/wiki/SenseCAP/Meshtastic/xiao_nrf52840_ble_bootloader.zip) linked by the [Solar Node guide](https://wiki.seeedstudio.com/get_started_with_meshtastic_solar_node/). The application runs without the SoftDevice at `0x27000`; browser recovery requests set the UF2 flag directly before resetting. Confirm the Solar enclosure label because other XIAO products share that bootloader identity.
 
 ### XIAO ESP32-S3 with Wio-SX1262
 
@@ -182,3 +182,35 @@ The board port comes from [PR #239](https://github.com/KenAKAFrosty/Prns/pull/23
 `./tools/prns build hopspot rak10724` builds the RAK3401 / RAK13302 release UF2 adapted from [PR #247](https://github.com/KenAKAFrosty/Prns/pull/247). It uses the current S140 6.1.1 startup and regional radio controls, with the contributor's SKY66122 power mapping. Its memory profile participates in the canonical resource and architecture assurance matrix. The public catalog uses the shared `RAK4631` volume and `WisBlock-RAK4631-Board` identity with S140 6.1.1. The website requires kit confirmation because the WisBlock RAK4631 and WisMesh 1W recipes have different radio hardware and USB application identities.
 
 The nRF runtime now loads the contributor's optional factory controller grant from the Remote Control identity vault. Retained permission snapshots replace initial grants before the node starts, including an empty table after revocation. This supports pre-provisioned identity pages; it does not provision a controller during an ordinary browser firmware installation. A complete first-use pairing flow for headless nRF boards remains separate work. The PR's unsigned developer-artifact flasher path is also separate from the signed public-release flow.
+
+### First controller on an nRF board
+
+Install Hopspot, let it start, then use **Connect your controller** on that
+board's flasher page in desktop Chrome or Edge. Paste the controller's full
+128-character public key and choose **Authorize controller over USB**. The USB
+picker checks the selected board's Hopspot application identity. Setup grants
+that controller Administrator access, including radio configuration and grant
+management. It reports success only after the existing authorization journal
+has durably saved the grant. Save the returned board public key in the controller
+to pin the target identity. Neither private key leaves its owning device.
+
+A persistent development controller can print its public key using the
+[headless controller example](headless/docs/remote-control.md#provision-and-operate).
+Retain the controller's private state directory; generating another identity
+requires authorizing its new public key. USB Auto carries the subsequent
+identity-authenticated Remote Control traffic. A radio starts unconfigured until
+its region/profile is explicitly selected by an authorized controller.
+
+USB enrollment is an explicit local administrative operation, available whenever
+a trusted host has access to the board's USB control interface. It does not open
+radio pairing or accept unauthenticated network requests. It can also authorize
+a replacement controller without erasing firmware, identities, or other grants.
+A disconnected or timed-out browser must not infer success; reconnect and retry
+with the same public key. Repeating the operation is idempotent. Revoked grants
+stay revoked across ordinary restarts and firmware updates; only an explicit
+new authorization can restore access.
+
+This requires the 0.3.8 USB enrollment implementation. Automated tests exercise
+its wire contract, browser failure handling, and the journal's power-loss and
+revocation behavior. Physical USB behavior remains outside simulator/emulator
+coverage.

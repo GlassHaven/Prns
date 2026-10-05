@@ -1,3 +1,4 @@
+import { requestControllerEnrollment } from "./controller-enrollment.js";
 import {
   BoundedResponseError,
   esptoolFlashSizeValue,
@@ -626,6 +627,29 @@ export function clearPrepared() {
 
 export function continueNrfBootloaderSelection() {
   return continuePendingNrfBootloaderSelection();
+}
+
+export async function enrollController(request, dependencies = {}) {
+  if (active) return { status: "error", message: "A device operation is already active." };
+  active = true;
+  preparationGeneration += 1;
+  discardPreparingRequest();
+  discardPrepared();
+  const environment = dependencies.environment ?? globalThis;
+  try {
+    assertHostedEnvironment(environment);
+    const usb = dependencies.usb ?? environment.navigator?.usb;
+    if (!usb?.requestDevice) {
+      throw new FlashBridgeError("unsupported_browser", "Controller setup requires desktop Chrome or Edge and a USB connection.");
+    }
+    const targetPublicKey = await requestControllerEnrollment(usb, request, environment, dependencies);
+    return { status: "saved", targetPublicKey };
+  } catch (error) {
+    const failure = safeFailure(error);
+    return { status: "error", message: failure.message };
+  } finally {
+    active = false;
+  }
 }
 
 export async function handOffToUf2(request, dependencies = {}) {

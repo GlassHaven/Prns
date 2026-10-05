@@ -5,12 +5,15 @@ use ::embassy_usb::driver::{
 };
 use ::embassy_usb::types::StringIndex;
 use ::embassy_usb::{
-    control::{OutResponse, Recipient, Request, RequestType},
+    control::{InResponse, OutResponse, Recipient, Request, RequestType},
     msos, Builder, Handler,
 };
 use prns_core::interfaces::usb_auto::{
+    UsbControllerEnrollment, UsbControllerEnrollmentBusy, UsbControllerEnrollmentStatus,
     BOOTLOADER_ENTRY_CONTROL_INDEX, BOOTLOADER_ENTRY_CONTROL_REQUEST,
-    BOOTLOADER_ENTRY_CONTROL_VALUE, UF2_HAND_OFF_CONTROL_REQUEST,
+    BOOTLOADER_ENTRY_CONTROL_VALUE, CONTROLLER_ENROLL_CONTROL_REQUEST,
+    CONTROLLER_ENROLL_REQUEST_BYTES, CONTROLLER_ENROLL_STATUS_BYTES,
+    CONTROLLER_ENROLL_STATUS_REQUEST, UF2_HAND_OFF_CONTROL_REQUEST,
 };
 
 pub const WEBUSB_AUTO_PACKET_SIZE: u16 = 64;
@@ -35,6 +38,7 @@ impl embedded_io_async::Error for WebUsbAutoError {
 pub struct WebUsbAutoState {
     control: MaybeUninit<WebUsbAutoControl>,
     bootloader_entry: WebUsbBootloaderEntry,
+    controller_enrollment: WebUsbControllerEnrollment,
 }
 
 impl WebUsbAutoState {
@@ -43,8 +47,30 @@ impl WebUsbAutoState {
         Self {
             control: MaybeUninit::uninit(),
             bootloader_entry,
+            controller_enrollment: WebUsbControllerEnrollment::Unsupported,
         }
     }
+
+    #[must_use]
+    pub const fn with_controller_enrollment(
+        mut self,
+        enrollment: WebUsbControllerEnrollment,
+    ) -> Self {
+        self.controller_enrollment = enrollment;
+        self
+    }
+}
+
+/// A local USB host may explicitly grant controller access. This is never exposed
+/// through radio packets; completion is reported only by the durable grant owner.
+#[derive(Clone, Copy)]
+pub enum WebUsbControllerEnrollment {
+    Unsupported,
+    Supported {
+        request: fn(UsbControllerEnrollment) -> Result<(), UsbControllerEnrollmentBusy>,
+        status: fn() -> UsbControllerEnrollmentStatus,
+        target_public_key: [u8; prns_core::identity::IDENTITY_PUBLIC_KEY_LEN],
+    },
 }
 
 /// The bootloader transport requested by a validated USB control transfer.
@@ -65,6 +91,7 @@ pub enum WebUsbBootloaderEntry {
 struct WebUsbAutoControl {
     iface_string: StringIndex,
     bootloader_entry: WebUsbBootloaderEntry,
+    controller_enrollment: WebUsbControllerEnrollment,
 }
 
 impl Handler for WebUsbAutoControl {
@@ -72,7 +99,51 @@ impl Handler for WebUsbAutoControl {
         (index == self.iface_string).then_some("Personal Hopspot WebUSB Auto")
     }
 
+    fn control_in<'a>(&'a mut self, request: Request, buf: &'a mut [u8]) -> Option<InResponse<'a>> {
+        if !enrollment_request(
+            request,
+            Direction::In,
+            CONTROLLER_ENROLL_STATUS_REQUEST,
+            CONTROLLER_ENROLL_STATUS_BYTES,
+        ) {
+            return None;
+        }
+        match self.controller_enrollment {
+            WebUsbControllerEnrollment::Unsupported => Some(InResponse::Rejected),
+            WebUsbControllerEnrollment::Supported {
+                status,
+                target_public_key,
+                ..
+            } => {
+                let Some(response) = buf.get_mut(..CONTROLLER_ENROLL_STATUS_BYTES) else {
+                    return Some(InResponse::Rejected);
+                };
+                response.copy_from_slice(&status().encode(&target_public_key));
+                Some(InResponse::Accepted(response))
+            }
+        }
+    }
+
     fn control_out(&mut self, request: Request, data: &[u8]) -> Option<OutResponse> {
+        if enrollment_request(
+            request,
+            Direction::Out,
+            CONTROLLER_ENROLL_CONTROL_REQUEST,
+            CONTROLLER_ENROLL_REQUEST_BYTES,
+        ) {
+            let Some(enrollment) = UsbControllerEnrollment::decode(data) else {
+                return Some(OutResponse::Rejected);
+            };
+            return Some(match self.controller_enrollment {
+                WebUsbControllerEnrollment::Unsupported => OutResponse::Rejected,
+                WebUsbControllerEnrollment::Supported { request, .. } => {
+                    match request(enrollment) {
+                        Ok(()) => OutResponse::Accepted,
+                        Err(UsbControllerEnrollmentBusy) => OutResponse::Rejected,
+                    }
+                }
+            });
+        }
         let mode = bootloader_mode(request, data)?;
         match self.bootloader_entry {
             WebUsbBootloaderEntry::Unsupported => Some(OutResponse::Rejected),
@@ -82,6 +153,16 @@ impl Handler for WebUsbAutoControl {
             }
         }
     }
+}
+
+fn enrollment_request(request: Request, direction: Direction, verb: u8, length: usize) -> bool {
+    request.direction == direction
+        && request.request_type == RequestType::Vendor
+        && request.recipient == Recipient::Device
+        && request.request == verb
+        && request.value == BOOTLOADER_ENTRY_CONTROL_VALUE
+        && request.index == BOOTLOADER_ENTRY_CONTROL_INDEX
+        && usize::from(request.length) == length
 }
 
 fn bootloader_mode(request: Request, data: &[u8]) -> Option<WebUsbBootloaderMode> {
@@ -131,6 +212,7 @@ impl<'d, D: UsbDriver<'d>> WebUsbAutoClass<'d, D> {
         builder.handler(state.control.write(WebUsbAutoControl {
             iface_string,
             bootloader_entry: state.bootloader_entry,
+            controller_enrollment: state.controller_enrollment,
         }));
 
         Self { read_ep, write_ep }
@@ -231,6 +313,99 @@ mod tests {
             index: BOOTLOADER_ENTRY_CONTROL_INDEX,
             length: 0,
         }
+    }
+
+    #[test]
+    fn enrollment_requires_exact_vendor_signature_direction_and_lengths() {
+        for (verb, direction, length) in [
+            (
+                CONTROLLER_ENROLL_CONTROL_REQUEST,
+                Direction::Out,
+                CONTROLLER_ENROLL_REQUEST_BYTES,
+            ),
+            (
+                CONTROLLER_ENROLL_STATUS_REQUEST,
+                Direction::In,
+                CONTROLLER_ENROLL_STATUS_BYTES,
+            ),
+        ] {
+            let mut request = bootloader_entry_request();
+            request.request = verb;
+            request.direction = direction;
+            request.length = length as u16;
+            assert!(enrollment_request(request, direction, verb, length));
+            let mut invalid = request;
+            invalid.value ^= 1;
+            assert!(!enrollment_request(invalid, direction, verb, length));
+            invalid = request;
+            invalid.index ^= 1;
+            assert!(!enrollment_request(invalid, direction, verb, length));
+            invalid = request;
+            invalid.request_type = RequestType::Class;
+            assert!(!enrollment_request(invalid, direction, verb, length));
+            invalid = request;
+            invalid.recipient = Recipient::Interface;
+            assert!(!enrollment_request(invalid, direction, verb, length));
+            invalid = request;
+            invalid.length += 1;
+            assert!(!enrollment_request(invalid, direction, verb, length));
+            invalid = request;
+            invalid.request ^= 1;
+            assert!(!enrollment_request(invalid, direction, verb, length));
+            invalid = request;
+            invalid.direction = match direction {
+                Direction::In => Direction::Out,
+                Direction::Out => Direction::In,
+            };
+            assert!(!enrollment_request(invalid, direction, verb, length));
+        }
+    }
+
+    #[test]
+    fn enrollment_rejects_unsupported_busy_and_truncated_requests() {
+        let mut handler = WebUsbAutoControl {
+            iface_string: StringIndex(1),
+            bootloader_entry: WebUsbBootloaderEntry::Unsupported,
+            controller_enrollment: WebUsbControllerEnrollment::Unsupported,
+        };
+        let mut request = bootloader_entry_request();
+        request.request = CONTROLLER_ENROLL_CONTROL_REQUEST;
+        request.length = CONTROLLER_ENROLL_REQUEST_BYTES as u16;
+        let bytes = [42; CONTROLLER_ENROLL_REQUEST_BYTES];
+        assert!(matches!(
+            handler.control_out(request, &bytes),
+            Some(OutResponse::Rejected)
+        ));
+        handler.controller_enrollment = WebUsbControllerEnrollment::Supported {
+            request: |_| Err(UsbControllerEnrollmentBusy),
+            status: || UsbControllerEnrollmentStatus::Pending { transaction: 42 },
+            target_public_key: [42; 64],
+        };
+        assert!(matches!(
+            handler.control_out(request, &bytes),
+            Some(OutResponse::Rejected)
+        ));
+        handler.controller_enrollment = WebUsbControllerEnrollment::Supported {
+            request: |_| Ok(()),
+            status: || UsbControllerEnrollmentStatus::Saved { transaction: 42 },
+            target_public_key: [42; 64],
+        };
+        assert!(matches!(
+            handler.control_out(request, &bytes[..67]),
+            Some(OutResponse::Rejected)
+        ));
+        assert!(matches!(
+            handler.control_out(request, &bytes),
+            Some(OutResponse::Accepted)
+        ));
+        request.request = CONTROLLER_ENROLL_STATUS_REQUEST;
+        request.direction = Direction::In;
+        request.length = CONTROLLER_ENROLL_STATUS_BYTES as u16;
+        let mut response = [0; CONTROLLER_ENROLL_STATUS_BYTES];
+        assert!(matches!(
+            handler.control_in(request, &mut response),
+            Some(InResponse::Accepted(bytes)) if bytes[..5] == [2, 42, 0, 0, 0] && bytes[5..] == [42; 64]
+        ));
     }
 
     #[test]

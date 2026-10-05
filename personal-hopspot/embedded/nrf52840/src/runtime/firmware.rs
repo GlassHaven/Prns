@@ -158,7 +158,16 @@ pub async fn run(spawner: Spawner) -> ! {
     static USB_STATE: StaticCell<WebUsbAutoState> = StaticCell::new();
     let class = WebUsbAutoClass::new(
         &mut builder,
-        USB_STATE.init(WebUsbAutoState::new(super::bootloader_entry::webusb_entry())),
+        USB_STATE.init(
+            WebUsbAutoState::new(super::bootloader_entry::webusb_entry())
+                .with_controller_enrollment(super::controller_enrollment::webusb_enrollment(
+                    remote_control_identity_secrets
+                        .identities()
+                        .target()
+                        .public_keys()
+                        .public_key_bytes(),
+                )),
+        ),
         WEBUSB_AUTO_PACKET_SIZE,
     );
     let mut usb = builder.build();
@@ -744,7 +753,10 @@ pub async fn run(spawner: Spawner) -> ! {
         usb_dev.run(usb_seam),
         heartbeat,
         board::drive_controls(controls),
-        super::bootloader_entry::wait(),
+        embassy_futures::join::join(
+            super::bootloader_entry::wait(),
+            super::controller_enrollment::run(PrnsNodeHandle::new(COMMANDS.sender(), &COMPLETION)),
+        ),
     );
     let ble_plane = async move {
         if let Some(groups) =

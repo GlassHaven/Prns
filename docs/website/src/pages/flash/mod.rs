@@ -1,6 +1,7 @@
 mod appliance;
 mod bridge;
 mod contract;
+mod enrollment;
 mod model;
 mod protocol;
 mod release;

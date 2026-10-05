@@ -285,7 +285,7 @@ async function requestManagedBootloader(
   }
 }
 
-function requireManagedIdentity(device, expected) {
+export function requireManagedIdentity(device, expected) {
   if (
     device?.vendorId !== expected.usb.vendorId
     || device?.productId !== expected.usb.productId

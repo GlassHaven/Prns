@@ -32,6 +32,7 @@ mod bluetooth_gatt_server;
     any(feature = "board-rak4631", feature = "board-rak10724")
 ))]
 pub(crate) mod bootloader_entry;
+mod controller_enrollment;
 mod entropy;
 #[cfg(any(feature = "board-t-echo", feature = "board-mesh-pocket"))]
 mod firmware;

@@ -118,6 +118,12 @@ pub struct NrfManagedApplicationIdentity {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Uf2BoardIdentityRule {
+    pub kind: Uf2BoardIdMatchKind,
+    pub value: &'static str,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BoardFlashTarget {
     EspSerial {
         expected_chip: &'static str,
@@ -129,6 +135,7 @@ pub enum BoardFlashTarget {
         mount_label: &'static str,
         board_id_match_kind: Uf2BoardIdMatchKind,
         board_id: &'static str,
+        alternative_board_identities: &'static [Uf2BoardIdentityRule],
     },
     NrfSerialDfu {
         recovery_mount_label: &'static str,
@@ -170,16 +177,22 @@ impl BoardFlashTarget {
         )
     }
 
-    pub const fn shared_uf2_identity(self) -> Option<&'static str> {
+    pub fn shared_uf2_identity(self) -> Option<&'static str> {
         match self {
             Self::EspSerial { .. } => None,
             Self::Uf2MassStorage {
                 board_id_match_kind,
                 board_id,
+                alternative_board_identities,
                 ..
             } => match board_id_match_kind {
                 Uf2BoardIdMatchKind::ExactShared => Some(board_id),
-                Uf2BoardIdMatchKind::Exact | Uf2BoardIdMatchKind::RevisionPrefix => None,
+                Uf2BoardIdMatchKind::Exact | Uf2BoardIdMatchKind::RevisionPrefix => {
+                    alternative_board_identities
+                        .iter()
+                        .find(|identity| identity.kind == Uf2BoardIdMatchKind::ExactShared)
+                        .map(|identity| identity.value)
+                }
             },
             Self::NrfSerialDfu {
                 recovery_board_id_match_kind,

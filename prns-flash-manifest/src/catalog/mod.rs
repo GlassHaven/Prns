@@ -337,6 +337,8 @@ pub struct Uf2Build {
     pub rust_target: String,
     pub mount_label: String,
     pub board_identity: Uf2BoardIdentity,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternative_board_identities: Vec<Uf2BoardIdentity>,
     pub application_usb: Uf2ApplicationUsb,
     pub variants: Vec<Uf2BuildVariant>,
 }
@@ -347,6 +349,12 @@ pub struct Uf2BoardIdentity {
     #[serde(rename = "match")]
     pub match_kind: Uf2BoardIdMatchKind,
     pub value: String,
+}
+
+impl Uf2Build {
+    pub fn board_identities(&self) -> impl Iterator<Item = &Uf2BoardIdentity> {
+        std::iter::once(&self.board_identity).chain(&self.alternative_board_identities)
+    }
 }
 
 impl Uf2BoardIdentity {
@@ -561,12 +569,15 @@ fn validate_transport(board: &BoardCatalogEntry) -> Result<(), CatalogError> {
 fn validate_uf2_board_identities(boards: &[BoardCatalogEntry]) -> Result<(), CatalogError> {
     let identities = boards
         .iter()
-        .filter_map(|board| match &board.build {
-            BoardBuild::Uf2(build) => Some((board.slug.as_str(), &build.board_identity)),
-            BoardBuild::Esp(_) => None,
-            BoardBuild::NrfSerialDfu(build) => {
-                Some((board.slug.as_str(), &build.recovery.board_identity))
-            }
+        .flat_map(|board| {
+            let identities: Vec<&Uf2BoardIdentity> = match &board.build {
+                BoardBuild::Uf2(build) => build.board_identities().collect(),
+                BoardBuild::Esp(_) => Vec::new(),
+                BoardBuild::NrfSerialDfu(build) => vec![&build.recovery.board_identity],
+            };
+            identities
+                .into_iter()
+                .map(|identity| (board.slug.as_str(), identity))
         })
         .collect::<Vec<_>>();
     for (index, (slug, identity)) in identities.iter().enumerate() {
@@ -585,7 +596,7 @@ fn validate_uf2_board_identities(boards: &[BoardCatalogEntry]) -> Result<(), Cat
                         message: "UF2 Board-ID match rule is invalid".to_string(),
                     })?;
             if identity.overlaps(&other_identity)
-                && !identity.declares_shared_identity_with(&other_identity)
+                && (slug == other_slug || !identity.declares_shared_identity_with(&other_identity))
             {
                 return Err(CatalogError::OverlappingUf2BoardIdentities {
                     first: (*slug).to_string(),
@@ -1058,6 +1069,46 @@ fn invalid(board: &BoardCatalogEntry, message: &str) -> CatalogError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn solar_recovery_identities_are_finite_and_cannot_overlap_other_products() {
+        let mut catalog = board_catalog().expect("catalog");
+        let solar = catalog
+            .boards
+            .iter_mut()
+            .find(|board| board.slug == "seeed-sensecap-solar-node-p1")
+            .expect("Solar");
+        let BoardBuild::Uf2(build) = &mut solar.build else {
+            panic!("UF2")
+        };
+        assert_eq!(build.mount_label, "SENSECAP");
+        let rules = build
+            .board_identities()
+            .map(|identity| identity.validated().expect("rule"))
+            .collect::<Vec<_>>();
+        for accepted in ["nRF52840-SeeedSenseCAPSolarP1-v1", "nRF52840-SeeedXiao-v1"] {
+            assert!(rules
+                .iter()
+                .any(|rule| rule.matches(&accepted.to_ascii_lowercase())));
+        }
+        for rejected in [
+            "nRF52840-SeeedSenseCAPSolarP1-v2",
+            "nRF52840-SeeedXiao-v2",
+            "nRF52840-T1000-E-v1",
+        ] {
+            assert!(!rules
+                .iter()
+                .any(|rule| rule.matches(&rejected.to_ascii_lowercase())));
+        }
+        build.alternative_board_identities.push(Uf2BoardIdentity {
+            match_kind: Uf2BoardIdMatchKind::Exact,
+            value: "nrf52840-t1000-e-v1".to_string(),
+        });
+        assert!(matches!(
+            catalog.validate(),
+            Err(CatalogError::OverlappingUf2BoardIdentities { .. })
+        ));
+    }
 
     #[test]
     fn embedded_catalog_has_all_release_ready_boards() -> Result<(), CatalogError> {
