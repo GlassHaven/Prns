@@ -49,13 +49,13 @@ const SHARED_EXTENDED_GUIDE: &str =
 
 pub(super) fn installation_guide(appliance: &Appliance) -> Element {
     rsx! {
-        MarkdownBody { source: format!("{}\n\n{SHARED_QUICK_GUIDE}", appliance.quick_guide()) }
+        MarkdownBody { heading_offset: 1, source: format!("{}\n\n{SHARED_QUICK_GUIDE}", appliance.quick_guide()) }
         details { class: "mt-10",
             summary { class: "cursor-pointer text-sm text-soft hover:text-accent transition-colors",
                 "Extended guide: every check, every failure case, and the reasoning behind each step"
             }
             div { class: "mt-6",
-                MarkdownBody { source: format!("{}\n\n{SHARED_EXTENDED_GUIDE}", appliance.extended_guide()) }
+                MarkdownBody { heading_offset: 1, source: format!("{}\n\n{SHARED_EXTENDED_GUIDE}", appliance.extended_guide()) }
             }
         }
     }

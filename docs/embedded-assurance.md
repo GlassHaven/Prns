@@ -8,7 +8,12 @@ Embedded assurance combines production firmware resource evidence with executabl
 
 The doctor checks the current requirements from the assurance inventories: upstream and ESP Rust toolchains, compilation targets, LLVM tools, the pinned Miri nightly, QEMU runners, Renode and its nRF52840 model, Xtensa compiler tools, and libclang. It installs nothing. When something is missing or has the wrong version, it prints the exact setup commands or the pinned emulator package, checksum, and source revision. `PRNS_RENODE` may point to a Renode executable outside `PATH`; set `PRNS_RENODE_ROOT` only when its bundled platform models are not discoverable beside that executable.
 
-The authoritative versions and targets remain in `validation/hardening/embedded-isa.toml`, `validation/hardening/embedded-platform.toml`, `validation/manifest.toml`, and `tools/release/release-esp-toolchain-identity.sh`. The doctor consumes those files rather than maintaining another compatibility table.
+The nRF52840 production firmware compiler is pinned by
+`personal-hopspot/embedded/nrf52840/rust-toolchain.toml`. This keeps release
+flash sizes reproducible when the upstream stable compiler changes. The doctor
+reads that same pin.
+
+The other authoritative versions and targets remain in `validation/hardening/embedded-isa.toml`, `validation/hardening/embedded-platform.toml`, `validation/manifest.toml`, and `tools/release/release-esp-toolchain-identity.sh`. The doctor consumes those files rather than maintaining another compatibility table.
 
 CI stages emulator builds and packages into an explicit disposable root through the validation control plane. The same path is available when reproducing a runner locally:
 

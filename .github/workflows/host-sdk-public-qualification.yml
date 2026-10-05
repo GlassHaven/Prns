@@ -230,6 +230,10 @@ jobs:
         with:
           go-version: 1.26.5
           cache: false
+      - name: Import Swift signing keys
+        if: runner.os == 'Linux'
+        shell: bash
+        run: curl --fail --silent --show-error --location https://www.swift.org/keys/all-keys.asc | gpg --batch --import
       - uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9
         with:
           swift-version: "6.3.3"
