@@ -86,6 +86,7 @@ pub struct BoardImage {
 }
 
 pub const ESPRESSIF_NATIVE_USB_VENDOR_ID: u16 = 0x303a;
+pub const SILICON_LABS_USB_VENDOR_ID: u16 = 0x10c4;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum PreparationProfile {
@@ -97,6 +98,7 @@ pub enum PreparationProfile {
     #[cfg_attr(not(feature = "local-dev-flasher"), allow(dead_code))]
     MuziBaseDuoUf2,
     MeshTowerV2Uf2,
+    WioTrackerL1Uf2,
     #[cfg_attr(not(feature = "local-dev-flasher"), allow(dead_code))]
     Rak4631Uf2,
     T096Uf2,
@@ -215,6 +217,8 @@ impl BoardTarget {
 
     pub fn image(&self) -> Option<&'static BoardImage> {
         match self.slug {
+            "heltec-v3" => Some(&board_images::HELTEC_V3),
+            "seeed-wio-tracker-l1" => Some(&board_images::WIO_TRACKER_L1),
             "heltec-v4" => Some(&board_images::HELTEC_V4),
             "heltec-v4-r8" => Some(&board_images::HELTEC_V4),
             "t-beam-supreme" => Some(&board_images::T_BEAM_SUPREME),
@@ -255,26 +259,6 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
         tier: Tier::BringUp,
         interfaces: &[],
         icon: Some("raspberrypi"),
-        preparation_profile: None,
-        flash_target: None,
-    },
-    BoardTarget {
-        name: "Heltec V3/V3.1",
-        slug: "heltec-v3",
-        silicon: "ESP32-S3 + SX1262",
-        tier: Tier::BringUp,
-        interfaces: &[],
-        icon: Some("espressif"),
-        preparation_profile: None,
-        flash_target: None,
-    },
-    BoardTarget {
-        name: "Seeed Wio Tracker L1",
-        slug: "seeed-wio-tracker-l1",
-        silicon: "nRF52840 + SX1262",
-        tier: Tier::BringUp,
-        interfaces: &[],
-        icon: Some("nordicsemiconductor"),
         preparation_profile: None,
         flash_target: None,
     },
@@ -727,12 +711,7 @@ mod tests {
 
         assert_eq!(
             bring_up,
-            vec![
-                "Raspberry Pi Zero 2 W",
-                "Heltec V3/V3.1",
-                "Seeed Wio Tracker L1",
-                "SenseCAP Solar Node P1",
-            ]
+            vec!["Raspberry Pi Zero 2 W", "SenseCAP Solar Node P1",]
         );
         assert!(
             UPCOMING_BOARD_TARGETS
@@ -755,6 +734,19 @@ mod tests {
     }
 
     #[test]
+    fn v3_selects_its_cp2102_serial_adapter() {
+        let board = board_target_by_slug("heltec-v3").expect("release V3 board");
+        assert!(matches!(
+            board.flash_target,
+            Some(BoardFlashTarget::EspSerial {
+                web_serial_vendor_id: SILICON_LABS_USB_VENDOR_ID,
+                supports_provisioning: false,
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn automated_release_boards_are_flashable_in_public_builds() {
         for slug in [
             "heltec-e290",
@@ -764,6 +756,8 @@ mod tests {
             "rak4631",
             "muzi-base-duo",
             "mesh-tower-v2",
+            "heltec-v3",
+            "seeed-wio-tracker-l1",
         ] {
             let board = board_target_by_slug(slug).expect("release board");
             assert_eq!(board.tier, Tier::Flashable);

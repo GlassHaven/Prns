@@ -731,6 +731,26 @@ const T096_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
     }],
 };
 
+const WIO_TRACKER_L1_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
+    preparation_profile: PreparationProfile::WioTrackerL1Uf2,
+    package: "t-echo",
+    binary: "wio-tracker-l1",
+    board_feature: "board-wio-tracker-l1",
+    manufacturer: "Stay Personal",
+    product: "Personal Hopspot (Wio Tracker L1)",
+    serial_number: "PERSONAL-RNS-WIO-L1-HOP",
+    variants: &[PinnedUf2Variant {
+        softdevice_family: "s140",
+        softdevice_version: "7.3.0",
+        fwid: "0x0123",
+        memory_profile: "wio-tracker-l1",
+        family_id: "0xada52840",
+        application_link: Uf2ApplicationLink::SoftdeviceS140V7,
+        target_directory: "target/wio-tracker-l1",
+        filename: "wio-tracker-l1-s140-7.3.0.uf2",
+    }],
+};
+
 const MESH_TOWER_V2_UF2_RECIPE: PinnedUf2Recipe = PinnedUf2Recipe {
     preparation_profile: PreparationProfile::MeshTowerV2Uf2,
     package: "t-echo",
@@ -798,6 +818,7 @@ fn pinned_uf2_recipe(slug: &str) -> Option<&'static PinnedUf2Recipe> {
         "mesh-pocket-10000" => Some(&MESH_POCKET_10000_UF2_RECIPE),
         "t096" => Some(&T096_UF2_RECIPE),
         "t114" => Some(&T114_UF2_RECIPE),
+        "seeed-wio-tracker-l1" => Some(&WIO_TRACKER_L1_UF2_RECIPE),
         "mesh-tower-v2" => Some(&MESH_TOWER_V2_UF2_RECIPE),
         "muzi-base-duo" => Some(&MUZI_BASE_DUO_UF2_RECIPE),
         "rak4631" => Some(&RAK4631_UF2_RECIPE),
@@ -1021,7 +1042,9 @@ mod tests {
                 "rak4631",
                 "t1000-e",
                 "mesh-tower-v2",
-                "muzi-base-duo"
+                "muzi-base-duo",
+                "heltec-v3",
+                "seeed-wio-tracker-l1"
             ]
         );
         assert!(catalog
@@ -1109,6 +1132,12 @@ mod tests {
                 ("t1000-e", None, None),
                 ("mesh-tower-v2", None, None),
                 ("muzi-base-duo", None, None),
+                (
+                    "heltec-v3",
+                    Some(8_388_608),
+                    Some(("partitions-hopspot-8mb.csv", "8mb"))
+                ),
+                ("seeed-wio-tracker-l1", None, None),
             ]
         );
         Ok(())
@@ -1188,6 +1217,12 @@ mod tests {
                 ("t1000-e", "t1000-e", "thumbv7em-none-eabihf"),
                 ("mesh-tower-v2", "mesh-tower-v2", "thumbv7em-none-eabihf"),
                 ("muzi-base-duo", "muzi-base-duo", "thumbv7em-none-eabihf"),
+                ("heltec-v3", "heltec-v3", "xtensa-esp32s3-none-elf"),
+                (
+                    "seeed-wio-tracker-l1",
+                    "wio-tracker-l1",
+                    "thumbv7em-none-eabihf"
+                ),
             ]
         );
         Ok(())

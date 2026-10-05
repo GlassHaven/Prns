@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 pub(crate) fn generate() {
     const BOARD_IMAGES: &[(&str, &str)] = &[
+        ("HELTEC_V3", "heltec-v3.webp"),
+        ("WIO_TRACKER_L1", "wio-tracker-l1.webp"),
         ("HELTEC_V4", "heltec-v4.webp"),
         ("T_BEAM_SUPREME", "t-beam-supreme.webp"),
         ("XIAO_ESP32_C6", "xiao-esp32-c6.webp"),

@@ -53,6 +53,8 @@ pub(super) enum NrfSerialDfuEntry {
 pub(super) const WEB_SERIAL_PROBE_SUPPORTED: &str = "supported";
 pub(super) const WEB_SERIAL_PROBE_ANDROID_BLUETOOTH_ONLY: &str = "android-bluetooth-only";
 pub(super) const WEB_USB_PROBE_SUPPORTED: &str = "supported";
+const WIO_TRACKER_L1_SHARED_UF2_IDENTITY: &str = "tracker l1";
+const WIO_TRACKER_L1_CONFIRMATION_DETAIL: &str = "INFO_UF2.TXT identifies the TRACKER L1 family, not the radio or display variant. Confirm this is a Wio Tracker L1 or L1 Pro with the standard radio and OLED, not a Pro 1 W or E-Ink model.";
 const HT_N5262_SHARED_UF2_IDENTITY: &str = "ht-n5262";
 const HT_N5262_CONFIRMATION_DETAIL: &str = "INFO_UF2.TXT confirms only the shared HT-n5262 recovery family. It cannot distinguish T114, MeshTower V2, or either MeshPocket capacity; the printed product label and, for MeshPocket, enclosure capacity marking are the final identity check.";
 
@@ -218,6 +220,14 @@ pub(super) fn preparation_guide(
             uf2_preparation_guide(target)
         }
         PreparationProfile::MeshPocketUf2 => mesh_pocket_preparation_guide(target),
+        PreparationProfile::WioTrackerL1Uf2 => PreparationGuide {
+            lead: "Use this image for the Wio Tracker L1 or L1 Pro with the standard radio and OLED. The Pro 1 W and E-Ink models need different firmware.",
+            steps: vec![
+                "Connect a USB data cable and double-press RESET to open the bootloader drive, usually named TRACKER L1.".to_string(),
+                "Select INFO_UF2.TXT from that drive. The supported foundation is S140 7.3.0; confirm the model on the device label.".to_string(),
+                "Copy the verified Wio Tracker L1 UF2 to that drive and wait for it to disappear as the device reboots.".to_string(),
+            ],
+        },
         PreparationProfile::MeshTowerV2Uf2 => PreparationGuide {
             lead: "MeshTower V2 shares its recovery identity with T114 and MeshPocket. Confirm the MeshTower V2 product label before selecting the image.",
             steps: vec![
@@ -451,6 +461,7 @@ pub(super) fn board_identity_confirmation_detail(target: BoardFlashTarget) -> Op
     let shared_identity = target.shared_uf2_identity()?;
     match shared_identity {
         HT_N5262_SHARED_UF2_IDENTITY => Some(HT_N5262_CONFIRMATION_DETAIL),
+        WIO_TRACKER_L1_SHARED_UF2_IDENTITY => Some(WIO_TRACKER_L1_CONFIRMATION_DETAIL),
         _ => panic!("shared UF2 identity requires family-specific confirmation detail"),
     }
 }
@@ -533,6 +544,31 @@ mod tests {
         );
         assert!(uf2.steps.iter().any(|step| step.contains("TECHOBOOT")));
         assert!(uf2.lead.contains("local descriptor"));
+    }
+
+    #[test]
+    fn every_flashable_board_has_preparation_and_identity_guidance() {
+        for board in SHIPPING_BOARD_TARGETS {
+            let target = board.flash_target.expect("shipping flash target");
+            let guide = preparation_guide(
+                board.preparation_profile.expect("preparation profile"),
+                target,
+                false,
+            );
+            assert!(!guide.steps.is_empty(), "{}", board.slug);
+            if target.shared_uf2_identity().is_some() {
+                assert!(
+                    board_identity_confirmation_detail(target).is_some(),
+                    "{}",
+                    board.slug
+                );
+            }
+        }
+        let wio = board_target_by_slug("seeed-wio-tracker-l1").expect("Wio board");
+        assert_eq!(
+            board_identity_confirmation_detail(wio.flash_target.unwrap()),
+            Some(WIO_TRACKER_L1_CONFIRMATION_DETAIL)
+        );
     }
 
     #[test]

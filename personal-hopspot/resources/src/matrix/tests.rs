@@ -1,8 +1,8 @@
 use super::*;
 
 #[test]
-fn canonical_matrix_has_sixteen_unique_profile_bound_targets(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn canonical_matrix_has_all_unique_profile_bound_targets() -> Result<(), Box<dyn std::error::Error>>
+{
     let catalog = prns_flash_manifest::board_catalog()?;
     let matrix = Matrix::from_catalog(&catalog)?;
     let targets = matrix
@@ -120,6 +120,20 @@ fn canonical_matrix_has_sixteen_unique_profile_bound_targets(
                 TargetPlatform::Nrf52840
             ),
             (
+                "heltec-v3",
+                "heltec-v3",
+                "xtensa-esp32s3-none-elf",
+                "xtensa-esp32s3-gnu-ld",
+                TargetPlatform::Esp
+            ),
+            (
+                "wio-tracker-l1",
+                "wio-tracker-l1",
+                "thumbv7em-none-eabihf",
+                "thumbv7em-rust-lld",
+                TargetPlatform::Nrf52840
+            ),
+            (
                 "mesh-tower-v2",
                 "mesh-tower-v2",
                 "thumbv7em-none-eabihf",
@@ -129,6 +143,13 @@ fn canonical_matrix_has_sixteen_unique_profile_bound_targets(
             (
                 "muzi-base-duo",
                 "muzi-base-duo",
+                "thumbv7em-none-eabihf",
+                "thumbv7em-rust-lld",
+                TargetPlatform::Nrf52840
+            ),
+            (
+                "wio-tracker-l1-pro-1w",
+                "wio-tracker-l1",
                 "thumbv7em-none-eabihf",
                 "thumbv7em-rust-lld",
                 TargetPlatform::Nrf52840

@@ -175,11 +175,11 @@ test("transport-specific request identity is complete and bounded", () => {
   delete uf2.installMode;
   delete uf2.eraseConfirmed;
   assert.equal(validateRequest(uf2).mountLabel, "TECHOBOOT");
-  for (const mountLabel of ["", ".UF2", "BAD LABEL", "../UF2", "UF2/BOOT", "A".repeat(33)]) {
+  for (const mountLabel of ["", ".UF2", " BAD LABEL", "BAD LABEL ", "BAD\tLABEL", "../UF2", "UF2/BOOT", "A".repeat(33)]) {
     uf2.mountLabel = mountLabel;
     assert.throws(() => validateRequest(uf2), /UF2 target identity is incomplete/);
   }
-  for (const mountLabel of ["T114_BOOT", "UF2.1"]) {
+  for (const mountLabel of ["T114_BOOT", "UF2.1", "TRACKER L1"]) {
     uf2.mountLabel = mountLabel;
     assert.equal(validateRequest(uf2).mountLabel, mountLabel);
   }

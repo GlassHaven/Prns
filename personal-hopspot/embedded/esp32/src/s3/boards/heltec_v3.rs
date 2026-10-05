@@ -18,9 +18,7 @@ use ssd1306::{I2CDisplayInterface, Ssd1306};
 
 use personal_hopspot_core as screen;
 use personal_rns::interfaces::InterfaceId;
-use personal_rns::radios::sx126x::{
-    BoardConfig, RadioActivityControl, Sx126x, TcxoVoltage,
-};
+use personal_rns::radios::sx126x::{BoardConfig, RadioActivityControl, Sx126x, TcxoVoltage};
 
 use super::heltec_frontend;
 use crate::s3::{
@@ -35,10 +33,8 @@ const VBAT_DIVIDER_NUM: u32 = 49;
 const VBAT_DIVIDER_DEN: u32 = 10;
 const CHARGE_RISE_MV: u32 = 16;
 
-static RADIO_ACTIVITY_LED: Mutex<
-    CriticalSectionRawMutex,
-    RefCell<Option<Output<'static>>>,
-> = Mutex::new(RefCell::new(None));
+static RADIO_ACTIVITY_LED: Mutex<CriticalSectionRawMutex, RefCell<Option<Output<'static>>>> =
+    Mutex::new(RefCell::new(None));
 
 fn set_radio_activity_led(active: bool) {
     RADIO_ACTIVITY_LED.lock(|led| {
@@ -163,11 +159,7 @@ impl Esp32S3Board for HeltecV3Board {
         mut p: esp_hal::peripherals::Peripherals,
     ) -> S3BoardHardware<Self::Display, Self::Battery, Self::Gnss> {
         RADIO_ACTIVITY_LED.lock(|led| {
-            *led.borrow_mut() = Some(Output::new(
-                p.GPIO35,
-                Level::Low,
-                OutputConfig::default(),
-            ));
+            *led.borrow_mut() = Some(Output::new(p.GPIO35, Level::Low, OutputConfig::default()));
         });
 
         let (sw_int1, timebase, rtc) = s3::boot_common!(p, Self::BOOT_BANNER, no_psram);

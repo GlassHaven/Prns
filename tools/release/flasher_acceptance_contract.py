@@ -178,6 +178,7 @@ UF2_COMPATIBILITY_VARIANTS = {
     "rak4631": ("s140-6.1.1-fwid-0x00b6",),
     "mesh-tower-v2": ("s140-6.1.1-fwid-0x00b6",),
     "muzi-base-duo": ("s140-6.1.1-fwid-0x00b6",),
+    "seeed-wio-tracker-l1": ("s140-7.3.0-fwid-0x0123",),
 }
 NOT_RUN = "NOT_RUN"
 UTC_TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")

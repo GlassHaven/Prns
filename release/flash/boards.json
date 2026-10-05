@@ -665,6 +665,87 @@
           }
         ]
       }
+    },
+    {
+      "availability": "shipping",
+      "slug": "heltec-v3",
+      "display_name": "Heltec V3/V3.1",
+      "silicon": "ESP32-S3 + SX1262 (no PSRAM)",
+      "interfaces": [
+        "BLE Auto",
+        "LoRa",
+        "USB Auto"
+      ],
+      "icon": "espressif",
+      "transport": "esp-serial",
+      "expected_chip": "esp32s3",
+      "flash_size": 8388608,
+      "preparation_profile": "esp-usb-boot",
+      "provisioning": null,
+      "build": {
+        "kind": "esp",
+        "chip": "esp32s3",
+        "rust_target": "xtensa-esp32s3-none-elf",
+        "memory_profile": "heltec-v3",
+        "partition_table": "partitions-hopspot-8mb.csv",
+        "package": "hopspot-heltec-v3",
+        "binary": "hopspot-heltec-v3",
+        "flash_size_label": "8mb",
+        "flash_mode": "dio",
+        "flash_frequency": "40m",
+        "before_reset": "default-reset",
+        "after_reset": "hard-reset"
+      }
+    },
+    {
+      "availability": "shipping",
+      "slug": "seeed-wio-tracker-l1",
+      "display_name": "Seeed Wio Tracker L1",
+      "silicon": "nRF52840 + SX1262",
+      "interfaces": [
+        "BLE Auto",
+        "LoRa",
+        "USB Auto"
+      ],
+      "icon": "nordicsemiconductor",
+      "transport": "uf2-mass-storage",
+      "expected_chip": null,
+      "flash_size": null,
+      "preparation_profile": "wio-tracker-l1-uf2",
+      "provisioning": null,
+      "build": {
+        "kind": "uf2",
+        "package": "t-echo",
+        "binary": "wio-tracker-l1",
+        "board_feature": "board-wio-tracker-l1",
+        "rust_target": "thumbv7em-none-eabihf",
+        "mount_label": "TRACKER L1",
+        "board_identity": {
+          "match": "exact-shared",
+          "value": "tracker l1"
+        },
+        "application_usb": {
+          "usb": {
+            "vendor_id": "0x1209",
+            "product_id": "0x0001"
+          },
+          "manufacturer": "Stay Personal",
+          "product": "Personal Hopspot (Wio Tracker L1)",
+          "serial_number": "PERSONAL-RNS-WIO-L1-HOP"
+        },
+        "variants": [
+          {
+            "softdevice_family": "s140",
+            "softdevice_version": "7.3.0",
+            "fwid": "0x0123",
+            "memory_profile": "wio-tracker-l1",
+            "family_id": "0xada52840",
+            "application_link": "softdevice-s140-v7",
+            "target_directory": "target/wio-tracker-l1",
+            "filename": "wio-tracker-l1-s140-7.3.0.uf2"
+          }
+        ]
+      }
     }
   ]
 }

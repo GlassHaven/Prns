@@ -40,6 +40,8 @@ transparent background inside a dark "slot" (`.flash-board-slot--inset` in
 | muzi works Base Duo | https://muzi.works/products/base-duo | https://cdn.shopify.com/s/files/1/0657/6973/4201/files/base-duo.png?v=1765232558 | connected-background flood-fill (opaque render on a flat `#F2F2F2` canvas; the seed takes the corner color, so the white-canvas recipe applies unchanged) | vendor catalog image, nominative use |
 | Elecrow ThinkNode G4 | https://www.elecrow.com/thinknode-g4-wi-fi-halow-gateway-support-wi-fi-wi-fi-halow-ethernet-connections-supports-ap-sta-mesh-etc.html | https://www.elecrow.com/media/catalog/product/t/h/thninknode_g4_wi-fi_halow_gateway.jpg | white-knockout, cropped to `500:960:240:25` before scaling | vendor catalog image, nominative use |
 | Heltec HT-HD01 | https://heltec.org/project/ht-hd01/ | https://heltec.org/wp-content/uploads/2024/12/4-3.png | white-knockout, cropped to `280:730:250:40` before scaling | vendor catalog image, nominative use |
+| Heltec V3 | https://heltec.org/project/wifi-lora-32-v3/ | https://heltec.org/wp-content/uploads/2023/09/2.png | real alpha (vendor PNG) | vendor image, nominative use |
+| Seeed Wio Tracker L1 | https://wiki.seeedstudio.com/wio_tracker_l1_node/ | https://media-cdn.seeedstudio.com/media/catalog/product/cache/bb49d3ec4ee05b6f018e93f896b8a25d/1/-/1-114993648-wio-tracker-l1.jpg | white-knockout | vendor catalog image, nominative use |
 
 Real-alpha vendor originals are not stored in the repo; the source URL above is
 the pointer, and regeneration is a plain download, a lanczos `scale=160`, and a

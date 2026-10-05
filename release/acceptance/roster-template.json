@@ -320,6 +320,54 @@
       "cables_ready": true,
       "device_permissions_ready": true,
       "recovery_instructions_reviewed": true
+    },
+    {
+      "board": "heltec-v3",
+      "surface": "web",
+      "os": "linux",
+      "architecture": "x86_64",
+      "browser": {
+        "name": "chrome",
+        "channel": "stable"
+      },
+      "tester": "REPLACE_WITH_PUBLIC_TESTER_IDENTITY",
+      "cables_ready": true,
+      "device_permissions_ready": true,
+      "recovery_instructions_reviewed": true
+    },
+    {
+      "board": "heltec-v3",
+      "surface": "cli",
+      "os": "linux",
+      "architecture": "x86_64",
+      "tester": "REPLACE_WITH_PUBLIC_TESTER_IDENTITY",
+      "cables_ready": true,
+      "device_permissions_ready": true,
+      "recovery_instructions_reviewed": true
+    },
+    {
+      "board": "seeed-wio-tracker-l1",
+      "surface": "web",
+      "os": "linux",
+      "architecture": "x86_64",
+      "browser": {
+        "name": "chrome",
+        "channel": "stable"
+      },
+      "tester": "REPLACE_WITH_PUBLIC_TESTER_IDENTITY",
+      "cables_ready": true,
+      "device_permissions_ready": true,
+      "recovery_instructions_reviewed": true
+    },
+    {
+      "board": "seeed-wio-tracker-l1",
+      "surface": "cli",
+      "os": "linux",
+      "architecture": "x86_64",
+      "tester": "REPLACE_WITH_PUBLIC_TESTER_IDENTITY",
+      "cables_ready": true,
+      "device_permissions_ready": true,
+      "recovery_instructions_reviewed": true
     }
   ],
   "web_serial_assignments": [

@@ -99,14 +99,22 @@ control faces, Bluetooth Auto, and a 60-second display auto-off:
     ./tools/prns build hopspot t096
     ./tools/prns build hopspot t114
 
-Seeed Wio Tracker L1 / L1 Pro developer firmware drives the 128×64 OLED status
+Heltec V3/V3.1 is available in the website flasher with BLE Auto, LoRa,
+USB Auto through its CP2102 adapter, and the OLED face. Its no-PSRAM
+firmware leaves Wi-Fi, TCP Client, and ESP-NOW disabled.
+
+Seeed Wio Tracker L1 / L1 Pro firmware is available in the website flasher and drives the 128×64 OLED status
 face (SSD1306 or SH1106, detected at boot), the user button and five-way
 joystick, the L76K GNSS, and Bluetooth Auto on the factory S140 7.3.0 UF2
 bootloader. Double-tap reset and copy the UF2 onto the bootloader drive:
 
     ./tools/prns build hopspot wio-tracker-l1
 
-The L1 Pro 1W has its own build, which powers the radio's 1 W amplifier rail
+The website image is for the standard-radio OLED models, not the E-Ink or
+1 W variants. Confirm the model label even when INFO_UF2.TXT reports the
+shared `TRACKER L1` identity.
+
+The L1 Pro 1W has its own developer build, which powers the radio's 1 W amplifier rail
 and maps requested output power through the amplifier's gain curve:
 
     ./tools/prns build hopspot wio-tracker-l1-pro-1w

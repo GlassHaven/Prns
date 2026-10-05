@@ -478,7 +478,7 @@ pub const HELTEC_V3: MemoryProfile = MemoryProfile {
     regions: &ESP_8_MIB_REGIONS,
     firmware: firmware_placement(0x10000, 0x67D000, 0x67D000),
     journals: &ESP_8_MIB_JOURNALS,
-    runtime_reservations: &S3FN8_RUNTIME_RESERVATIONS,
+    runtime_reservations: &S3_RUNTIME_RESERVATIONS,
 };
 
 pub const HELTEC_WIRELESS_STICK_LITE_V3: MemoryProfile = MemoryProfile {

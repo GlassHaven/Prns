@@ -170,7 +170,9 @@ impl WioBoard {
             twim_config,
             TWIM_TX_BUFFER.take(),
         );
-        let mut display = super::DisplayDriver::new(display_bus);
+        static DISPLAYED_FRAME: ConstStaticCell<personal_hopspot_core::face_64x128::Frame> =
+            ConstStaticCell::new(personal_hopspot_core::face_64x128::Frame::new());
+        let mut display = super::DisplayDriver::new(display_bus, DISPLAYED_FRAME.take());
         let display = match display.initialize().await {
             Ok(()) => BoardDisplay::initialized(display),
             Err(_) => {

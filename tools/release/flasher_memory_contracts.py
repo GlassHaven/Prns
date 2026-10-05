@@ -47,6 +47,14 @@ ESP_MEMORY_CONTRACTS = {
             "partition-table": (0x00008000, 0x00009000),
         },
     },
+    "heltec-v3": {
+        "profile": "heltec-v3",
+        "regions": {
+            "application": (0x00010000, 0x0067d000),
+            "bootloader": (0x00000000, 0x00008000),
+            "partition-table": (0x00008000, 0x00009000),
+        },
+    },
 }
 
 UF2_MEMORY_CONTRACTS = {
@@ -94,6 +102,11 @@ UF2_MEMORY_CONTRACTS = {
         "profile": "muzi-base-duo",
         "firmware_owned": (0x00026000, 0x000e2000),
         "transport_envelope": (0x00026000, 0x000e2000),
+    },
+    ("seeed-wio-tracker-l1", "s140", "7.3.0", "0x0123", 0x00027000, "0xada52840"): {
+        "profile": "wio-tracker-l1",
+        "firmware_owned": (0x00027000, 0x000e1000),
+        "transport_envelope": (0x00027000, 0x000e1000),
     },
 }
 
