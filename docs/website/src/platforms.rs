@@ -81,6 +81,20 @@ pub struct LandingPlatformChip {
     pub icon: Option<&'static str>,
 }
 
+impl LandingPlatformChip {
+    pub fn chip_badge(&self) -> Option<&'static str> {
+        PLATFORMS
+            .iter()
+            .find(|platform| platform.name == self.name)
+            .and_then(|platform| match platform.tier {
+                Tier::Shipping | Tier::SdkPreview | Tier::Flashable => None,
+                Tier::InstallationPreview | Tier::Qualification | Tier::BringUp | Tier::Roadmap => {
+                    platform.tier.chip_badge()
+                }
+            })
+    }
+}
+
 pub struct BoardImage {
     pub data_uri: &'static str,
 }
@@ -402,6 +416,12 @@ pub const PLATFORMS: &[Platform] = &[
         icon: Some("apple"),
     },
     Platform {
+        name: "React Native",
+        group: Group::Mobile,
+        tier: Tier::BringUp,
+        icon: Some("react"),
+    },
+    Platform {
         name: "ESP32-S3",
         group: Group::Microcontroller,
         tier: Tier::Shipping,
@@ -436,6 +456,18 @@ pub const PLATFORMS: &[Platform] = &[
         group: Group::Microcontroller,
         tier: Tier::Shipping,
         icon: Some("semtech"),
+    },
+    Platform {
+        name: "Wi-Fi HaLoW",
+        group: Group::Microcontroller,
+        tier: Tier::InstallationPreview,
+        icon: None,
+    },
+    Platform {
+        name: "MediaTek MT7628",
+        group: Group::SingleBoardComputer,
+        tier: Tier::InstallationPreview,
+        icon: Some("mediatek"),
     },
     Platform {
         name: "Raspberry Pi RP3A0",
@@ -635,6 +667,10 @@ pub const LANDING_PLATFORM_CHIPS: &[LandingPlatformChip] = &[
         icon: Some("apple"),
     },
     LandingPlatformChip {
+        name: "React Native",
+        icon: Some("react"),
+    },
+    LandingPlatformChip {
         name: "ESP32-S3",
         icon: Some("espressif"),
     },
@@ -657,6 +693,14 @@ pub const LANDING_PLATFORM_CHIPS: &[LandingPlatformChip] = &[
     LandingPlatformChip {
         name: "LR1110",
         icon: Some("semtech"),
+    },
+    LandingPlatformChip {
+        name: "MediaTek MT7628",
+        icon: Some("mediatek"),
+    },
+    LandingPlatformChip {
+        name: "Wi-Fi HaLoW",
+        icon: None,
     },
     LandingPlatformChip {
         name: "Rust",
