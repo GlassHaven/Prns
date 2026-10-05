@@ -233,6 +233,14 @@ jobs:
           path: |
             validation-artifacts/results/bluetooth-auto-embassy
             validation-artifacts/results/virtual-device-simulation
+            validation-artifacts/results/core-work-simulation/**/case.json
+            validation-artifacts/results/core-work-simulation/**/original.json
+            validation-artifacts/results/core-work-simulation/**/reduced.json
+            validation-artifacts/results/core-work-simulation/**/original.stderr.log
+            validation-artifacts/results/remote-control-simulation/**/case.json
+            validation-artifacts/results/remote-control-simulation/**/original.json
+            validation-artifacts/results/remote-control-simulation/**/reduced.json
+            validation-artifacts/results/remote-control-simulation/**/original.stderr.log
           if-no-files-found: ignore
       - name: doc — prns-interfaces-embassy (all features)
         run: cargo doc --locked --no-deps --document-private-items --all-features --quiet
