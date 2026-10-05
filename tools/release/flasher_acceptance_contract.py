@@ -1,4 +1,4 @@
-"""Authoritative physical-qualification matrix and scaffold construction."""
+"""Release policy and historical physical-qualification contracts."""
 
 from __future__ import annotations
 
@@ -11,6 +11,17 @@ import re
 from flasher_board_catalog import release_boards
 from flasher_manifest import require_schema, target_artifacts
 from flasher_hotfix import HotfixSpec
+
+
+SOFTWARE_ACCEPTANCE_SCHEMA = 7
+SOFTWARE_ROSTER_SCHEMA = 5
+
+
+def software_qualification(version: object) -> bool:
+    if not isinstance(version, str):
+        return False
+    matched = re.fullmatch(r"0\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-hotfix\.[1-9][0-9]*)?", version)
+    return matched is not None and tuple(map(int, matched.groups())) >= (3, 8)
 
 
 RELEASE_BOARDS = release_boards(Path(__file__))

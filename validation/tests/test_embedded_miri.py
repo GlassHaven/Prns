@@ -33,7 +33,7 @@ class EmbeddedMiriTests(unittest.TestCase):
                 ("embedded-persistence", "flash-journal-state-machine"),
             ],
         )
-        self.assertEqual(len(scenarios[2].quick_filters), 3)
+        self.assertEqual(len(scenarios[2].quick_filters), 6)
 
     def test_validation_registry_launches_miri_as_a_repository_module(self) -> None:
         manifest = embedded_miri.tomllib.loads(

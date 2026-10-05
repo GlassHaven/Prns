@@ -900,8 +900,8 @@ class AcceptanceValidatorTests(unittest.TestCase):
 
     def test_version_bound_maintainer_override_rejects_other_versions(self) -> None:
         record = self.override_acceptance()
-        record["candidate"]["version"] = "0.3.8"
-        self.manifest_document["release"]["version"] = "0.3.8"
+        record["candidate"]["version"] = "0.3.6"
+        self.manifest_document["release"]["version"] = "0.3.6"
         self.manifest_path.write_text(
             json.dumps(self.manifest_document, sort_keys=True) + "\n", encoding="utf-8"
         )

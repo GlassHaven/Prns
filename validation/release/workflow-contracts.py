@@ -807,8 +807,8 @@ def validate() -> list[str]:
             rf'(?ms)^\[\[suite\]\]\nid = "{re.escape(pilot)}"\n(.*?)(?=^\[\[suite\]\]|\Z)',
             manifest_document,
         )
-        if pilot_block is None or 'enforcement = "advisory"' not in pilot_block.group(1):
-            errors.append(f"{pilot} is not explicitly advisory")
+        if pilot_block is None or 'enforcement = "required"' not in pilot_block.group(1):
+            errors.append(f"{pilot} is not a required automated release check")
     esp_resources = re.search(
         r'(?ms)^\[\[suite\]\]\nid = "esp32-firmware-check"\n(.*?)(?=^\[\[suite\]\]|\Z)',
         manifest_document,
@@ -1091,6 +1091,13 @@ def validate() -> list[str]:
         ROOT / ".github" / "workflows" / "flasher-finalize-evidence.yml"
     ).read_text(encoding="utf-8")
     for finalization_gate in (
+        "Verify automated release-readiness workflow custody",
+        ".software_validation.workflow_run_id",
+        ".software_validation.sha256",
+        '.head_sha == $sha and .conclusion == "success"',
+        '.event == "workflow_dispatch" and .path == ".github/workflows/release-readiness.yml"',
+        '--name "release-readiness-manifest-${source_commit}"',
+        'cmp "target/qualification-evidence/${digest}" target/readiness-custody/release-manifest.json',
         "qualification_evidence_sha256:",
         'PYTHONDONTWRITEBYTECODE: "1"',
         "qualification-evidence-v${RELEASE_VERSION}.tar.gz",

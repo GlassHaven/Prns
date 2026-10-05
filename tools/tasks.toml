@@ -898,7 +898,7 @@ requires = ["bash"]
 
 [[task]]
 id = "release.acceptance.validate"
-summary = "Validate signed physical qualification and its complete evidence set."
+summary = "Validate exact-candidate automated or historical physical acceptance."
 domain = "release"
 effect = "read-only"
 platforms = ["any"]
@@ -938,7 +938,7 @@ requires = ["python3"]
 
 [[task]]
 id = "release.tester-roster.create"
-summary = "Create a versioned tester-roster scaffold from the catalog-aware template."
+summary = "Create a release-owner record or historical physical roster for a version."
 domain = "release"
 effect = "workspace-write"
 platforms = ["any"]
@@ -948,7 +948,7 @@ requires = ["python3"]
 
 [[task]]
 id = "release.tester-roster.validate"
-summary = "Validate that a version's tester roster covers every shipping target."
+summary = "Validate the versioned release owner or historical physical tester roster."
 domain = "release"
 effect = "read-only"
 platforms = ["any"]
@@ -978,7 +978,7 @@ requires = ["python3"]
 
 [[task]]
 id = "release.candidate.verify"
-summary = "Verify a signed candidate and optional physical qualification evidence."
+summary = "Verify a signed candidate and optional release acceptance evidence."
 domain = "release"
 effect = "read-only"
 platforms = ["any"]
@@ -1059,6 +1059,10 @@ requires = ["python3"]
 [[internal]]
 path = "tools/device/developer_flasher_candidate.py"
 reason = "Validated local developer candidate boundary shared by the developer flasher workflow and its focused tests."
+
+[[internal]]
+path = "tools/release/flasher_software_acceptance.py"
+reason = "Exact-source automated acceptance validation shared by candidate generation and signed release qualification."
 
 [[internal]]
 path = "tools/release/flasher_acceptance_contract.py"

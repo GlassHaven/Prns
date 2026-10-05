@@ -1,6 +1,6 @@
 {
   "name": "personal-rns",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Correct, robust, fast Personal Reticulum bindings for native JavaScript and browsers.",
   "license": "MIT OR Apache-2.0",
   "homepage": "https://reticulum.rs",
@@ -121,14 +121,14 @@
     "vue": "^3.5.42"
   },
   "optionalDependencies": {
-    "personal-rns-darwin-arm64": "0.3.7",
-    "personal-rns-darwin-x64": "0.3.7",
-    "personal-rns-linux-arm64-gnu": "0.3.7",
-    "personal-rns-linux-arm64-musl": "0.3.7",
-    "personal-rns-linux-x64-gnu": "0.3.7",
-    "personal-rns-linux-x64-musl": "0.3.7",
-    "personal-rns-win32-arm64-msvc": "0.3.7",
-    "personal-rns-win32-x64-msvc": "0.3.7"
+    "personal-rns-darwin-arm64": "0.3.8",
+    "personal-rns-darwin-x64": "0.3.8",
+    "personal-rns-linux-arm64-gnu": "0.3.8",
+    "personal-rns-linux-arm64-musl": "0.3.8",
+    "personal-rns-linux-x64-gnu": "0.3.8",
+    "personal-rns-linux-x64-musl": "0.3.8",
+    "personal-rns-win32-arm64-msvc": "0.3.8",
+    "personal-rns-win32-x64-msvc": "0.3.8"
   },
   "publishConfig": {
     "access": "public"
