@@ -440,7 +440,7 @@ requires = ["cargo", "python"]
 
 [[task]]
 id = "repo.cargo-check"
-summary = "Compile-check every host-compatible first-party Cargo workspace in parallel."
+summary = "Compile-check every host-compatible first-party Cargo workspace with shared dependencies and parallel compilation."
 domain = "repo"
 effect = "workspace-write"
 platforms = ["any"]
