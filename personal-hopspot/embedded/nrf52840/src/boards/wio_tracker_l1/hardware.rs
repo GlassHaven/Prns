@@ -170,8 +170,8 @@ impl WioBoard {
             twim_config,
             TWIM_TX_BUFFER.take(),
         );
-        static DISPLAYED_PAGES: ConstStaticCell<[[u8; 128]; super::display::PAGES]> =
-            ConstStaticCell::new([[0; 128]; super::display::PAGES]);
+        static DISPLAYED_PAGES: ConstStaticCell<super::display::PageCache> =
+            ConstStaticCell::new(super::display::PageCache::new());
         let mut display = super::DisplayDriver::new(display_bus, DISPLAYED_PAGES.take());
         let display = match display.initialize().await {
             Ok(()) => BoardDisplay::initialized(display),

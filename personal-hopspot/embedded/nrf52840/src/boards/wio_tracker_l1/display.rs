@@ -2,7 +2,8 @@ use embassy_nrf::twim::Twim;
 use embassy_time::{Duration, Timer};
 use embedded_graphics::prelude::Point;
 use personal_hopspot_core::display::{
-    BlankingCommand, BlankingOutcome, BlankingResult, BufferRetention, PresentationOutcome,
+    BlankingCommand, BlankingOutcome, BlankingResult, BufferRetention, MonochromePageCache,
+    PresentationOutcome,
 };
 use personal_hopspot_core::face_64x128::{
     Frame, MappedPoint, PanelScale, PanelScaling, PanelSize, PanelTransform, PhysicalPoint,
@@ -17,7 +18,7 @@ use crate::immediate_display::ImmediateDisplayDevice;
 const ADDRESSES: [u8; 2] = [0x3d, 0x3c];
 const PANEL_WIDTH: u32 = 128;
 const PANEL_HEIGHT: u32 = 64;
-pub(super) const PAGES: usize = (PANEL_HEIGHT / 8) as usize;
+const PAGES: usize = (PANEL_HEIGHT / 8) as usize;
 const PANEL: PanelSize = match PanelSize::new(PANEL_WIDTH, PANEL_HEIGHT) {
     Ok(panel) => panel,
     Err(_) => panic!("the Wio Tracker L1 panel dimensions are nonzero"),
@@ -30,6 +31,8 @@ const TRANSFORM: PanelTransform = match PanelTransform::centered(
     Ok(transform) => transform,
     Err(_) => panic!("the canonical face fits the Wio Tracker L1 panel"),
 };
+pub(super) type PageCache = MonochromePageCache<{ PANEL_WIDTH as usize }, PAGES>;
+
 const IO_TIMEOUT: embassy_time::Duration = embassy_time::Duration::from_millis(50);
 
 const CONTROL_COMMAND: u8 = 0x00;
@@ -110,22 +113,18 @@ pub(crate) struct OledDisplay {
     i2c: Twim<'static>,
     address: u8,
     controller: Controller,
-    /// What the panel's GDDRAM holds while `panel_known` is set. Each frame is compared page by
-    /// page against it, so unchanged pages cost neither I2C time nor a second frame buffer.
-    page: &'static mut [[u8; PANEL_WIDTH as usize]; PAGES],
+    page: &'static mut PageCache,
     initialized: bool,
-    panel_known: bool,
 }
 
 impl OledDisplay {
-    pub(crate) fn new(i2c: Twim<'static>, page: &'static mut [[u8; PANEL_WIDTH as usize]; PAGES]) -> Self {
+    pub(crate) fn new(i2c: Twim<'static>, page: &'static mut PageCache) -> Self {
         Self {
             i2c,
             address: ADDRESSES[0],
             controller: Controller::Ssd1306,
             page,
             initialized: false,
-            panel_known: false,
         }
     }
 
@@ -141,12 +140,14 @@ impl OledDisplay {
             self.command(command)?;
         }
         self.command(NORMAL_DISPLAY)?;
-        *self.page = [[0; PANEL_WIDTH as usize]; PAGES];
-        self.panel_known = false;
-        for page in 0..PAGES {
-            self.write_page(page)?;
-        }
-        self.panel_known = true;
+        self.page.invalidate();
+        let address = self.address;
+        let column = self.controller.column_offset();
+        let i2c = &mut self.i2c;
+        self.page.present(
+            |_| [0; PANEL_WIDTH as usize],
+            |page, bytes| Self::write_page(i2c, address, column, page, bytes),
+        )?;
         self.command(DISPLAY_ON)?;
         Timer::after(Duration::from_millis(100)).await;
         self.initialized = true;
@@ -156,7 +157,7 @@ impl OledDisplay {
     pub(crate) fn force_dark(&mut self) {
         let _ = self.command(DISPLAY_OFF);
         self.initialized = false;
-        self.panel_known = false;
+        self.page.invalidate();
     }
 
     /// Meshtastic's controller probe: the low nibble of the status byte is 0x0 or 0x8 on SH1106
@@ -202,45 +203,46 @@ impl OledDisplay {
         if !self.initialized {
             return Err(DisplayIoError::NotInitialized);
         }
-        for page in 0..PAGES {
-            let mut next = [0u8; PANEL_WIDTH as usize];
-            for bit in 0..8u32 {
-                let y = page as u32 * 8 + bit;
-                for x in 0..PANEL_WIDTH {
-                    let Ok(MappedPoint::Source(source)) =
-                        TRANSFORM.map_panel_point(PhysicalPoint::new(x, y))
-                    else {
-                        continue;
-                    };
-                    if frame.pixel_is_on(Point::new(source.x() as i32, source.y() as i32)) {
-                        next[x as usize] |= 1 << bit;
+        let address = self.address;
+        let column = self.controller.column_offset();
+        let i2c = &mut self.i2c;
+        self.page.present(
+            |page| {
+                let mut next = [0u8; PANEL_WIDTH as usize];
+                for bit in 0..8u32 {
+                    let y = page as u32 * 8 + bit;
+                    for x in 0..PANEL_WIDTH {
+                        let Ok(MappedPoint::Source(source)) =
+                            TRANSFORM.map_panel_point(PhysicalPoint::new(x, y))
+                        else {
+                            continue;
+                        };
+                        if frame.pixel_is_on(Point::new(source.x() as i32, source.y() as i32)) {
+                            next[x as usize] |= 1 << bit;
+                        }
                     }
                 }
-            }
-            if self.panel_known && next == self.page[page] {
-                continue;
-            }
-            self.page[page] = next;
-            if let Err(error) = self.write_page(page) {
-                // A failed write leaves the panel's contents unknown; resend every page next time.
-                self.panel_known = false;
-                return Err(error);
-            }
-        }
-        self.panel_known = true;
-        Ok(())
+                next
+            },
+            |page, bytes| Self::write_page(i2c, address, column, page, bytes),
+        )
     }
 
-    fn write_page(&mut self, page: usize) -> Result<(), DisplayIoError> {
-        let column = self.controller.column_offset();
-        self.command(0xb0 | page as u8)?;
-        self.command(column & 0x0f)?;
-        self.command(0x10 | (column >> 4))?;
+    fn write_page(
+        i2c: &mut Twim<'static>,
+        address: u8,
+        column: u8,
+        page: usize,
+        bytes: &[u8; PANEL_WIDTH as usize],
+    ) -> Result<(), DisplayIoError> {
+        for command in [0xb0 | page as u8, column & 0x0f, 0x10 | (column >> 4)] {
+            i2c.blocking_write_timeout(address, &[CONTROL_COMMAND, command], IO_TIMEOUT)
+                .map_err(|_| DisplayIoError::I2c)?;
+        }
         let mut chunk = [0u8; PANEL_WIDTH as usize + 1];
         chunk[0] = CONTROL_DATA;
-        chunk[1..].copy_from_slice(&self.page[page]);
-        self.i2c
-            .blocking_write_timeout(self.address, &chunk, IO_TIMEOUT)
+        chunk[1..].copy_from_slice(bytes);
+        i2c.blocking_write_timeout(address, &chunk, IO_TIMEOUT)
             .map_err(|_| DisplayIoError::I2c)
     }
 

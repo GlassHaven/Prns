@@ -34,7 +34,7 @@ pub const REMOTE_CONTROL_INTERFACE_GROUP_CAP: usize = 32;
 pub const REMOTE_CONTROL_INTERFACE_CONFIG_CAP: usize = 48;
 pub const REMOTE_CONTROL_BUILD_VERSION_CAP: usize = 48;
 /// A node's human-facing name, as announced to other Reticulum nodes and apps.
-pub const REMOTE_CONTROL_NODE_NAME_CAP: usize = 32;
+pub const REMOTE_CONTROL_NODE_NAME_CAP: usize = 64;
 /// Version byte that prefixes a persisted node name record.
 pub const NODE_NAME_SNAPSHOT_VERSION: u8 = 1;
 /// A persisted node name: version byte, length byte, then the UTF-8 name.
@@ -1375,7 +1375,7 @@ impl RemoteControlBuildVersion {
     }
 }
 
-/// A node name a controller may set: 1..=32 bytes of UTF-8 without control characters and
+/// A node name a controller may set: 1..=64 bytes of UTF-8 without control characters and
 /// without surrounding whitespace, so what other nodes display is exactly what was entered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RemoteControlNodeName {

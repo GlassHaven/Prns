@@ -18,6 +18,7 @@ mod remote_control;
 #[cfg(feature = "embedded")]
 mod remote_control_executor;
 mod remote_control_inventory;
+mod remote_node_name;
 mod remote_subg_configuration;
 #[cfg(feature = "display")]
 mod screen;
@@ -85,6 +86,7 @@ pub use remote_control_inventory::{
     remote_control_interface_peers_from_snapshots, remote_control_inventory_from_snapshots,
     singleton_discovery_group,
 };
+pub use remote_node_name::apply_remote_node_name;
 pub use remote_subg_configuration::apply_remote_subg_configuration;
 #[cfg(feature = "display")]
 pub use screen::{

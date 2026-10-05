@@ -47,6 +47,20 @@ impl NodeNameStoreExchange {
         }
     }
 
+    pub fn store(
+        &self,
+        name: RemoteControlNodeName,
+    ) -> impl core::future::Future<Output = Result<(), EmbeddedPersistenceFailure>> + Unpin + '_
+    {
+        let caller = self.caller.try_lock().ok();
+        let admitted = caller.is_some() && self.submit(name);
+        NodeNameStoreFuture {
+            _caller: caller,
+            immediate_failure: (!admitted).then_some(EmbeddedPersistenceFailure::Capacity),
+            exchange: self,
+        }
+    }
+
     pub(super) fn publish_restored(&self, name: Option<RemoteControlNodeName>) {
         self.restored.lock(|state| {
             let mut state = state.borrow_mut();
@@ -212,15 +226,17 @@ pub fn store_node_name(
     NodeNameStoreFuture {
         _caller: caller,
         immediate_failure: (!admitted).then_some(EmbeddedPersistenceFailure::Capacity),
+        exchange: GlobalNodeNameStore,
     }
 }
 
-struct NodeNameStoreFuture<'a> {
+struct NodeNameStoreFuture<'a, Store> {
     _caller: Option<embassy_sync::mutex::MutexGuard<'a, CriticalSectionRawMutex, ()>>,
     immediate_failure: Option<EmbeddedPersistenceFailure>,
+    exchange: Store,
 }
 
-impl core::future::Future for NodeNameStoreFuture<'_> {
+impl<Store: AsRef<NodeNameStoreExchange>> core::future::Future for NodeNameStoreFuture<'_, Store> {
     type Output = Result<(), EmbeddedPersistenceFailure>;
 
     fn poll(
@@ -230,8 +246,23 @@ impl core::future::Future for NodeNameStoreFuture<'_> {
         if let Some(failure) = self.immediate_failure {
             return core::task::Poll::Ready(Err(failure));
         }
-        let completed = NODE_NAME_STORE.completed.wait();
+        let completed = self.exchange.as_ref().completed.wait();
         let mut completed = core::pin::pin!(completed);
         completed.as_mut().poll(context)
+    }
+}
+
+/// The single-board exchange without a per-owner pointer.
+pub struct GlobalNodeNameStore;
+
+impl AsRef<NodeNameStoreExchange> for GlobalNodeNameStore {
+    fn as_ref(&self) -> &NodeNameStoreExchange {
+        &NODE_NAME_STORE
+    }
+}
+
+impl AsRef<NodeNameStoreExchange> for NodeNameStoreExchange {
+    fn as_ref(&self) -> &Self {
+        self
     }
 }

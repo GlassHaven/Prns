@@ -1269,17 +1269,16 @@ fn discovery_group_snapshot_survives_compaction_and_reboot() {
 
 #[test]
 fn a_pending_node_name_makes_persistence_due_immediately() {
-    use super::super::node_name_store::store_node_name;
-    let _store = lock_discovery_group_store();
-    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
-    NODE_NAME_STORE.reset_for_test();
+    let groups = DiscoveryGroupConfigurationStoreExchange::new();
+    let names = NodeNameStoreExchange::new();
     embassy_futures::block_on(async {
-        let mut persistence = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4>::new(
+        let mut persistence = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _, _>::with_configuration_stores(
             TestFlash::new(),
             LAYOUT,
             EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
             FixedRouteSnapshotKeys::new(),
             (|_| {}) as fn(EmbeddedPersistenceDiagnostic),
+            &groups, &names,
         );
         let mut engine = EngineState::<crate::storage::GrowableHeap>::default();
         let mut remote_control = available_remote_control(&mut engine);
@@ -1298,7 +1297,7 @@ fn a_pending_node_name_makes_persistence_due_immediately() {
         assert!(persistence
             .next_deadline(InstantMillis(5))
             .is_none_or(|deadline| deadline.0 > 5));
-        let stored = store_node_name(RemoteControlNodeName::new("Box-Hopspot").unwrap());
+        let stored = names.store(RemoteControlNodeName::new("Box-Hopspot").unwrap());
         // Without this the manifold spins: work is signalled but progress is never due.
         assert_eq!(
             persistence.next_deadline(InstantMillis(5)),
@@ -1310,23 +1309,20 @@ fn a_pending_node_name_makes_persistence_due_immediately() {
             .next_deadline(InstantMillis(6))
             .is_none_or(|deadline| deadline.0 > 6));
     });
-    NODE_NAME_STORE.reset_for_test();
-    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
 }
 
 #[test]
 fn node_name_survives_progress_reboot_compaction_and_reboot() {
-    use super::super::node_name_store::{restored_node_name_now, store_node_name};
-    let _store = lock_discovery_group_store();
-    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
-    NODE_NAME_STORE.reset_for_test();
+    let groups = DiscoveryGroupConfigurationStoreExchange::new();
+    let names = NodeNameStoreExchange::new();
     let persistence_on = |flash| {
-        EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4>::new(
+        EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _, _>::with_configuration_stores(
             flash,
             LAYOUT,
             EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
             FixedRouteSnapshotKeys::new(),
             (|_| {}) as fn(EmbeddedPersistenceDiagnostic),
+            &groups, &names,
         )
     };
     embassy_futures::block_on(async {
@@ -1336,20 +1332,20 @@ fn node_name_survives_progress_reboot_compaction_and_reboot() {
         persistence
             .restore(&mut engine, &mut remote_control, InstantMillis(0))
             .await;
-        assert_eq!(restored_node_name_now(), Some(None));
+        assert_eq!(names.restored_now(), Some(None));
 
         let name = RemoteControlNodeName::new("Rooftop RAK").unwrap();
-        let stored = store_node_name(name);
+        let stored = names.store(name);
         persistence.progress(&mut engine, InstantMillis(1)).await;
         assert_eq!(stored.await, Ok(()));
-        assert_eq!(restored_node_name_now(), Some(Some(name)));
+        assert_eq!(names.restored_now(), Some(Some(name)));
 
         let mut rebooted = persistence_on(persistence.journal.take().unwrap().release());
-        NODE_NAME_STORE.reset_for_test();
+        names.reset_for_test();
         rebooted
             .restore(&mut engine, &mut remote_control, InstantMillis(0))
             .await;
-        assert_eq!(restored_node_name_now(), Some(Some(name)));
+        assert_eq!(names.restored_now(), Some(Some(name)));
 
         rebooted.require_snapshot(EmbeddedPersistenceTarget::CriticalState, InstantMillis(2));
         rebooted.try_start_compaction(&engine, InstantMillis(2));
@@ -1364,14 +1360,100 @@ fn node_name_survives_progress_reboot_compaction_and_reboot() {
         assert_eq!(rebooted.compaction, None);
 
         let mut compacted = persistence_on(rebooted.journal.take().unwrap().release());
-        NODE_NAME_STORE.reset_for_test();
+        names.reset_for_test();
         compacted
             .restore(&mut engine, &mut remote_control, InstantMillis(0))
             .await;
-        assert_eq!(restored_node_name_now(), Some(Some(name)));
+        assert_eq!(names.restored_now(), Some(Some(name)));
     });
-    NODE_NAME_STORE.reset_for_test();
-    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
+}
+
+#[test]
+fn node_name_owners_isolate_restore_failure_cancellation_and_retry() {
+    #[track_caller]
+    fn ready<F: core::future::Future>(future: F) -> F::Output {
+        use core::task::{Context, Poll, Waker};
+        match core::pin::pin!(future)
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+        {
+            Poll::Ready(value) => value,
+            Poll::Pending => panic!("expected a settled name request"),
+        }
+    }
+    let names = [NodeNameStoreExchange::new(), NodeNameStoreExchange::new()];
+    let groups = [
+        DiscoveryGroupConfigurationStoreExchange::new(),
+        DiscoveryGroupConfigurationStoreExchange::new(),
+    ];
+    let first_name = RemoteControlNodeName::new("First node").unwrap();
+    let second_name = RemoteControlNodeName::new("Second node").unwrap();
+    embassy_futures::block_on(async {
+        let (flash, fail_write) = TestFlash::controlled();
+        let mut owners = [(flash, &groups[0], &names[0]), (TestFlash::new(), &groups[1], &names[1])].map(|(flash, groups, names)| {
+            EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _, _>::with_configuration_stores(
+                flash, LAYOUT,
+                EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
+                FixedRouteSnapshotKeys::new(), (|_| {}) as fn(EmbeddedPersistenceDiagnostic), groups, names,
+            )
+        });
+        let mut engines = core::array::from_fn::<_, 2, _>(|_| {
+            EngineState::<crate::storage::GrowableHeap>::default()
+        });
+        for (owner, engine) in owners.iter_mut().zip(&mut engines) {
+            let mut remote = available_remote_control(engine);
+            owner.restore(engine, &mut remote, InstantMillis(0)).await;
+        }
+        let first = names[0].store(first_name);
+        let second = names[1].store(second_name);
+        fail_write.set(true);
+        owners[0].progress(&mut engines[0], InstantMillis(1)).await;
+        assert_eq!(ready(first), Err(EmbeddedPersistenceFailure::Flash));
+        assert_eq!(names[0].restored_now(), Some(None));
+        assert!(names[1].has_pending_request());
+        owners[1].progress(&mut engines[1], InstantMillis(1)).await;
+        assert_eq!(ready(second), Ok(()));
+        assert_eq!(names[1].restored_now(), Some(Some(second_name)));
+
+        let abandoned = names[1].store(first_name);
+        drop(abandoned);
+        assert_eq!(
+            ready(names[1].store(second_name)),
+            Err(EmbeddedPersistenceFailure::Capacity)
+        );
+        owners[1].progress(&mut engines[1], InstantMillis(2)).await;
+        assert_eq!(names[1].restored_now(), Some(Some(first_name)));
+        let subsequent = names[1].store(second_name);
+        owners[1].progress(&mut engines[1], InstantMillis(3)).await;
+        assert_eq!(ready(subsequent), Ok(()));
+
+        let retry = names[0].store(first_name);
+        let retry_at = owners[0].retry_not_before.unwrap_or(InstantMillis(4));
+        // A failed append may retire an arena; allow each bounded compaction phase to run.
+        for step in 0..32 {
+            if !names[0].has_pending_request() {
+                break;
+            }
+            owners[0]
+                .progress(&mut engines[0], InstantMillis(retry_at.0 + step))
+                .await;
+        }
+        assert_eq!(ready(retry), Ok(()));
+        assert_eq!(names[0].restored_now(), Some(Some(first_name)));
+        engines[0] = EngineState::<crate::storage::GrowableHeap>::default();
+        let mut remote = available_remote_control(&mut engines[0]);
+        let flash = owners[0].journal.take().unwrap().release();
+        let mut rebooted = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4, _, _>::with_configuration_stores(
+            flash, LAYOUT, EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
+            FixedRouteSnapshotKeys::new(), (|_| {}) as fn(EmbeddedPersistenceDiagnostic), &groups[0], &names[0],
+        );
+        rebooted
+            .restore(&mut engines[0], &mut remote, InstantMillis(0))
+            .await;
+        assert_eq!(names[0].restored_now(), Some(Some(first_name)));
+        assert_eq!(names[1].restored_now(), Some(Some(second_name)));
+    });
+    assert_eq!(core::mem::size_of::<GlobalNodeNameStore>(), 0);
 }
 
 #[test]

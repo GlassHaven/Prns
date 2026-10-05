@@ -209,6 +209,25 @@ ESP boards already retain profiles; all nRF and ESP remote profile changes now u
 same tested persistence and rollback implementation. This handles failed writes;
 it does not add a timed confirmation protocol for changes made over the radio.
 
+### Persistent node names and Wio OLED updates
+
+All nRF Hopspot boards expose `SetNodeName` and `DescribeNodeName` through
+authorized Remote Control, incorporating [PR #263](https://github.com/KenAKAFrosty/Prns/pull/263).
+Names accept 1–64 UTF-8 bytes without control characters or surrounding
+whitespace, including the existing longer factory names. The current journal
+retains the name across reboot and compaction without moving identity or storage
+regions. A successful command confirms persistence and updates both the LXMF
+delivery and node-page announcements. Retrying after an announcement failure
+reapplies both announcements even when the name is already durable. ESP32
+firmware does not yet advertise these two commands.
+
+The Wio Tracker L1 and Pro 1W incorporate the OLED update from
+[PR #259](https://github.com/KenAKAFrosty/Prns/pull/259): only changed panel pages
+are transferred, with a full redraw after an uncertain or partial I2C write.
+The integration keeps the page cache statically allocated. Host tests inject
+partial transfers at every page and check retry recovery; these do not replace
+physical display or bus testing.
+
 ### First controller on an nRF board
 
 Install Hopspot, let it start, then use **Connect your controller** on that

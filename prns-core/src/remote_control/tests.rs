@@ -2037,7 +2037,10 @@ fn node_name_requests_and_responses_round_trip_and_reject_malformed_bodies() {
         let mut bytes = [0u8; RemoteControlRequest::MAX_ENCODED_LEN];
         let written = request.write_into(&mut bytes).unwrap();
         assert_eq!(written, request.encoded_len());
-        assert_eq!(RemoteControlRequest::parse(&bytes[..written]), Ok(request));
+        assert_eq!(
+            RemoteControlRequest::parse(bytes.get(..written).unwrap()),
+            Ok(request)
+        );
     }
     let malformed = |kind: RemoteControlRequestKind, body: &[u8]| {
         let mut bytes = vec![
@@ -2083,7 +2086,7 @@ fn node_name_requests_and_responses_round_trip_and_reject_malformed_bodies() {
         let mut bytes = [0u8; RemoteControlResponse::MAX_ENCODED_LEN];
         let written = response.write_into(&mut bytes).unwrap();
         assert_eq!(
-            RemoteControlResponse::parse(&bytes[..written]),
+            RemoteControlResponse::parse(bytes.get(..written).unwrap()),
             Ok(response)
         );
         assert!(written <= kind.maximum_response_encoded_len());
@@ -2096,17 +2099,17 @@ fn node_name_snapshots_round_trip_and_refuse_unknown_versions() {
     let mut encoded = [0u8; NODE_NAME_SNAPSHOT_MAX_LEN];
     let written = name.encode_snapshot(&mut encoded);
     assert_eq!(
-        RemoteControlNodeName::decode_snapshot(&encoded[..written]),
+        RemoteControlNodeName::decode_snapshot(encoded.get(..written).unwrap()),
         Some(name)
     );
     let mut future = encoded;
     future[0] = NODE_NAME_SNAPSHOT_VERSION + 1;
     assert_eq!(
-        RemoteControlNodeName::decode_snapshot(&future[..written]),
+        RemoteControlNodeName::decode_snapshot(future.get(..written).unwrap()),
         None
     );
     assert_eq!(
-        RemoteControlNodeName::decode_snapshot(&encoded[..written - 1]),
+        RemoteControlNodeName::decode_snapshot(encoded.get(..written - 1).unwrap()),
         None
     );
 }

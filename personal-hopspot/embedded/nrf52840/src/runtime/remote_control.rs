@@ -98,6 +98,8 @@ pub(super) const fn capabilities() -> RemoteControlCapabilities {
         .with_request(RemoteControlRequestKind::InventoryInterfacePeers)
         .with_request(RemoteControlRequestKind::InventoryInterfaceConfig)
         .with_request(RemoteControlRequestKind::SetInterfaceLoRaProfile)
+        .with_request(RemoteControlRequestKind::SetNodeName)
+        .with_request(RemoteControlRequestKind::DescribeNodeName)
         .with_request(RemoteControlRequestKind::DescribeBuild)
         .with_request(RemoteControlRequestKind::DescribePower)
         .with_request(RemoteControlRequestKind::SetSystemPower)
@@ -241,6 +243,12 @@ pub(super) async fn execute<D: RetainedDisplayDevice>(
                 RemoteControlLoRaOutcome::Applied,
             ))
         }
+        RemoteControlHostCommand::SetNodeName { name } => Ok(
+            RemoteControlHostResponse::SetNodeName(super::node_name::set(name).await?),
+        ),
+        RemoteControlHostCommand::DescribeNodeName => Ok(
+            RemoteControlHostResponse::DescribeNodeName(super::node_name::current()),
+        ),
         RemoteControlHostCommand::DescribeBuild => Ok(RemoteControlHostResponse::DescribeBuild(
             hopspot::hopspot_remote_control_build_version()
                 .map_err(|_| RemoteControlHostCommandError::ApplyFailed)?,

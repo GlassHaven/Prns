@@ -58,6 +58,7 @@ mod interface_cards;
 mod learned_state;
 #[cfg(any(feature = "board-t-echo", feature = "board-mesh-pocket"))]
 pub(crate) mod node;
+mod node_name;
 #[cfg(any(feature = "board-t-echo", feature = "board-mesh-pocket"))]
 mod remote_control;
 #[cfg(any(

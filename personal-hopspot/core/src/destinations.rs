@@ -171,6 +171,22 @@ pub fn named_node_announce_app_data(
 #[cfg(test)]
 mod tests {
     #[test]
+    fn long_factory_names_and_maximum_custom_names_fit_both_announces() {
+        use personal_rns::remote_control::{RemoteControlNodeName, REMOTE_CONTROL_NODE_NAME_CAP};
+        for text in [
+            "Personal Hopspot Wio Tracker L1 Pro 1W",
+            &"n".repeat(REMOTE_CONTROL_NODE_NAME_CAP),
+        ] {
+            let name = RemoteControlNodeName::new(text).unwrap();
+            let delivery = super::named_delivery_announce_app_data(&name);
+            assert_eq!(&delivery[..3], &[0x92, 0xc4, text.len() as u8]);
+            assert_eq!(&delivery[3..delivery.len() - 1], text.as_bytes());
+            assert_eq!(delivery.last(), Some(&0xc0));
+            assert_eq!(super::named_node_announce_app_data(&name), text.as_bytes());
+        }
+    }
+
+    #[test]
     fn named_announce_app_data_matches_the_built_in_shape() {
         let name =
             personal_rns::remote_control::RemoteControlNodeName::new("Personal Hopspot RAK4631")

@@ -15,7 +15,10 @@ use personal_rns::runtime::{
     RemoteControlHostCommandError,
 };
 
-use super::{COMMANDS, COMPLETION};
+#[cfg(not(any(feature = "board-t-echo", feature = "board-mesh-pocket")))]
+use super::headless::{COMMANDS, COMPLETION};
+#[cfg(any(feature = "board-t-echo", feature = "board-mesh-pocket"))]
+use super::node::{COMMANDS, COMPLETION};
 use crate::boards::selected as board;
 
 const APPLY_ATTEMPTS: u8 = 20;
@@ -68,20 +71,25 @@ async fn apply(name: &RemoteControlNodeName) -> Result<(), ()> {
     Ok(())
 }
 
-/// Persist `name`, then announce with it. Unchanged when it already is the current name.
+/// A durable name still needs reapplying after a failed or interrupted announce update.
 pub(super) async fn set(
     name: RemoteControlNodeName,
 ) -> Result<RemoteControlApplyOutcome, RemoteControlHostCommandError> {
-    if current() == name {
-        return Ok(RemoteControlApplyOutcome::Unchanged);
-    }
-    store_node_name(name)
-        .await
-        .map_err(|_| RemoteControlHostCommandError::ApplyFailed)?;
-    apply(&name)
-        .await
-        .map_err(|()| RemoteControlHostCommandError::ApplyFailed)?;
-    Ok(RemoteControlApplyOutcome::Applied)
+    hopspot::apply_remote_node_name(
+        restored_node_name().await,
+        name,
+        async |name| {
+            store_node_name(name)
+                .await
+                .map_err(|_| RemoteControlHostCommandError::PersistenceFailed)
+        },
+        async |name| {
+            apply(&name)
+                .await
+                .map_err(|()| RemoteControlHostCommandError::ApplyFailed)
+        },
+    )
+    .await
 }
 
 /// Re-apply a stored name once the journal has been restored at boot. Awaited at the start of
