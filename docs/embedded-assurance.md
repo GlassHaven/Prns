@@ -26,7 +26,7 @@ export PATH="$PWD/target/embedded-assurance-tools/bin:$PATH"
 
 The preparation command derives its download, checksum, build, identity, and model requirements from the same inventories checked by the doctor. It refuses unknown suites, unsafe archive paths, checksum mismatches, unexpected tool identities, and broad installation roots. A host package format that cannot be prepared automatically remains an explicit doctor-guided setup rather than silently falling back to a different emulator.
 
-## Run the quick evidence
+## Run the release evidence
 
 Check generated memory contracts first, then run the affected executable proofs:
 
@@ -53,11 +53,28 @@ missing tools; readiness failures point back to the embedded-assurance doctor.
 Platform pilots remain scheduled/release work, so pre-push reports selected
 pilots as deferred instead of silently omitting them.
 
-Run the full Miri borrow-model matrix before release-sensitive changes:
+The `embedded-miri-quick` suite is the focused Miri gate for pull requests and
+releases. It exercises both radio drivers and an explicit persistence selection covering
+encoding buffer limits, durable snapshots, recovery, isolated ownership, cancelled
+commit confirmation, and rollback retry. Its target duration is five to ten minutes;
+the validation runner enforces a 15-minute limit. Every selected filter must complete
+with passing, unignored tests. A timeout or missing test fails the gate.
+
+All native persistence tests, including every fault-injection boundary, remain required.
+Focused Miri adds memory-model checking without interpreting the entire native fault
+campaign for each release.
+
+## Optional exhaustive Miri
+
+Run the exhaustive borrow-model matrix for deeper investigation:
 
 ```console
 python3 validation/run.py run --suite embedded-miri-full
 ```
+
+The `embedded-miri-deep` workflow runs weekly and on manual dispatch. The monthly
+`deep-validation` workflow also includes this suite. Exhaustive Miri is outside the
+routine PR and release gate; reported failures still require investigation.
 
 The registered full suite expands into eight round-robin shards. Each discovers the
 complete component inventory and runs its assigned tests under both borrow models,
@@ -77,7 +94,7 @@ To retry a failed shard without repeating successful shards from the same clean 
 
 ```console
 python3 validation/run.py run --suite embedded-miri-full-shard-0-of-8
-python3 validation/run.py aggregate --tier release --suite embedded-miri-full --expected-sha "$(git rev-parse HEAD)"
+python3 validation/run.py aggregate --tier scheduled --suite embedded-miri-full --expected-sha "$(git rev-parse HEAD)"
 ```
 
 Use the failed shard's actual index. Per-test logs remain in each shard's artifact
@@ -87,7 +104,7 @@ keys, while each simulated node still owns fresh keys, engine state and authoriz
 tables.
 
 
-## Build and combine the full evidence
+## Build and combine the release evidence
 
 The production resource matrix is heavier because it builds every current firmware target through the canonical builder:
 
@@ -113,7 +130,15 @@ Replace the reviewed baseline only from a complete passing matrix:
   --matrix validation-artifacts/assurance/matrix.json
 ```
 
-Refresh rejects missing required evidence, incompatible target or capability contracts, working-tree or mixed-commit evidence, and Miri results without both borrow models. The assurance crate also parses the checked-in baseline during its tests so schema or canonical-matrix drift cannot leave the snapshot silently stale.
+Refresh accepts passing focused Miri alongside the required firmware and emulator
+evidence. Proofs explicitly record focused or exhaustive scope, borrow models, test
+counts, source commit, tool identities, and artifact fingerprints. Exhaustive scope
+still requires both models and the complete shard collection. A focused result is
+never relabeled as exhaustive.
+
+Refresh rejects missing required evidence, incompatible target or capability contracts,
+and working-tree or mixed-commit evidence. This retains exact candidate provenance
+while removing the requirement to rerun exhaustive Miri for baseline refreshes. The assurance crate also parses the checked-in baseline during its tests so schema or canonical-matrix drift cannot leave the snapshot silently stale.
 
 These checks establish memory contracts, executable structure, measured stack evidence, production task-pool allocation, target-ABI sizes for named semantic-scenario futures, Rust memory-model behavior for exercised components, and matching component behavior as target instructions. The checks do not prove RF behavior, physical peripherals, timing, power, SoftDevice behavior, or whole-board operation.
 

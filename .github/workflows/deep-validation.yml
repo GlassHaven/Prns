@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - id: matrix
         env:
-          VALIDATION_TIER: ${{ github.event_name == 'schedule' && 'scheduled' || 'release' }}
+          VALIDATION_TIER: scheduled
         run: |
           python3 validation/run.py verify
           echo "tier=$VALIDATION_TIER" >> "$GITHUB_OUTPUT"

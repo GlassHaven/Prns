@@ -177,9 +177,22 @@ class WorkflowSchedulingTests(unittest.TestCase):
                     job.index("validation/run.py aggregate"),
                     job.index("./tools/prns build embedded assurance summarize"),
                 )
-                self.assertIn("--suite embedded-miri-full", job)
+                expected = "embedded-miri-full" if workflow == "deep-validation.yml" else "embedded-miri-quick"
+                self.assertIn(f"--suite {expected}", job)
                 self.assertIn("--proofs validation-artifacts/results", job)
                 self.assertIn("dtolnay/rust-toolchain@", job)
+
+    def test_exhaustive_miri_has_an_independent_weekly_and_manual_workflow(self) -> None:
+        workflow = (ROOT / ".github/workflows/embedded-miri-deep.yml").read_text()
+        self.assertIn('cron: "17 9 * * 1"', workflow)
+        self.assertIn('workflow_dispatch:', workflow)
+        jobs = self.workflow_jobs("embedded-miri-deep.yml")
+        self.assertIn('--tier scheduled --suite embedded-miri-full', jobs["inventory"])
+        self.assertIn('--tier scheduled --suite embedded-miri-full', jobs["collect"])
+        self.assertIn('if: always()', jobs["collect"])
+        release = (ROOT / ".github/workflows/release-readiness.yml").read_text()
+        self.assertNotIn('embedded-miri-full', release)
+        self.assertNotIn('continue-on-error', workflow)
 
     def test_deep_validation_rejects_every_unsuccessful_lane(self) -> None:
         aggregate = self.workflow_jobs("deep-validation.yml")["deep-validation"]

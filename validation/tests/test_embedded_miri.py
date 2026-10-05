@@ -35,7 +35,7 @@ class EmbeddedMiriTests(unittest.TestCase):
                 ("embedded-persistence", "flash-journal-state-machine"),
             ],
         )
-        self.assertEqual(len(scenarios[2].quick_filters), 6)
+        self.assertEqual(len(scenarios[2].quick_filters), 11)
 
     def test_validation_registry_launches_miri_as_a_repository_module(self) -> None:
         manifest = embedded_miri.tomllib.loads(
@@ -169,6 +169,23 @@ class EmbeddedMiriTests(unittest.TestCase):
         self.assertEqual(embedded_miri.parse_completed_tests(output), 16)
         with self.assertRaises(embedded_miri.EmbeddedMiriError):
             embedded_miri.parse_completed_tests(b"test result: FAILED")
+
+    def test_focused_filters_cannot_pass_with_missing_or_ignored_tests(self) -> None:
+        for output in (
+            b"test result: ok. 0 passed; 0 failed; 0 ignored;",
+            b"test result: ok. 1 passed; 0 failed; 1 ignored;",
+        ):
+            with self.subTest(output=output), self.assertRaises(embedded_miri.EmbeddedMiriError):
+                embedded_miri.parse_completed_tests(output)
+
+    def test_release_requires_bounded_focused_miri_and_schedules_exhaustive_miri(self) -> None:
+        manifest = embedded_miri.tomllib.loads((ROOT / "validation/manifest.toml").read_text())
+        suites = {suite["id"]: suite for suite in manifest["suite"]}
+        self.assertEqual(suites["embedded-miri-quick"]["timeout_seconds"], 900)
+        self.assertEqual(suites["embedded-miri-quick"]["tiers"], ["pr", "release"])
+        self.assertEqual(suites["embedded-miri-full"]["tiers"], ["scheduled"])
+        self.assertEqual(embedded_miri.mode_configuration(embedded_miri.Mode.QUICK).scope, "focused")
+        self.assertEqual(embedded_miri.mode_configuration(embedded_miri.Mode.FULL).scope, "exhaustive")
 
     def test_runner_clears_only_owned_component_evidence(self) -> None:
         scenarios = embedded_miri.load_inventory()

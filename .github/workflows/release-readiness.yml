@@ -81,7 +81,7 @@ jobs:
     needs: inventory
     name: ${{ matrix.id }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 330
+    timeout-minutes: 260
     env:
       RUSTUP_TOOLCHAIN: 1.96.0
     strategy:
@@ -294,7 +294,7 @@ jobs:
             --suite embedded-isa-thumbv7em \
             --suite embedded-isa-riscv32imac \
             --suite embedded-isa-xtensa-esp32s3 \
-            --suite embedded-miri-full \
+            --suite embedded-miri-quick \
             --suite embedded-platform-nrf52840 \
             --suite embedded-platform-esp32s3 \
             --expected-sha "$GITHUB_SHA"

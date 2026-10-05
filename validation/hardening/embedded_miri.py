@@ -39,7 +39,7 @@ DISTRIBUTION_SOURCE = ROOT / "validation" / "hardening" / "embedded_miri_distrib
 VALIDATION_RUNNER = ROOT / "validation" / "run.py"
 VALID_IDENTIFIER = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?")
 TEST_RESULT = re.compile(
-    rb"test result: ok\. (?P<passed>[0-9]+) passed; 0 failed; [0-9]+ ignored;"
+    rb"test result: ok\. (?P<passed>[0-9]+) passed; 0 failed; 0 ignored;"
 )
 PROVISIONING_ENV = "PRNS_EMBEDDED_MIRI_PROVISIONING"
 
@@ -102,6 +102,7 @@ class ToolchainIdentity:
 class ModeConfiguration:
     borrow_models: tuple[BorrowModel, ...]
     coverage: str
+    scope: str
     runner: str
 
 
@@ -191,12 +192,14 @@ def mode_configuration(mode: Mode) -> ModeConfiguration:
             return ModeConfiguration(
                 borrow_models=(BorrowModel.STACKED,),
                 coverage="stacked",
+                scope="focused",
                 runner="miri-stacked",
             )
         case Mode.FULL:
             return ModeConfiguration(
                 borrow_models=(BorrowModel.STACKED, BorrowModel.TREE),
                 coverage="stacked-and-tree",
+                scope="exhaustive",
                 runner="miri-stacked-tree",
             )
 
@@ -462,7 +465,10 @@ def parse_completed_tests(output: bytes) -> int:
     match = TEST_RESULT.search(output)
     if match is None:
         raise EmbeddedMiriError("Miri output has no successful unit-test result")
-    return int(match.group("passed"))
+    completed = int(match.group("passed"))
+    if completed == 0:
+        raise EmbeddedMiriError("Miri filter completed no tests")
+    return completed
 
 
 def tool_version(command: tuple[str, ...]) -> str:
@@ -501,6 +507,8 @@ def record_proof(
         configuration.runner,
         "--coverage",
         configuration.coverage,
+        "--scope",
+        configuration.scope,
         "--completed-tests",
         str(next(iter(completed))),
         "--rustc-version",
