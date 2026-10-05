@@ -87,9 +87,9 @@ env:
   RUSTFLAGS: "-D warnings --cfg aes_armv8"
 
 jobs:
-  contract:
+  preflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -104,9 +104,25 @@ jobs:
       - run: c++ -std=c++17 -Wall -Wextra -Werror -Iprns-host/abi/c/include -include prns_host.h -x c++ -fsyntax-only /dev/null
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
-          components: clippy,rustfmt
+          components: rustfmt
       - run: cargo fmt --manifest-path prns-host/impls/native/Cargo.toml -- --check
       - run: cargo fmt --manifest-path prns-host/abi/c/Cargo.toml -- --check
+      - run: python3 validation/run.py verify
+
+  contract:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.14"
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
           workspaces: |
@@ -153,10 +169,9 @@ jobs:
       - run: python3 validation/run.py run --suite host-swift-contract
       - run: python3 validation/run.py run --suite host-julia-contract
       - run: python3 validation/run.py run --suite host-jvm-contract
-      - run: python3 validation/run.py verify
 
   native:
-    needs: contract
+    needs: preflight
     strategy:
       fail-fast: false
       max-parallel: 16
@@ -367,7 +382,7 @@ jobs:
           retention-days: 7
 
   android:
-    needs: contract
+    needs: preflight
     strategy:
       fail-fast: false
       max-parallel: 16
@@ -426,7 +441,7 @@ jobs:
           if-no-files-found: error
 
   rust-packages:
-    needs: contract
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -557,7 +572,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       inputs.publish_pypi &&
       inputs.expected_sha == github.sha
-    needs: [native, managed]
+    needs: [contract, native, managed]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: host-sdk-release
@@ -579,7 +594,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       inputs.publish_nuget &&
       inputs.expected_sha == github.sha
-    needs: dotnet-package-smoke
+    needs: [contract, dotnet-package-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: host-sdk-release
@@ -619,7 +634,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       inputs.publish_maven &&
       inputs.expected_sha == github.sha
-    needs: managed
+    needs: [contract, managed]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: host-sdk-release
@@ -684,7 +699,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       inputs.publish_crates &&
       inputs.expected_sha == github.sha
-    needs: rust-packages
+    needs: [contract, rust-packages]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: host-sdk-release

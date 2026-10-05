@@ -119,12 +119,8 @@ jobs:
       - name: Compile-check every host-compatible Cargo workspace
         run: ${{ matrix.command }}
 
-  feature-configs:
-    # The jobs above only build the default features (`std` + `std-sync-host`). The async host
-    # lane (tokio-host/tcp/udp) and the embassy-host lane are feature-gated, so the default
-    # `clippy`/`test` never compile, lint, or run them — that is exactly how a tokio-host
-    # `clippy::expect_used` and a non-exhaustive `match` in an embassy test both reached main
-    # unseen. This job lints, tests, and doc-checks each lane on its own.
+  feature-core:
+    # Core allocation and metrics features.
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -134,28 +130,38 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
           components: clippy
-          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
-          key: standalone-workspaces-v2
+          shared-key: feature-core-v1
           workspaces: |
             .
-            prns-interfaces/impls/tokio
-            prns-runtime/impls/tokio
-            prns-interfaces/impls/embassy
-            prns-runtime/impls/embassy
-            personal-hopspot/desktop
-            prns-config
-            prnsd
-            prns-wasm
-      - name: Install Linux desktop link dependency
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
       - name: clippy and test — prns-core external-alloc
         run: bash validation/native/external-alloc.sh
       # Counter dimensions are feature-gated, so the default workspace test does not compile or
       # execute their owning tests. Keep the regression that motivated iterable enums on a PR lane.
       - name: test — prns-core runtime-metrics
         run: cargo test -p prns-core --features std,runtime-metrics --locked
+
+  feature-tokio:
+    # Tokio interfaces, runtime, and umbrella feature forwarding.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          shared-key: feature-tokio-v1
+          workspaces: |
+            .
+            prns-interfaces/impls/tokio
+            prns-runtime/impls/tokio
+      - name: Install Linux native development packages
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       # The tokio interface crate: every host interface family above the engine's tokio-host bind,
       # linted/tested/doc'd as the standalone workspace consumers actually build. --all-features is
       # honest here — the per-OS BLE backends live in target tables, so Linux gets BlueR and never
@@ -188,6 +194,25 @@ jobs:
       # also proves the weak-edge forwarding resolves them to the tokio impls.
       - name: clippy — personal-rns umbrella, tokio-host lane + families
         run: cargo clippy -p personal-rns --features tokio-host,tcp,udp,wifi-auto,shared-instance --all-targets --locked -- -D warnings
+
+  feature-embassy:
+    # Embassy interfaces, runtime, and controlled-time simulation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          shared-key: feature-embassy-v1
+          workspaces: |
+            .
+            prns-interfaces/impls/embassy
+            prns-runtime/impls/embassy
       # The same lane-neutral family names on the embassy lane (host-compiled), proving the weak
       # edges resolve them to the embassy impls instead.
       - name: clippy — personal-rns umbrella, embassy-host lane + families
@@ -227,6 +252,29 @@ jobs:
         working-directory: prns-runtime/impls/embassy
         env:
           RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
+
+  feature-applications:
+    # Desktop, configuration, daemon, and browser compilation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          shared-key: feature-applications-v1
+          workspaces: |
+            personal-hopspot/desktop
+            prns-config
+            prnsd
+            prns-wasm
+      - name: Install Linux native development packages
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
       # Hopspot desktop face (personal-hopspot/desktop): its own stable-toolchain
       # workspace, it consumes the runtime Message/Diagnostic enums by *exhaustive* match. Nothing
       # else in CI builds it (fmt-check only fmt-checks the workspace), so a new runtime event variant
@@ -253,6 +301,24 @@ jobs:
       - name: clippy — prns-wasm (wasm32)
         run: cargo clippy --target wasm32-unknown-unknown --all-targets --locked -- -D warnings
         working-directory: prns-wasm
+
+  feature-configs:
+    # Preserve the required check name while independent feature lanes run together.
+    if: always()
+    needs: [feature-core, feature-tokio, feature-embassy, feature-applications]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CORE_RESULT: ${{ needs.feature-core.result }}
+      TOKIO_RESULT: ${{ needs.feature-tokio.result }}
+      EMBASSY_RESULT: ${{ needs.feature-embassy.result }}
+      APPLICATIONS_RESULT: ${{ needs.feature-applications.result }}
+    steps:
+      - name: Require every feature lane
+        run: |
+          for result in "$CORE_RESULT" "$TOKIO_RESULT" "$EMBASSY_RESULT" "$APPLICATIONS_RESULT"; do
+            test "$result" = success
+          done
 
   integration-capstones:
     # Keep the live cross-crate capstones independently retryable: engine + runtime binds + real
@@ -842,7 +908,7 @@ jobs:
       - name: check — complete prnsd release profile (Windows)
         run: cargo check --locked --no-default-features --features tokio-host,observability,tray
         working-directory: prnsd
-      # Lint + compile parity with the Linux desktop-face step in feature-configs: this is what would
+      # Lint + compile parity with the Linux desktop-face step in feature-applications: this is what would
       # have caught the snapshot-refactor type mismatch that left main non-compiling.
       - name: clippy — hopspot desktop face (Windows)
         run: cargo clippy --all-targets --locked -- -D warnings
