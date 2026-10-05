@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import subprocess
@@ -112,6 +113,61 @@ class WorkflowSchedulingTests(unittest.TestCase):
                         'validation/run.py aggregate --tier release --expected-sha "${{ github.sha }}"',
                         jobs[gate],
                     )
+
+    def test_release_setup_keeps_direct_and_nested_tool_consumers(self) -> None:
+        qualify = self.workflow_jobs("release-readiness.yml")["qualify"]
+        steps = re.split(r"(?m)(?=^      - )", qualify)
+        selectors = {
+            "node": "uses: actions/setup-node@",
+            "uv": "uses: astral-sh/setup-uv@",
+            "llvm": "name: Prepare embedded object inspection tools",
+            "native": "name: Prepare Linux native development packages",
+        }
+        conditions = {}
+        for tool, selector in selectors.items():
+            step = next(step for step in steps if selector in step)
+            conditions[tool] = re.search(r"(?m)^        if: (.+)$", step).group(1)
+
+        selected = {tool: set() for tool in selectors}
+        matrix = subprocess.run(
+            [sys.executable, str(ROOT / "validation/run.py"), "matrix", "--tier", "release"],
+            check=True, capture_output=True, text=True,
+        )
+        suites = json.loads(matrix.stdout)["include"]
+        for suite in suites:
+            for tool, condition in conditions.items():
+                expression = re.sub(
+                    r"matrix\.(\w+)", lambda match: repr(suite.get(match.group(1), "")),
+                    condition,
+                )
+                os_name = "Linux" if suite["runner"].startswith("ubuntu-") else "Other"
+                expression = expression.replace("runner.os", repr(os_name))
+                expression = expression.replace("&&", "and").replace("||", "or")
+                if eval(expression, {"__builtins__": {}}):
+                    selected[tool].add(suite["id"])
+
+        # Include indirect npm callers, not only suites whose command starts with npm.
+        self.assertEqual(selected["node"], {
+            "hopspot-javascript-package", "javascript-browser-package", "javascript-contract",
+            "wasm-auto-wifi", "wasm-casework", "wasm-events", "wasm-websocket",
+            "flasher-web", "esp32-firmware-check", "shipping-firmware",
+            "dependency-audit", "release-contracts",
+        })
+        self.assertEqual(selected["uv"], {
+            suite["id"] for suite in suites if suite["domain"] in {"oracles", "interop"}
+        } | {"release-contracts"})
+        self.assertEqual(selected["llvm"], {
+            "embedded-builds", "esp32-firmware-check", "shipping-firmware",
+            "embedded-isa-riscv32imac", "embedded-isa-thumbv7em", "embedded-isa-xtensa-esp32s3",
+            "embedded-platform-esp32s3", "embedded-platform-nrf52840",
+        })
+        self.assertTrue({
+            "host-workspaces", "integration-capstones", "sanitizer-address",
+            "sanitizer-leak", "sanitizer-thread", "embedded-platform-nrf52840",
+        } <= selected["native"])
+        for suite in suites:
+            if suite["domain"] in {"kani", "fuzz", "oracles"}:
+                self.assertNotIn(suite["id"], selected["native"])
 
     def test_deep_validation_rejects_every_unsuccessful_lane(self) -> None:
         aggregate = self.workflow_jobs("deep-validation.yml")["deep-validation"]

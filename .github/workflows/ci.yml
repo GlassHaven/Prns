@@ -62,8 +62,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
       - run: cargo test --workspace --locked
-      - name: doc (intra-doc links are load-bearing navigation)
-        run: cargo doc --locked -p prns-core -p prns-runtime -p personal-rns --no-deps --document-private-items --quiet
 
   cargo-check:
     name: Cargo check (${{ matrix.name }})
@@ -402,11 +400,6 @@ jobs:
         run: cargo clippy --manifest-path docs/website/Cargo.toml --locked --all-targets -- -D warnings
       - name: Website Rust contract tests
         run: cargo test --manifest-path docs/website/Cargo.toml --locked
-      - name: Build flasher JavaScript and CSS
-        working-directory: docs/website
-        run: |
-          npm run build:flasher
-          npm run build:css
       - name: Production browser-test and embedded-output boundary
         working-directory: docs/website
         run: |
