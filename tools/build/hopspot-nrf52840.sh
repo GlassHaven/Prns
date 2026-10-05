@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if (( $# != 1 )); then
-    echo "usage: hopspot-nrf52840.sh <t096|t114|mesh-pocket-5000|mesh-pocket-10000|t1000e|rak4631|wio-tracker-l1|wio-tracker-l1-pro-1w>" >&2
+    echo "usage: hopspot-nrf52840.sh <t096|t114|mesh-pocket-5000|mesh-pocket-10000|t1000e|sensecap-solar-node|rak4631|wio-tracker-l1|wio-tracker-l1-pro-1w>" >&2
     exit 1
 fi
 
@@ -32,6 +32,11 @@ case "$board" in
         board_name="T1000-E"
         board_feature="board-t1000e"
         firmware_name="t1000e"
+        ;;
+    sensecap-solar-node)
+        board_name="SenseCAP Solar Node"
+        board_feature="board-sensecap-solar-node"
+        firmware_name="sensecap-solar-node"
         ;;
     rak4631)
         board_name="RAK4631"

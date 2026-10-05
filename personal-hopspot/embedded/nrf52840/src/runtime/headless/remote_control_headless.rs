@@ -14,7 +14,7 @@ use personal_rns::interfaces::{
     InterfaceGravity, InterfaceId, InterfaceMode, InterfaceSnapshot, InterfaceStatus, Membership,
 };
 use personal_rns::manifold::embassy::EmbassyInterfaceStatus;
-#[cfg(feature = "board-t1000e")]
+#[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
 use personal_rns::remote_control::RemoteControlGnssPower;
 use personal_rns::remote_control::{
     RemoteControlApplyOutcome, RemoteControlCapabilities, RemoteControlInterfacePower,
@@ -34,7 +34,7 @@ use personal_rns::runtime::{
     RemoteControlHostCommand, RemoteControlHostCommandError, RemoteControlHostResponse,
 };
 
-#[cfg(feature = "board-t1000e")]
+#[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
 use crate::boards::selected as board;
 
 #[cfg(any(
@@ -60,7 +60,7 @@ const BLUETOOTH_ENABLED: u8 = 1 << 2;
     feature = "board-rak4631"
 ))]
 const SNAPSHOT_CAPACITY: usize = MEMBERS + 3;
-#[cfg(feature = "board-t1000e")]
+#[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
 const SNAPSHOT_CAPACITY: usize = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -90,7 +90,7 @@ struct Context<'a> {
     scheduled_effect: &'a mut Option<ScheduledEffect>,
     lora_controller: &'a mut personal_rns::lora::LoRaController<'static>,
     subg_configuration: &'a mut SubGConfigurationState,
-    #[cfg(feature = "board-t1000e")]
+    #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     gnss_wanted: &'a mut bool,
 }
 
@@ -123,7 +123,7 @@ pub(super) fn capabilities() -> RemoteControlCapabilities {
     ] {
         capabilities = capabilities.with_request(kind);
     }
-    #[cfg(feature = "board-t1000e")]
+    #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     {
         capabilities = capabilities.with_request(RemoteControlRequestKind::SetGnssPower);
     }
@@ -139,7 +139,7 @@ pub(super) async fn run_headless(
     let mut system_awake = true;
     let mut desired_interfaces = enabled_interfaces(lora_status, usb_status);
     let mut scheduled_effect: Option<ScheduledEffect> = None;
-    #[cfg(feature = "board-t1000e")]
+    #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     let mut gnss_wanted = true;
 
     loop {
@@ -180,7 +180,10 @@ pub(super) async fn run_headless(
                         scheduled_effect: &mut scheduled_effect,
                         lora_controller: &mut lora_controller,
                         subg_configuration: &mut subg_configuration,
-                        #[cfg(feature = "board-t1000e")]
+                        #[cfg(any(
+                            feature = "board-t1000e",
+                            feature = "board-sensecap-solar-node"
+                        ))]
                         gnss_wanted: &mut gnss_wanted,
                     },
                     command,
@@ -380,7 +383,7 @@ async fn execute(
                 RemoteControlApplyOutcome::Unchanged
             } else if desired_awake {
                 restore_desired_interfaces(&context);
-                #[cfg(feature = "board-t1000e")]
+                #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
                 if *context.gnss_wanted {
                     board::control_gnss(hopspot::GnssReceiverCommand::Enable);
                 }
@@ -392,7 +395,7 @@ async fn execute(
             };
             Ok(RemoteControlHostResponse::SetSystemPower(outcome))
         }
-        #[cfg(feature = "board-t1000e")]
+        #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
         RemoteControlHostCommand::SetGnssPower { power } => {
             let desired = power == RemoteControlGnssPower::On;
             let outcome = if *context.gnss_wanted == desired {
@@ -693,7 +696,7 @@ fn apply_scheduled(
                 feature = "board-rak4631"
             ))]
             BluetoothAutoStatus::new(&BLE_SHARED).disable();
-            #[cfg(feature = "board-t1000e")]
+            #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
             board::control_gnss(hopspot::GnssReceiverCommand::Disable);
             *system_awake = false;
         }

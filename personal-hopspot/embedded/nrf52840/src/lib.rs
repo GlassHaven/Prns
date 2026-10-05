@@ -6,6 +6,7 @@
     feature = "board-t114",
     feature = "board-mesh-pocket",
     feature = "board-t1000e",
+    feature = "board-sensecap-solar-node",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
     feature = "board-rak4631",
@@ -51,7 +52,19 @@ compile_error!(
     all(feature = "board-t1000e", feature = "board-wio-tracker-l1"),
     all(feature = "board-mesh-tower-v2", feature = "board-wio-tracker-l1"),
     all(feature = "board-muzi-base-duo", feature = "board-wio-tracker-l1"),
-    all(feature = "board-rak4631", feature = "board-wio-tracker-l1")
+    all(feature = "board-rak4631", feature = "board-wio-tracker-l1"),
+    all(feature = "board-sensecap-solar-node", feature = "board-t-echo"),
+    all(feature = "board-sensecap-solar-node", feature = "board-t096"),
+    all(feature = "board-sensecap-solar-node", feature = "board-t114"),
+    all(feature = "board-sensecap-solar-node", feature = "board-mesh-pocket"),
+    all(feature = "board-sensecap-solar-node", feature = "board-t1000e"),
+    all(feature = "board-sensecap-solar-node", feature = "board-mesh-tower-v2"),
+    all(feature = "board-sensecap-solar-node", feature = "board-muzi-base-duo"),
+    all(feature = "board-sensecap-solar-node", feature = "board-rak4631"),
+    all(
+        feature = "board-sensecap-solar-node",
+        feature = "board-wio-tracker-l1"
+    )
 ))]
 compile_error!("nRF52840 board features are mutually exclusive");
 
@@ -113,7 +126,7 @@ compile_error!("wio-tracker-l1-pro-1w requires board-wio-tracker-l1");
 compile_error!("S140 compatibility features are mutually exclusive");
 
 #[cfg(all(
-    feature = "board-t1000e",
+    any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
     any(feature = "softdevice-s140-v6", feature = "softdevice-s140-v7")
 ))]
 compile_error!("T1000-E does not support S140 compatibility features");
@@ -198,7 +211,7 @@ mod retained_display;
         not(feature = "board-wio-tracker-l1")
     ),
     all(
-        feature = "board-t1000e",
+        any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
         not(feature = "board-t-echo"),
         not(feature = "board-t096"),
         not(feature = "board-t114"),
@@ -302,7 +315,7 @@ mod storage;
         not(feature = "board-wio-tracker-l1")
     ),
     all(
-        feature = "board-t1000e",
+        any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
         not(feature = "board-t-echo"),
         not(feature = "board-t096"),
         not(feature = "board-t114"),

@@ -25,7 +25,7 @@ mod bluetooth_gatt_server;
     feature = "board-t096",
     feature = "board-wio-tracker-l1",
     feature = "board-t114",
-    feature = "board-t1000e",
+    any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
     feature = "board-mesh-pocket",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
@@ -37,7 +37,7 @@ mod entropy;
 mod firmware;
 #[cfg(any(
     feature = "board-t096",
-    feature = "board-t1000e",
+    any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
     feature = "board-wio-tracker-l1"
 ))]
 pub(crate) mod gnss;
@@ -45,7 +45,7 @@ pub(crate) mod gnss;
     feature = "board-t096",
     feature = "board-wio-tracker-l1",
     feature = "board-t114",
-    feature = "board-t1000e",
+    any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
     feature = "board-rak4631"
@@ -77,7 +77,7 @@ pub use firmware::run;
     feature = "board-t096",
     feature = "board-wio-tracker-l1",
     feature = "board-t114",
-    feature = "board-t1000e",
+    any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
     feature = "board-rak4631"

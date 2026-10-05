@@ -597,7 +597,12 @@ pub const WIO_TRACKER_L1: MemoryProfile = MemoryProfile {
     runtime_reservations: &NRF_RUNTIME_RESERVATIONS,
 };
 
-const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 11] = [
+pub const SENSECAP_SOLAR_NODE: MemoryProfile = MemoryProfile {
+    id: MemoryProfileId("sensecap-solar-node"),
+    ..T1000_E
+};
+
+const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 12] = [
     T_ECHO_S140_V6.id,
     T_ECHO_S140_V7.id,
     T096.id,
@@ -605,6 +610,7 @@ const NRF52840_MEMORY_X_PROFILES: [MemoryProfileId; 11] = [
     MESH_POCKET_5000.id,
     MESH_POCKET_10000.id,
     T1000_E.id,
+    SENSECAP_SOLAR_NODE.id,
     MESH_TOWER_V2.id,
     MUZI_BASE_DUO.id,
     RAK4631.id,

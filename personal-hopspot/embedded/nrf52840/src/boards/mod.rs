@@ -10,6 +10,7 @@ use prns_core::entropy::{EntropySource, RuntimeEntropy};
     feature = "board-t096",
     feature = "board-t114",
     feature = "board-t1000e",
+    feature = "board-sensecap-solar-node",
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
     feature = "board-rak4631",
@@ -120,6 +121,7 @@ pub(crate) mod wio_tracker_l1;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use mesh_pocket as selected;
@@ -133,6 +135,7 @@ pub(crate) use mesh_pocket as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use mesh_tower_v2 as selected;
@@ -145,6 +148,7 @@ pub(crate) use mesh_tower_v2 as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-rak4631"),
+    not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use muzi_base_duo as selected;
@@ -157,6 +161,7 @@ pub(crate) use muzi_base_duo as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
+    not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use rak4631 as selected;
@@ -169,6 +174,7 @@ pub(crate) use rak4631 as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
 #[allow(unused_imports)] // Reserved for the runtime once the bring-up boundary is cleared.
@@ -182,6 +188,7 @@ pub(crate) use t096 as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use t1000e as selected;
@@ -194,6 +201,7 @@ pub(crate) use t1000e as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use t114 as selected;
@@ -206,6 +214,7 @@ pub(crate) use t114 as selected;
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
     not(feature = "board-rak4631"),
+    not(feature = "board-sensecap-solar-node"),
     not(feature = "board-wio-tracker-l1")
 ))]
 pub(crate) use t_echo as selected;
@@ -218,6 +227,12 @@ pub(crate) use t_echo as selected;
     not(feature = "board-t1000e"),
     not(feature = "board-mesh-tower-v2"),
     not(feature = "board-muzi-base-duo"),
-    not(feature = "board-rak4631")
+    not(feature = "board-rak4631"),
+    not(feature = "board-sensecap-solar-node")
 ))]
 pub(crate) use wio_tracker_l1 as selected;
+
+#[cfg(feature = "board-sensecap-solar-node")]
+pub(crate) mod sensecap_solar_node;
+#[cfg(feature = "board-sensecap-solar-node")]
+pub(crate) use sensecap_solar_node as selected;

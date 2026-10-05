@@ -3,7 +3,7 @@ use embassy_nrf::gpio::Output;
 enum Polarity {
     #[cfg(any(
         feature = "board-t096",
-        feature = "board-t1000e",
+        any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
         feature = "board-rak4631",
         feature = "board-wio-tracker-l1"
     ))]
@@ -24,7 +24,7 @@ pub(crate) struct StatusLed {
 impl StatusLed {
     #[cfg(any(
         feature = "board-t096",
-        feature = "board-t1000e",
+        any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
         feature = "board-rak4631",
         feature = "board-wio-tracker-l1"
     ))]
@@ -51,7 +51,7 @@ impl StatusLed {
         match self.polarity {
             #[cfg(any(
                 feature = "board-t096",
-                feature = "board-t1000e",
+                any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
                 feature = "board-rak4631",
                 feature = "board-wio-tracker-l1"
             ))]
@@ -69,7 +69,7 @@ impl StatusLed {
         match self.polarity {
             #[cfg(any(
                 feature = "board-t096",
-                feature = "board-t1000e",
+                any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
                 feature = "board-rak4631",
                 feature = "board-wio-tracker-l1"
             ))]

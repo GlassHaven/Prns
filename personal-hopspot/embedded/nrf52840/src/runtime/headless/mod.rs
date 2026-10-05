@@ -40,7 +40,7 @@ use board::{
     USB_INTERFACE_ID, USB_MANUFACTURER, USB_PRODUCT, USB_SERIAL_NUMBER,
 };
 
-#[cfg(feature = "board-t1000e")]
+#[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
 use super::entropy::install_hal_runtime_entropy;
 #[cfg(any(
     feature = "board-t096",
@@ -78,7 +78,7 @@ mod bluetooth;
 ))]
 mod remote_control;
 #[cfg(any(
-    feature = "board-t1000e",
+    any(feature = "board-t1000e", feature = "board-sensecap-solar-node"),
     feature = "board-mesh-tower-v2",
     feature = "board-muzi-base-duo",
     feature = "board-rak4631"
@@ -98,6 +98,9 @@ mod selected;
     feature = "board-wio-tracker-l1"
 ))]
 #[path = "display.rs"]
+mod selected;
+#[cfg(feature = "board-sensecap-solar-node")]
+#[path = "sensecap_solar_node.rs"]
 mod selected;
 #[cfg(feature = "board-t1000e")]
 #[path = "t1000e.rs"]
@@ -219,7 +222,7 @@ async fn manifold_task(
 
 #[allow(clippy::too_many_lines)]
 pub async fn run(spawner: Spawner) -> ! {
-    #[cfg(feature = "board-t1000e")]
+    #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     let ((node_bootstrap, remote_control_bootstrap, entropy), hardware) =
         Board::initialize(|nvmc, rng| {
             let mut entropy = seed_from_hal(rng);
@@ -294,7 +297,7 @@ pub async fn run(spawner: Spawner) -> ! {
         button,
         mut status_led,
     } = hardware;
-    #[cfg(feature = "board-t1000e")]
+    #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     let Hardware {
         flash,
         usb: usb_driver,
@@ -302,7 +305,7 @@ pub async fn run(spawner: Spawner) -> ! {
         mut status_led,
         gnss,
     } = hardware;
-    #[cfg(feature = "board-t1000e")]
+    #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     install_hal_runtime_entropy(entropy);
     #[cfg(any(
         feature = "board-mesh-tower-v2",
@@ -388,7 +391,7 @@ pub async fn run(spawner: Spawner) -> ! {
         feature = "board-rak4631"
     ))]
     let shared_flash = super::learned_state::take_flash(sd);
-    #[cfg(feature = "board-t1000e")]
+    #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     let shared_flash = super::learned_state::take_flash(flash);
     let persistence = super::learned_state::new(shared_flash);
 
@@ -606,12 +609,13 @@ pub async fn run(spawner: Spawner) -> ! {
         )
         .await;
     }
-    #[cfg(feature = "board-t1000e")]
+    #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     selected::run(
         io,
         lora.run(lora_seam),
         remote_control::run_headless(lora_status, usb_status, lora_controller, subg_configuration),
         gnss,
+        node_page_destination,
     )
     .await;
     #[cfg(any(
@@ -632,3 +636,6 @@ pub async fn run(spawner: Spawner) -> ! {
 }
 
 fn ignore_events(_event: PrnsEvent<'_>, _state: &AppState) {}
+
+#[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
+mod node_page_announce;

@@ -491,3 +491,5 @@ mod tests {
         assert_eq!(disconnected.as_slice()[0].text(), "Peers 0");
     }
 }
+
+pub mod headless_announce;

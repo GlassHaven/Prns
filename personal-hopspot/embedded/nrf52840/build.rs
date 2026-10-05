@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use personal_hopspot_memory::{
     MemoryProfile, MESH_POCKET_10000, MESH_POCKET_5000, MESH_TOWER_V2, MUZI_BASE_DUO,
-    NRF52840_MEMORY_X_BINDING, RAK4631, T096, T1000_E, T114, T_ECHO_S140_V6, T_ECHO_S140_V7,
-    WIO_TRACKER_L1,
+    NRF52840_MEMORY_X_BINDING, RAK4631, SENSECAP_SOLAR_NODE, T096, T1000_E, T114, T_ECHO_S140_V6,
+    T_ECHO_S140_V7, WIO_TRACKER_L1,
 };
 
 const BOARD_T_ECHO_FEATURE: &str = "CARGO_FEATURE_BOARD_T_ECHO";
@@ -32,6 +32,7 @@ enum Board {
     MuziBaseDuo,
     Rak4631,
     WioTrackerL1,
+    SolarNode,
 }
 
 enum Softdevice {
@@ -62,6 +63,8 @@ fn main() {
         (Board::MeshPocket, Some(Softdevice::S140V7)) => {
             panic!("MeshPocket does not support S140 7.x")
         }
+        (Board::SolarNode, None) => &SENSECAP_SOLAR_NODE,
+        (Board::SolarNode, Some(_)) => panic!("Solar Node uses bare-metal HAL without SoftDevice"),
         (Board::T1000e, None) => &T1000_E,
         (Board::MeshTowerV2, Some(Softdevice::S140V6)) => &MESH_TOWER_V2,
         (Board::MeshTowerV2, None) => {
@@ -122,19 +125,23 @@ fn selected_board() -> Board {
         env::var_os(BOARD_MUZI_BASE_DUO_FEATURE).is_some(),
         env::var_os(BOARD_RAK4631_FEATURE).is_some(),
         env::var_os(BOARD_WIO_TRACKER_L1_FEATURE).is_some(),
+        env::var_os("CARGO_FEATURE_BOARD_SENSECAP_SOLAR_NODE").is_some(),
     ) {
-        (true, false, false, false, false, false, false, false, false) => Board::TEcho,
-        (false, true, false, false, false, false, false, false, false) => Board::T096,
-        (false, false, true, false, false, false, false, false, false) => Board::T114,
-        (false, false, false, true, false, false, false, false, false) => Board::MeshPocket,
-        (false, false, false, false, true, false, false, false, false) => Board::T1000e,
-        (false, false, false, false, false, true, false, false, false) => Board::MeshTowerV2,
-        (false, false, false, false, false, false, true, false, false) => Board::MuziBaseDuo,
-        (false, false, false, false, false, false, false, true, false) => Board::Rak4631,
-        (false, false, false, false, false, false, false, false, true) => Board::WioTrackerL1,
-        (false, false, false, false, false, false, false, false, false) => {
+        (true, false, false, false, false, false, false, false, false, false) => Board::TEcho,
+        (false, true, false, false, false, false, false, false, false, false) => Board::T096,
+        (false, false, true, false, false, false, false, false, false, false) => Board::T114,
+        (false, false, false, true, false, false, false, false, false, false) => Board::MeshPocket,
+        (false, false, false, false, true, false, false, false, false, false) => Board::T1000e,
+        (false, false, false, false, false, true, false, false, false, false) => Board::MeshTowerV2,
+        (false, false, false, false, false, false, true, false, false, false) => Board::MuziBaseDuo,
+        (false, false, false, false, false, false, false, true, false, false) => Board::Rak4631,
+        (false, false, false, false, false, false, false, false, true, false) => {
+            Board::WioTrackerL1
+        }
+        (false, false, false, false, false, false, false, false, false, false) => {
             panic!("select exactly one nRF52840 board feature")
         }
+        (false, false, false, false, false, false, false, false, false, true) => Board::SolarNode,
         _ => panic!("nRF52840 board features are mutually exclusive"),
     }
 }
