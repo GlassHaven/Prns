@@ -273,7 +273,11 @@ class CandidateFixture:
                         "softdevice_family": "s140",
                         "softdevice_version": CATALOG[board]["build"]["variants"][0]["softdevice_version"],
                         "fwid": CATALOG[board]["build"]["variants"][0]["fwid"],
-                        "application_base": "0x00027000" if board == "seeed-wio-tracker-l1" else "0x00026000",
+                        "application_base": (
+                            "0x00027000"
+                            if CATALOG[board]["build"]["variants"][0]["softdevice_version"] == "7.3.0"
+                            else "0x00026000"
+                        ),
                         "family_id": "0xada52840",
                     }
                 ]
