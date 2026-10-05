@@ -106,6 +106,8 @@ pub(super) fn capabilities() -> RemoteControlCapabilities {
         RemoteControlRequestKind::InventoryInterfaceConfig,
         RemoteControlRequestKind::SetInterfaceLoRaProfile,
         RemoteControlRequestKind::DescribeBuild,
+        RemoteControlRequestKind::SetNodeName,
+        RemoteControlRequestKind::DescribeNodeName,
         RemoteControlRequestKind::SetSystemPower,
         RemoteControlRequestKind::InventoryControllers,
         RemoteControlRequestKind::AuthorizeController,
@@ -144,6 +146,8 @@ pub(super) async fn run_headless(
     let mut scheduled_effect: Option<ScheduledEffect> = None;
     #[cfg(any(feature = "board-t1000e", feature = "board-sensecap-solar-node"))]
     let mut gnss_wanted = true;
+
+    super::node_name::restore().await;
 
     loop {
         let pending = match scheduled_effect.as_ref() {
@@ -366,6 +370,12 @@ async fn execute(
                 RemoteControlLoRaOutcome::Applied,
             ))
         }
+        RemoteControlHostCommand::SetNodeName { name } => Ok(
+            RemoteControlHostResponse::SetNodeName(super::node_name::set(name).await?),
+        ),
+        RemoteControlHostCommand::DescribeNodeName => Ok(
+            RemoteControlHostResponse::DescribeNodeName(super::node_name::current()),
+        ),
         RemoteControlHostCommand::DescribeBuild => Ok(RemoteControlHostResponse::DescribeBuild(
             hopspot::hopspot_remote_control_build_version()
                 .map_err(|_| RemoteControlHostCommandError::ApplyFailed)?,

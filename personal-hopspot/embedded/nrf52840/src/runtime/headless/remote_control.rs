@@ -107,6 +107,8 @@ pub(super) fn capabilities() -> RemoteControlCapabilities {
         RemoteControlRequestKind::InventoryInterfaceConfig,
         RemoteControlRequestKind::SetInterfaceLoRaProfile,
         RemoteControlRequestKind::DescribeBuild,
+        RemoteControlRequestKind::SetNodeName,
+        RemoteControlRequestKind::DescribeNodeName,
         RemoteControlRequestKind::DescribePower,
         RemoteControlRequestKind::SetSystemPower,
         RemoteControlRequestKind::SetDisplayVisibility,
@@ -257,6 +259,12 @@ pub(super) async fn execute<D: ImmediateDisplayDevice>(
                 RemoteControlLoRaOutcome::Applied,
             ))
         }
+        RemoteControlHostCommand::SetNodeName { name } => Ok(
+            RemoteControlHostResponse::SetNodeName(super::node_name::set(name).await?),
+        ),
+        RemoteControlHostCommand::DescribeNodeName => Ok(
+            RemoteControlHostResponse::DescribeNodeName(super::node_name::current()),
+        ),
         RemoteControlHostCommand::DescribeBuild => Ok(RemoteControlHostResponse::DescribeBuild(
             hopspot::hopspot_remote_control_build_version()
                 .map_err(|_| RemoteControlHostCommandError::ApplyFailed)?,

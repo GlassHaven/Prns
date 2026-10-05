@@ -19,8 +19,9 @@ fn lock_discovery_group_store() -> std::sync::MutexGuard<'static, ()> {
 
 const ERASE: usize = 512;
 const CAPACITY: usize = ERASE * 6;
-// One bounded persistence turn per phase, including the optional discovery-group snapshot.
-const EMPTY_STATE_COMPACTION_PROGRESS_STEPS: usize = 10;
+// One bounded persistence turn per phase, including the optional discovery-group and node-name
+// snapshots.
+const EMPTY_STATE_COMPACTION_PROGRESS_STEPS: usize = 11;
 const LAYOUT: FlashJournalLayout = FlashJournalLayout::new(
     [0, ERASE as u32],
     [
@@ -876,6 +877,7 @@ fn sixteen_route_records_restore_eight_and_report_capacity_drops() {
                 controller_grants_snapshot: &mut controller_grants_snapshot,
                 target_accesses_snapshot: &mut target_accesses_snapshot,
                 discovery_group_configuration_snapshot: &mut discovery_group_configuration_snapshot,
+                node_name: &mut None,
                 report: &mut report,
             },
         );
@@ -991,6 +993,7 @@ fn malformed_newest_authorization_records_preserve_the_last_valid_tables() {
                 controller_grants_snapshot: &mut controller_grants_snapshot,
                 target_accesses_snapshot: &mut target_accesses_snapshot,
                 discovery_group_configuration_snapshot: &mut discovery_group_configuration_snapshot,
+                node_name: &mut None,
                 report: &mut report,
             },
         );
@@ -1065,6 +1068,7 @@ fn malformed_newest_discovery_group_record_preserves_the_last_valid_snapshot() {
                 controller_grants_snapshot: &mut controller_grants_snapshot,
                 target_accesses_snapshot: &mut target_accesses_snapshot,
                 discovery_group_configuration_snapshot: &mut discovery_group_configuration_snapshot,
+                node_name: &mut None,
                 report: &mut report,
             },
         );
@@ -1260,6 +1264,113 @@ fn discovery_group_snapshot_survives_compaction_and_reboot() {
         assert_eq!(report.discovery_group_configuration_refused_count, 0);
         assert_eq!(restored_discovery_group_configuration_now(), Some(expected));
     });
+    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
+}
+
+#[test]
+fn a_pending_node_name_makes_persistence_due_immediately() {
+    use super::super::node_name_store::store_node_name;
+    let _store = lock_discovery_group_store();
+    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
+    NODE_NAME_STORE.reset_for_test();
+    embassy_futures::block_on(async {
+        let mut persistence = EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4>::new(
+            TestFlash::new(),
+            LAYOUT,
+            EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
+            FixedRouteSnapshotKeys::new(),
+            (|_| {}) as fn(EmbeddedPersistenceDiagnostic),
+        );
+        let mut engine = EngineState::<crate::storage::GrowableHeap>::default();
+        let mut remote_control = available_remote_control(&mut engine);
+        persistence
+            .restore(&mut engine, &mut remote_control, InstantMillis(0))
+            .await;
+        // Settle whatever a fresh journal schedules first, so only the name can make it due.
+        for now in 1..64 {
+            match persistence.next_deadline(InstantMillis(now)) {
+                Some(deadline) if deadline.0 <= now => {
+                    persistence.progress(&mut engine, InstantMillis(now)).await;
+                }
+                _ => break,
+            }
+        }
+        assert!(persistence
+            .next_deadline(InstantMillis(5))
+            .is_none_or(|deadline| deadline.0 > 5));
+        let stored = store_node_name(RemoteControlNodeName::new("Box-Hopspot").unwrap());
+        // Without this the manifold spins: work is signalled but progress is never due.
+        assert_eq!(
+            persistence.next_deadline(InstantMillis(5)),
+            Some(InstantMillis(5))
+        );
+        persistence.progress(&mut engine, InstantMillis(5)).await;
+        assert_eq!(stored.await, Ok(()));
+        assert!(persistence
+            .next_deadline(InstantMillis(6))
+            .is_none_or(|deadline| deadline.0 > 6));
+    });
+    NODE_NAME_STORE.reset_for_test();
+    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
+}
+
+#[test]
+fn node_name_survives_progress_reboot_compaction_and_reboot() {
+    use super::super::node_name_store::{restored_node_name_now, store_node_name};
+    let _store = lock_discovery_group_store();
+    DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
+    NODE_NAME_STORE.reset_for_test();
+    let persistence_on = |flash| {
+        EmbeddedFlashPersistence::<_, FixedRouteSnapshotKeys<8>, _, 4>::new(
+            flash,
+            LAYOUT,
+            EmbeddedPersistencePolicy::hopspot_default(EmbeddedCompactionPolicy::hopspot(0)),
+            FixedRouteSnapshotKeys::new(),
+            (|_| {}) as fn(EmbeddedPersistenceDiagnostic),
+        )
+    };
+    embassy_futures::block_on(async {
+        let mut engine = EngineState::<crate::storage::GrowableHeap>::default();
+        let mut remote_control = available_remote_control(&mut engine);
+        let mut persistence = persistence_on(TestFlash::new());
+        persistence
+            .restore(&mut engine, &mut remote_control, InstantMillis(0))
+            .await;
+        assert_eq!(restored_node_name_now(), Some(None));
+
+        let name = RemoteControlNodeName::new("Rooftop RAK").unwrap();
+        let stored = store_node_name(name);
+        persistence.progress(&mut engine, InstantMillis(1)).await;
+        assert_eq!(stored.await, Ok(()));
+        assert_eq!(restored_node_name_now(), Some(Some(name)));
+
+        let mut rebooted = persistence_on(persistence.journal.take().unwrap().release());
+        NODE_NAME_STORE.reset_for_test();
+        rebooted
+            .restore(&mut engine, &mut remote_control, InstantMillis(0))
+            .await;
+        assert_eq!(restored_node_name_now(), Some(Some(name)));
+
+        rebooted.require_snapshot(EmbeddedPersistenceTarget::CriticalState, InstantMillis(2));
+        rebooted.try_start_compaction(&engine, InstantMillis(2));
+        for now in 2..32 {
+            if rebooted.compaction.is_none() {
+                break;
+            }
+            rebooted
+                .progress_compaction(&engine, InstantMillis(now))
+                .await;
+        }
+        assert_eq!(rebooted.compaction, None);
+
+        let mut compacted = persistence_on(rebooted.journal.take().unwrap().release());
+        NODE_NAME_STORE.reset_for_test();
+        compacted
+            .restore(&mut engine, &mut remote_control, InstantMillis(0))
+            .await;
+        assert_eq!(restored_node_name_now(), Some(Some(name)));
+    });
+    NODE_NAME_STORE.reset_for_test();
     DISCOVERY_GROUP_CONFIGURATION_STORES.reset_for_test();
 }
 
