@@ -170,3 +170,9 @@ The first firmware update carrying the board-sized flash layout moves learned-st
 `./tools/prns build hopspot sensecap-solar-node` builds the headless nRF52840 / Wio-SX1262 developer UF2. The P1-Pro GNSS adapter controls the L76K receiver; LoRa starts unconfigured and uses the current Remote Control regional configuration rather than a board-wide fixed European channel. The node page announces after 15 seconds and every six hours.
 
 The port adapts [PR #227](https://github.com/KenAKAFrosty/Prns/pull/227) to the shared memory-profile and Remote Control owners. Its firmware participates in the resource and architecture assurance matrix. The contributor's historical physical-board observations are recorded in that PR; automated evidence does not prove GNSS, RF, power, or physical-board behavior. The website remains Active Bring-up.
+
+### XIAO ESP32-S3 with Wio-SX1262
+
+The `hopspot-xiao-esp32s3-wio-sx1262` ESP workspace package builds the headless 8 MiB flash / 8 MiB Octal PSRAM board. Its flash catalog and memory profile use the normal ESP32-S3 resource and assurance gates. The SX1262 receive-enable pin and GPIO48 activity LED use the shared driver lifecycle callbacks, including cancellation cleanup.
+
+The board port comes from [PR #239](https://github.com/KenAKAFrosty/Prns/pull/239). Current Remote Control owns regional radio configuration; the PR's older standalone flasher `configure` command and radio-profile storage format are not imported. That PR therefore still contains separate provisioning work beyond this board integration.

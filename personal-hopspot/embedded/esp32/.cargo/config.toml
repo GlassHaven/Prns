@@ -42,3 +42,5 @@ tbeam-supreme-flash = "run --release -p hopspot-t-beam-supreme --target xtensa-e
 # Espressif's WiFi radio driver internally, but this build exposes no WiFi-LAN or SoftAP interface.
 c6 = "build --release -p hopspot-xiao-esp32-c6 --target riscv32imac-unknown-none-elf -Zbuild-std=core,alloc"
 c6-flash = "run --release -p hopspot-xiao-esp32-c6 --target riscv32imac-unknown-none-elf -Zbuild-std=core,alloc"
+
+xiao-s3-wio = "build --release -p hopspot-xiao-esp32s3-wio-sx1262 --target xtensa-esp32s3-none-elf -Zbuild-std=core,alloc"

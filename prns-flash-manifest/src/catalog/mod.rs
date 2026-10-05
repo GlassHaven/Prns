@@ -1044,7 +1044,8 @@ mod tests {
                 "mesh-tower-v2",
                 "muzi-base-duo",
                 "heltec-v3",
-                "seeed-wio-tracker-l1"
+                "seeed-wio-tracker-l1",
+                "xiao-esp32s3-wio-sx1262"
             ]
         );
         assert!(catalog
@@ -1138,6 +1139,11 @@ mod tests {
                     Some(("partitions-hopspot-8mb.csv", "8mb"))
                 ),
                 ("seeed-wio-tracker-l1", None, None),
+                (
+                    "xiao-esp32s3-wio-sx1262",
+                    Some(8_388_608),
+                    Some(("partitions-hopspot-8mb.csv", "8mb"))
+                ),
             ]
         );
         Ok(())
@@ -1222,6 +1228,11 @@ mod tests {
                     "seeed-wio-tracker-l1",
                     "wio-tracker-l1",
                     "thumbv7em-none-eabihf"
+                ),
+                (
+                    "xiao-esp32s3-wio-sx1262",
+                    "xiao-esp32s3-wio-sx1262",
+                    "xtensa-esp32s3-none-elf"
                 ),
             ]
         );
@@ -1593,7 +1604,13 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             capable,
-            ["heltec-v4", "heltec-v4-r8", "heltec-e290", "t-beam-supreme"]
+            [
+                "heltec-v4",
+                "heltec-v4-r8",
+                "heltec-e290",
+                "t-beam-supreme",
+                "xiao-esp32s3-wio-sx1262"
+            ]
         );
         Ok(())
     }

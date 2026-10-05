@@ -725,7 +725,6 @@ pub(super) async fn run_core<B: Esp32S3Board>(
             // Applying a channel-changing profile retags the running interface and updates
             // its status ID. Read that live ID for card classification instead of retaining
             // the boot-time ID, otherwise LoRa disappears from the home screen until reset.
-            let lora_card_id = lora_card_status.map(|status| status.id());
             let snapshots = build_snapshots(
                 usb_status,
                 wifi_status.as_ref(),

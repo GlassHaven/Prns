@@ -134,6 +134,13 @@ fn canonical_matrix_has_all_unique_profile_bound_targets() -> Result<(), Box<dyn
                 TargetPlatform::Nrf52840
             ),
             (
+                "xiao-esp32s3-wio-sx1262",
+                "xiao-esp32s3-wio-sx1262",
+                "xtensa-esp32s3-none-elf",
+                "xtensa-esp32s3-gnu-ld",
+                TargetPlatform::Esp
+            ),
+            (
                 "sensecap-solar-node",
                 "sensecap-solar-node",
                 "thumbv7em-none-eabihf",

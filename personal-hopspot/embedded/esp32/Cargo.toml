@@ -10,6 +10,7 @@ description = "Personal Hopspot firmware for supported ESP32-S3 and ESP32-C6 boa
 members = [
     "boards/heltec-e290",
     "boards/heltec-v3",
+    "boards/xiao-esp32s3-wio-sx1262",
     "boards/heltec-v4",
     "boards/heltec-v4-r8",
     "boards/heltec-wireless-stick-lite-v3",

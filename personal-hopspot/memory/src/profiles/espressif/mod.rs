@@ -491,6 +491,17 @@ pub const HELTEC_WIRELESS_STICK_LITE_V3: MemoryProfile = MemoryProfile {
     runtime_reservations: &S3FN8_RUNTIME_RESERVATIONS,
 };
 
+const ESP32S3_8_MIB_FIXED_PSRAM_SPACES: [AddressSpace; 8] = esp32s3_spaces(
+    8 * MIB,
+    AddressSpaceGeometry::FixedCapacity { bytes: 8 * MIB },
+);
+
+pub const XIAO_ESP32S3_WIO_SX1262: MemoryProfile = MemoryProfile {
+    id: MemoryProfileId("xiao-esp32s3-wio-sx1262"),
+    address_spaces: &ESP32S3_8_MIB_FIXED_PSRAM_SPACES,
+    ..T_BEAM_SUPREME
+};
+
 pub const XIAO_ESP32_C6: MemoryProfile = MemoryProfile {
     id: MemoryProfileId("xiao-esp32-c6"),
     architecture: ProcessorArchitecture::RiscV32Imac,
@@ -586,10 +597,11 @@ const ESP_4_MIB_PARTITIONS: [EspPartitionBinding; 9] = [
 ];
 
 const ESP_16_MIB_PROFILES: [MemoryProfileId; 3] = [HELTEC_V4.id, HELTEC_V4_R8.id, HELTEC_E290.id];
-const ESP_8_MIB_PROFILES: [MemoryProfileId; 3] = [
+const ESP_8_MIB_PROFILES: [MemoryProfileId; 4] = [
     T_BEAM_SUPREME.id,
     HELTEC_WIRELESS_STICK_LITE_V3.id,
     HELTEC_V3.id,
+    XIAO_ESP32S3_WIO_SX1262.id,
 ];
 const ESP_4_MIB_PROFILES: [MemoryProfileId; 1] = [XIAO_ESP32_C6.id];
 

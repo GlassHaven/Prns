@@ -55,6 +55,14 @@ ESP_MEMORY_CONTRACTS = {
             "partition-table": (0x00008000, 0x00009000),
         },
     },
+    "xiao-esp32s3-wio-sx1262": {
+        "profile": "xiao-esp32s3-wio-sx1262",
+        "regions": {
+            "application": (0x00010000, 0x0067d000),
+            "bootloader": (0x00000000, 0x00008000),
+            "partition-table": (0x00008000, 0x00009000),
+        },
+    },
 }
 
 UF2_MEMORY_CONTRACTS = {
