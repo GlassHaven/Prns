@@ -28,6 +28,7 @@ pub(crate) fn generate() {
             "heltec-wireless-stick-lite-v3.webp",
         ),
         ("RAK4631", "rak4631.webp"),
+        ("RAK10724", "rak10724.webp"),
         ("MUZI_BASE_DUO", "muzi-base-duo.webp"),
     ];
 

@@ -42,9 +42,9 @@ transparent background inside a dark "slot" (`.flash-board-slot--inset` in
 | Heltec HT-HD01 | https://heltec.org/project/ht-hd01/ | https://heltec.org/wp-content/uploads/2024/12/4-3.png | white-knockout, cropped to `280:730:250:40` before scaling | vendor catalog image, nominative use |
 | Heltec V3 | https://heltec.org/project/wifi-lora-32-v3/ | https://heltec.org/wp-content/uploads/2023/09/2.png | real alpha (vendor PNG) | vendor image, nominative use |
 | Seeed Wio Tracker L1 | https://wiki.seeedstudio.com/wio_tracker_l1_node/ | https://media-cdn.seeedstudio.com/media/catalog/product/cache/bb49d3ec4ee05b6f018e93f896b8a25d/1/-/1-114993648-wio-tracker-l1.jpg | white-knockout | vendor catalog image, nominative use |
-
 | Seeed XIAO ESP32-S3 + Wio-SX1262 | https://www.seeedstudio.com/Wio-SX1262-with-XIAO-ESP32S3-p-5982.html | https://media-cdn.seeedstudio.com/media/catalog/product/2/-/2-102010611-wio-sx1262-with-xiao-esp32s3.jpg | built-in imagegen background extraction; WebP thumbnail | vendor product photo, nominative use; AI-assisted cutout |
 | SenseCAP Solar Node P1 / P1-Pro | https://www.seeedstudio.com/SenseCAP-Solar-Node-P1-Pro-for-Meshtastic-LoRa-p-6412.html | https://media-cdn.seeedstudio.com/media/catalog/product/2/-/2-114993633-sensecap-solar-node-p1-pro-for-meshtastic_1.jpg | built-in imagegen background extraction; WebP thumbnail | vendor product photo, nominative use; AI-assisted cutout |
+| RAK WisMesh 1W (RAK10724) | https://store.rakwireless.com/products/meshtastic-1w-lora-booster-kit-rak3401 | https://cdn.shopify.com/s/files/1/0177/8784/6756/files/RAK10724_WisMesh_1W-Booster-Starter-Kit-01_3.png?v=1785997006 | built-in imagegen board extraction; WebP thumbnail | vendor product photo, nominative use; AI-assisted cutout |
 
 Real-alpha vendor originals are not stored in the repo; the source URL above is
 the pointer, and regeneration is a plain download, a lanczos `scale=160`, and a
@@ -64,3 +64,5 @@ a uniform basis instead. Swap to it for a crisper edge if wanted, and add the
 Seeed CC BY-SA attribution here and in the footer.
 
 The two Seeed cutouts added for the firmware integration used the built-in imagegen tool with the instruction: remove only the white backdrop and floor shadow to transparency; preserve the photographed hardware, labels, colors, proportions and viewing angle; add no text or objects. The transparent outputs were inspected and encoded with `cwebp -q 90 -resize 160 0`.
+
+The WisMesh cutout used the built-in imagegen tool with this prompt: extract only the complete assembled circuit board in the lower left; remove the white background, loose accessories, callouts and marketing text; preserve the board silhouette, geometry, component placement, colors, printed labels, perspective and angle; center it on a transparent square with a small margin; add no parts, labels, redesign or shadows. It was visually inspected and encoded with the same WebP command. These AI-assisted cutouts identify products at thumbnail size; use the linked vendor photographs for component and label details.

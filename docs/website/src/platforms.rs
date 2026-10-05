@@ -247,6 +247,7 @@ impl BoardTarget {
             "heltec-e290" => Some(&board_images::HELTEC_E290),
             "heltec-wireless-stick-lite-v3" => Some(&board_images::HELTEC_WIRELESS_STICK_LITE_V3),
             "rak4631" => Some(&board_images::RAK4631),
+            "rak10724" => Some(&board_images::RAK10724),
             "muzi-base-duo" => Some(&board_images::MUZI_BASE_DUO),
             _ => None,
         }
@@ -279,6 +280,16 @@ pub const UPCOMING_BOARD_TARGETS: &[BoardTarget] = &[
         name: "SenseCAP Solar Node P1",
         slug: "seeed-sensecap-solar-node-p1",
         silicon: "nRF52840 + SX1262",
+        tier: Tier::BringUp,
+        interfaces: &[],
+        icon: Some("nordicsemiconductor"),
+        preparation_profile: None,
+        flash_target: None,
+    },
+    BoardTarget {
+        name: "RAK WisMesh 1W",
+        slug: "rak10724",
+        silicon: "nRF52840 + SX1262 + SKY66122 PA",
         tier: Tier::BringUp,
         interfaces: &[],
         icon: Some("nordicsemiconductor"),
@@ -724,7 +735,11 @@ mod tests {
 
         assert_eq!(
             bring_up,
-            vec!["Raspberry Pi Zero 2 W", "SenseCAP Solar Node P1",]
+            vec![
+                "Raspberry Pi Zero 2 W",
+                "SenseCAP Solar Node P1",
+                "RAK WisMesh 1W"
+            ]
         );
         assert!(
             UPCOMING_BOARD_TARGETS
