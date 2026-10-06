@@ -120,7 +120,7 @@ async fn production_nodes_exchange_requests_after_link_and_radio_loss() {
         .destination_hash()
         .unwrap_or_else(|error| unreachable!("test destination is valid: {error:?}"));
     let node_a = PrnsNode::new(PrnsNodeRecipe {
-        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable.into(),
         transport_identity: None,
         pre_configured_destinations: [responder],
         app_state: NoRemoteControlHostControls,
@@ -134,7 +134,7 @@ async fn production_nodes_exchange_requests_after_link_and_radio_loss() {
     });
     let (heard_tx, mut heard_rx) = tokio::sync::mpsc::channel(1);
     let node_b = PrnsNode::new(PrnsNodeRecipe {
-        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+        remote_control: personal_rns::remote_control::RemoteControlService::Unavailable.into(),
         transport_identity: None,
         pre_configured_destinations: [],
         app_state: NoRemoteControlHostControls,

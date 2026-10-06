@@ -145,8 +145,8 @@ export class PlaygroundBluetoothController {
         this.#transition(Tag("Closed"));
         this.#view.record("Bluetooth", "Session closed", null);
       },
-      CloseFailed: (data) => {
-        const failure = Tag("CloseFailed", data);
+      RuntimeRejected: (data) => {
+        const failure = Tag("RuntimeRejected", data);
         this.#transition(Tag("CloseFailed", { session, failure }));
         this.#view.record(
           "Failure",
@@ -154,8 +154,8 @@ export class PlaygroundBluetoothController {
           describeInterfaceCloseFailure(failure),
         );
       },
-      RuntimeRejected: (data) => {
-        const failure = Tag("RuntimeRejected", data);
+      CloseFailed: (data) => {
+        const failure = Tag("CloseFailed", data);
         this.#transition(Tag("CloseFailed", { session, failure }));
         this.#view.record(
           "Failure",

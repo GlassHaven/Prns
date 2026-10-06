@@ -37,6 +37,7 @@ pub enum ManualTimeError {
         tick: SimulationTick,
     },
     Frames(AdvanceError),
+    HaLow(AdvanceError),
     Ble(BleAdvanceError),
 }
 
@@ -55,6 +56,7 @@ impl fmt::Display for ManualTimeError {
             Self::BeforeCurrent { current, requested } => write!(formatter, "cannot move manual time backward from {} to {}", current.get(), requested.get()),
             Self::ClockRange { tick } => write!(formatter, "tick {} exceeds the runtime clock's representable range", tick.get()),
             Self::Frames(error) => write!(formatter, "frame advance refused: {error}"),
+            Self::HaLow(error) => write!(formatter, "HaLoW advance refused: {error}"),
             Self::Ble(error) => write!(formatter, "BLE advance refused: {error}"),
         }
     }
@@ -65,6 +67,7 @@ impl std::error::Error for ManualTimeError {
         match self {
             Self::RuntimeBuild(error) => Some(error),
             Self::Frames(error) => Some(error),
+            Self::HaLow(error) => Some(error),
             Self::Ble(error) => Some(error),
             Self::InvalidTickDuration { .. }
             | Self::WakeSteppingRequiresMillisecondTicks

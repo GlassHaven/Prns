@@ -1094,6 +1094,7 @@ fn begin_verified_controller_grant_persistence<M: RawMutex>(
 
 pub(super) async fn run_router<
     St,
+    C,
     R,
     M,
     const COMMANDS: usize,
@@ -1104,6 +1105,7 @@ pub(super) async fn run_router<
     const REQUEST_BYTES: usize,
 >(
     state: &St,
+    controls: &C,
     remote_control: &mut AssembledRemoteControl,
     requests: Receiver<'_, M, RunnerRequest<REQUEST_BYTES>, REQUESTS>,
     pairing_events: &RemoteControlPairingPersistenceEvents<M>,
@@ -1112,7 +1114,8 @@ pub(super) async fn run_router<
 ) where
     R: RequestEndpointSet<St>,
     M: RawMutex + Sync,
-    St: prns_runtime::runtime::RemoteControlHostControls,
+    C: prns_runtime::runtime::RemoteControlHostControls
+        + prns_runtime::runtime::RemoteControlAppMessages<St>,
 {
     let mut authorization_transaction = RemoteControlPairingAuthorizationTransactionState::new();
     let mut authorization_persistence = RemoteControlAuthorizationPersistenceProgress::new();
@@ -1245,6 +1248,7 @@ pub(super) async fn run_router<
                             VerifiedControllerGrantStart::Dispatch => {
                                 dispatch_prepared::<
                                     St,
+                                    C,
                                     R,
                                     M,
                                     COMMANDS,
@@ -1254,6 +1258,7 @@ pub(super) async fn run_router<
                                     0,
                                 >(
                                     state,
+                                    controls,
                                     commands,
                                     request,
                                     PreparedRunnerRequest::RemoteControl(verified),
@@ -1267,6 +1272,7 @@ pub(super) async fn run_router<
                 };
                 dispatch_prepared::<
                     St,
+                    C,
                     R,
                     M,
                     COMMANDS,
@@ -1274,7 +1280,7 @@ pub(super) async fn run_router<
                     REQUEST_COMPLETIONS,
                     RESPONSE_BYTES,
                     REQUEST_BYTES,
-                >(state, commands, request, prepared)
+                >(state, controls, commands, request, prepared)
                 .await;
             }
         }
@@ -1355,6 +1361,7 @@ async fn next_pairing_persistence_input<M: RawMutex>(
 #[inline(never)]
 async fn dispatch_prepared<
     St,
+    C,
     R,
     M,
     const COMMANDS: usize,
@@ -1364,13 +1371,15 @@ async fn dispatch_prepared<
     const REQUEST_BYTES: usize,
 >(
     state: &St,
+    controls: &C,
     commands: PrnsNodeHandle<'_, M, COMMANDS, COMPLETIONS, REQUEST_COMPLETIONS, RESPONSE_BYTES>,
     request: RunnerRequest<REQUEST_BYTES>,
     prepared: PreparedRunnerRequest,
 ) where
     R: RequestEndpointSet<St>,
     M: RawMutex + Sync,
-    St: prns_runtime::runtime::RemoteControlHostControls,
+    C: prns_runtime::runtime::RemoteControlHostControls
+        + prns_runtime::runtime::RemoteControlAppMessages<St>,
 {
     let inbound = InboundRequest::new(
         request.destination,
@@ -1395,7 +1404,7 @@ async fn dispatch_prepared<
                 request.data.len()
             );
             dispatch_verified_admitted_remote_control_request(
-                state, &commands, inbound, &mut body, verified,
+                state, controls, &commands, inbound, &mut body, verified,
             )
             .await
         }
@@ -1772,6 +1781,7 @@ mod tests {
         >(&mut remote_control, &request);
         block_on(dispatch_prepared::<
             crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
             StaticRoutes,
             M,
             1,
@@ -1780,6 +1790,7 @@ mod tests {
             0,
             16,
         >(
+            &crate::runtime::NoRemoteControlHostControls,
             &crate::runtime::NoRemoteControlHostControls,
             handle,
             request,
@@ -1827,6 +1838,7 @@ mod tests {
         >(&mut remote_control, &request);
         block_on(dispatch_prepared::<
             crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
             DestinationRoutes,
             M,
             1,
@@ -1835,6 +1847,7 @@ mod tests {
             0,
             16,
         >(
+            &crate::runtime::NoRemoteControlHostControls,
             &crate::runtime::NoRemoteControlHostControls,
             handle,
             request,
@@ -1876,15 +1889,26 @@ mod tests {
         let grant = super::super::node_facade::test_remote_control_grant(
             RemoteControlRequestKind::Describe,
         );
-        let router =
-            run_router::<crate::runtime::NoRemoteControlHostControls, (), M, 1, 0, 0, 0, 1, 16>(
-                &crate::runtime::NoRemoteControlHostControls,
-                &mut remote_control,
-                requests.receiver(),
-                &pairing_events,
-                None,
-                handle,
-            );
+        let router = run_router::<
+            crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
+            (),
+            M,
+            1,
+            0,
+            0,
+            0,
+            1,
+            16,
+        >(
+            &crate::runtime::NoRemoteControlHostControls,
+            &crate::runtime::NoRemoteControlHostControls,
+            &mut remote_control,
+            requests.receiver(),
+            &pairing_events,
+            None,
+            handle,
+        );
         let exercise = async {
             assert_eq!(
                 handle.set_remote_control_controller_grant(grant).await,
@@ -1943,6 +1967,7 @@ mod tests {
         assert!(requests.try_send(request).is_ok());
         let router = run_router::<
             crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
             DestinationRoutes,
             M,
             1,
@@ -1952,6 +1977,7 @@ mod tests {
             1,
             16,
         >(
+            &crate::runtime::NoRemoteControlHostControls,
             &crate::runtime::NoRemoteControlHostControls,
             &mut remote_control,
             requests.receiver(),
@@ -2037,6 +2063,7 @@ mod tests {
 
         let router = run_router::<
             crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
             (),
             M,
             1,
@@ -2046,6 +2073,7 @@ mod tests {
             1,
             { RemoteControlRequest::MAX_ENCODED_LEN },
         >(
+            &crate::runtime::NoRemoteControlHostControls,
             &crate::runtime::NoRemoteControlHostControls,
             &mut remote_control,
             requests.receiver(),
@@ -2130,6 +2158,7 @@ mod tests {
 
         let router = run_router::<
             crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
             (),
             M,
             1,
@@ -2139,6 +2168,7 @@ mod tests {
             1,
             { RemoteControlRequest::MAX_ENCODED_LEN },
         >(
+            &crate::runtime::NoRemoteControlHostControls,
             &crate::runtime::NoRemoteControlHostControls,
             &mut remote_control,
             requests.receiver(),
@@ -2398,6 +2428,7 @@ mod tests {
 
         let router = run_router::<
             crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
             (),
             M,
             1,
@@ -2407,6 +2438,7 @@ mod tests {
             1,
             { RemoteControlRequest::MAX_ENCODED_LEN },
         >(
+            &crate::runtime::NoRemoteControlHostControls,
             &crate::runtime::NoRemoteControlHostControls,
             &mut remote_control,
             requests.receiver(),
@@ -2470,15 +2502,26 @@ mod tests {
         let grant = super::super::node_facade::test_remote_control_grant(
             RemoteControlRequestKind::Describe,
         );
-        let router =
-            run_router::<crate::runtime::NoRemoteControlHostControls, (), M, 1, 0, 0, 0, 1, 16>(
-                &crate::runtime::NoRemoteControlHostControls,
-                &mut remote_control,
-                requests.receiver(),
-                &pairing_events,
-                Some(&authorization_stores),
-                handle,
-            );
+        let router = run_router::<
+            crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
+            (),
+            M,
+            1,
+            0,
+            0,
+            0,
+            1,
+            16,
+        >(
+            &crate::runtime::NoRemoteControlHostControls,
+            &crate::runtime::NoRemoteControlHostControls,
+            &mut remote_control,
+            requests.receiver(),
+            &pairing_events,
+            Some(&authorization_stores),
+            handle,
+        );
         let exercise = async {
             let setting = handle.set_remote_control_controller_grant(grant);
             let inspect_while_unsettled = async {
@@ -2554,15 +2597,26 @@ mod tests {
             attempt_id,
             grant: pairing_grant,
         });
-        let router =
-            run_router::<crate::runtime::NoRemoteControlHostControls, (), M, 1, 0, 0, 0, 1, 16>(
-                &crate::runtime::NoRemoteControlHostControls,
-                &mut remote_control,
-                requests.receiver(),
-                &pairing_events,
-                Some(&authorization_stores),
-                handle,
-            );
+        let router = run_router::<
+            crate::runtime::NoRemoteControlHostControls,
+            crate::runtime::NoRemoteControlHostControls,
+            (),
+            M,
+            1,
+            0,
+            0,
+            0,
+            1,
+            16,
+        >(
+            &crate::runtime::NoRemoteControlHostControls,
+            &crate::runtime::NoRemoteControlHostControls,
+            &mut remote_control,
+            requests.receiver(),
+            &pairing_events,
+            Some(&authorization_stores),
+            handle,
+        );
         let exercise = async {
             let (app_mutation, (target_inventory, target_resolution)) = join(
                 handle.set_remote_control_controller_grant(app_grant),

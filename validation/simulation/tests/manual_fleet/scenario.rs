@@ -199,7 +199,8 @@ where
             let (host, handle_entropy) = sources(timeline_origin);
             let node = PrnsNode::new_with_entropy_sources(
                 |_| PrnsNodeRecipe {
-                    remote_control: personal_rns::remote_control::RemoteControlService::Unavailable,
+                    remote_control: personal_rns::remote_control::RemoteControlService::Unavailable
+                        .into(),
                     transport_identity: match role {
                         NodeRole::Endpoint => None,
                         NodeRole::Transport => {

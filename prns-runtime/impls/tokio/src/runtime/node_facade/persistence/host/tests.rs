@@ -15,6 +15,7 @@ async fn owned_authorization_defers_background_flush_but_refuses_shutdown_succes
     let deferred = flush_state(
         &handle,
         &worker.storage,
+        &worker.io,
         PersistenceTrigger::Interval,
         &mut |_| events += 1,
     )

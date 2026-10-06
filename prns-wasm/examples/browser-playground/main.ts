@@ -391,8 +391,8 @@ class BrowserPlayground {
         this.#webSocket = Tag("Closed");
         this.#view.record("WebSocket", "Session closed", null);
       },
-      CloseFailed: (data) => {
-        const failure = Tag("CloseFailed", data);
+      RuntimeRejected: (data) => {
+        const failure = Tag("RuntimeRejected", data);
         this.#webSocket = Tag("CloseFailed", { session, failure });
         this.#view.record(
           "Failure",
@@ -400,8 +400,8 @@ class BrowserPlayground {
           describeInterfaceCloseFailure(failure),
         );
       },
-      RuntimeRejected: (data) => {
-        const failure = Tag("RuntimeRejected", data);
+      CloseFailed: (data) => {
+        const failure = Tag("CloseFailed", data);
         this.#webSocket = Tag("CloseFailed", { session, failure });
         this.#view.record(
           "Failure",
@@ -517,8 +517,8 @@ class BrowserPlayground {
         this.#usb = Tag("Closed");
         this.#view.record("USB Auto", "Session closed", null);
       },
-      CloseFailed: (data) => {
-        const failure = Tag("CloseFailed", data);
+      RuntimeRejected: (data) => {
+        const failure = Tag("RuntimeRejected", data);
         this.#usb = Tag("CloseFailed", { session, failure });
         this.#view.record(
           "Failure",
@@ -526,8 +526,8 @@ class BrowserPlayground {
           describeInterfaceCloseFailure(failure),
         );
       },
-      RuntimeRejected: (data) => {
-        const failure = Tag("RuntimeRejected", data);
+      CloseFailed: (data) => {
+        const failure = Tag("CloseFailed", data);
         this.#usb = Tag("CloseFailed", { session, failure });
         this.#view.record(
           "Failure",

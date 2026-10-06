@@ -14,9 +14,9 @@ use crate::wire::DestinationHash;
 use prns_core::capabilities::power::PowerSnapshot;
 use prns_core::interfaces::InterfaceMode;
 use prns_core::remote_control::{
-    RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome, RemoteControlBuildVersion,
-    RemoteControlControllerIdentity, RemoteControlControllerInventory, RemoteControlControllerPage,
-    RemoteControlDescription, RemoteControlDiscoveryGroups,
+    RemoteControlAppMessage, RemoteControlApplyOutcome, RemoteControlAuthorizeControllerOutcome,
+    RemoteControlBuildVersion, RemoteControlControllerIdentity, RemoteControlControllerInventory,
+    RemoteControlControllerPage, RemoteControlDescription, RemoteControlDiscoveryGroups,
     RemoteControlDiscoveryGroupsInventoryOutcome, RemoteControlDiscoveryGroupsReplaceOutcome,
     RemoteControlDisplayAutoOff, RemoteControlDisplayVisibility, RemoteControlEspRadioMode,
     RemoteControlGnssPower, RemoteControlGroupOutcome, RemoteControlInterfaceConfigOutcome,
@@ -30,6 +30,7 @@ use prns_core::remote_control::{
 };
 
 use super::{PrnsNodeHandle, RemoteControlHandle};
+use crate::runtime::{RemoteControlInterfaceWatch, StreamId};
 
 pub struct RemoteControlTargetHandle<'a> {
     remote_control: RemoteControlHandle<'a>,
@@ -89,6 +90,15 @@ impl RemoteControlTargetConnectionTransport for PrnsNodeHandle {
 }
 
 impl RemoteControlTargetHandle<'_> {
+    pub async fn watch_interfaces(
+        &self,
+        stream_id: StreamId,
+    ) -> Result<(RemoteControlInterfaceWatch, RttMillis), super::RemoteControlWatchOpenError> {
+        self.connection
+            .admit(RemoteControlRequestKind::WatchInterfaces)?;
+        self.remote_control.watch_interfaces(stream_id).await
+    }
+
     remote_control_target_apply_method!(
         set_system_power,
         SetSystemPower,
@@ -112,6 +122,12 @@ impl RemoteControlTargetHandle<'_> {
         SetDisplayAutoOff,
         auto_off,
         RemoteControlDisplayAutoOff
+    );
+    remote_control_target_apply_method!(
+        set_node_name,
+        SetNodeName,
+        name,
+        prns_core::remote_control::RemoteControlNodeName
     );
     remote_control_target_apply_method!(
         set_esp_radio_mode,
@@ -158,6 +174,18 @@ impl RemoteControlTargetHandle<'_> {
             .map_err(Into::into)
     }
 
+    pub async fn app_message(
+        &self,
+        payload: RemoteControlAppMessage,
+    ) -> Result<(RemoteControlAppMessage, RttMillis), RemoteControlTargetOperationError> {
+        self.connection
+            .admit(crate::remote_control::RemoteControlRequestKind::AppMessage)?;
+        self.remote_control
+            .app_message(payload)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn describe(
         &self,
     ) -> Result<(RemoteControlDescription, RttMillis), RemoteControlTargetOperationError> {
@@ -173,6 +201,20 @@ impl RemoteControlTargetHandle<'_> {
             .admit(RemoteControlDescribeBuild::REQUEST.kind())?;
         self.remote_control
             .describe_build()
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn describe_node_name(
+        &self,
+    ) -> Result<
+        (prns_core::remote_control::RemoteControlNodeName, RttMillis),
+        RemoteControlTargetOperationError,
+    > {
+        self.connection
+            .admit(crate::runtime::RemoteControlDescribeNodeName::REQUEST.kind())?;
+        self.remote_control
+            .describe_node_name()
             .await
             .map_err(Into::into)
     }

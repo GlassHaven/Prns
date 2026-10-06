@@ -1,4 +1,5 @@
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
+use portable_atomic::AtomicU64;
+use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 use std::sync::Arc;
 use tokio::sync::watch;
 
@@ -297,6 +298,66 @@ impl RecordsFrameAccounting for TokioInterfaceStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_counters_cross_u32_boundary_without_lost_updates() {
+        let status = TokioInterfaceStatus::new_accounted(
+            InterfaceId::new([0x5A; 8]),
+            ConnectionState::Connected,
+        );
+        let start = u64::from(u32::MAX) - 10;
+        status.add_rx(start);
+        status.add_tx(start);
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                scope.spawn(|| {
+                    for _ in 0..1_000 {
+                        status.add_rx(1);
+                        status.add_tx(2);
+                    }
+                });
+            }
+        });
+        assert_eq!(
+            (status.rx_bytes(), status.tx_bytes()),
+            (start + 4_000, start + 8_000)
+        );
+    }
+
+    #[test]
+    fn concurrent_transfer_rate_reads_preserve_packed_pairs() {
+        let status = TokioInterfaceStatus::new_unaccounted(
+            InterfaceId::new([0x5A; 8]),
+            ConnectionState::Connected,
+        );
+        let first = TransferRates {
+            rx_bps: 0xaaaa_aaaa,
+            tx_bps: 0x5555_5555,
+        };
+        let second = TransferRates {
+            rx_bps: 0x5555_5555,
+            tx_bps: 0xaaaa_aaaa,
+        };
+        status.set_transfer_rates(first);
+        let barrier = std::sync::Barrier::new(3);
+        std::thread::scope(|scope| {
+            for rates in [first, second] {
+                let status = &status;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+                    for _ in 0..10_000 {
+                        status.set_transfer_rates(rates);
+                    }
+                });
+            }
+            barrier.wait();
+            for _ in 0..10_000 {
+                let rates = status.transfer_rates();
+                assert!(rates == Some(first) || rates == Some(second));
+            }
+        });
+    }
 
     #[test]
     fn status_instance_identity_survives_cloning_but_not_reconstruction() {

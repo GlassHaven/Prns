@@ -11,13 +11,14 @@ mod request_response;
 mod resource_admission;
 mod resource_transfer;
 
+use portable_atomic::AtomicU64;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -56,7 +57,9 @@ use super::remote_control_target_accesses::{
 };
 use super::request_endpoints::RespondToken;
 use super::{InterfaceStore, SendError};
-pub use byte_stream::{ByteStreamReader, ByteStreamWriter, StreamId};
+pub use byte_stream::{
+    ByteStreamReader, ByteStreamWriter, StreamId, StreamReaderRegistrationError,
+};
 pub use interface_lifecycle::{
     AttachIntent, Attachable, AttachedInterface, AttachedSupervisor, DetachedFleet, Fleet,
     InterfaceArbitration, InterfaceAttachmentMetadata, InterfaceEventSource, InterfaceSupervisor,
@@ -69,14 +72,18 @@ pub use node_lifecycle::{
 pub use persistence::{
     boot_timeline_origin, wall_clock_timeline_origin, DefaultLocationError,
     DestinationIdentitySeedReport, FlushError, FlushFailurePolicy, FlushMark, FlushReport,
-    NodePersistence, PersistenceEvent, PersistenceFlushStatus, PersistenceIntent,
+    NodePersistence, PersistenceEvent, PersistenceFlushStatus, PersistenceIntent, PersistenceIo,
+    PersistenceIoCompletion, PersistenceIoError, PersistenceIoOperation, PersistenceIoTask,
     PersistenceRestoreReport, PersistenceTrigger, PersistenceWorker, PrepareFlushError,
     PreparedFlush, RatchetSeedReport, RegionFlush, RemoteControlAuthorizationPersistence,
     RemoteControlAuthorizationSeedReport, RouteSeedProgress, RouteSeedReport, SaveOnLearn,
     SaveOnLearnWiring, TunnelSeedReport,
 };
 pub(crate) use persistence::{AuthorizationOwnerError, AuthorizationTransaction};
-pub use remote_control::{RemoteControlHandle, RemoteControlTargetHandle};
+pub use remote_control::{
+    RemoteControlHandle, RemoteControlInterfaceWatch, RemoteControlTargetHandle,
+    RemoteControlWatchOpenError, RemoteControlWatchReadError,
+};
 pub use request_response::{RequestOptions, ResponseSendError};
 pub use resource_admission::{ResourceAdmissionPeer, ResourceOfferAdmission, ResourceOfferMonitor};
 pub use resource_transfer::{

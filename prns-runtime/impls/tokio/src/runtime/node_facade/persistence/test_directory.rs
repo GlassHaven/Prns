@@ -1,5 +1,6 @@
+use portable_atomic::AtomicU64;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
 pub(crate) struct TestDirectory(PathBuf);
 

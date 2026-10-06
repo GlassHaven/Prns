@@ -25,6 +25,15 @@ The [queued-owner campaign](measurements/queued-persistence-cuts.md) adds torn
 append and compaction recovery through real admission and completion handling.
 The [grant-storage campaign](measurements/grant-persistence-cuts.md) checks whole
 authorization-table recovery across interrupted permission changes and revocation.
+The [asynchronous core qualification](measurements/core-work-qualification.md)
+adds controlled crypto completion, overlapping three-node traffic, public-outcome
+attribution, replay/reduction and isolated resource stability checks.
+The [Remote Control campaign](measurements/remote-control.md) runs real Tokio
+nodes with fixed entropy and manual time through authenticated inspection, app
+messages, concurrent authorization boundaries and bounded interface watches.
+The [HaLoW qualification](measurements/halow-qualification.md) runs the native
+supervisor through source-MAC datagrams, broadcast echoes, forced relay paths,
+delivery faults, peer pressure, adapter replacement and concurrent Remote Control.
 
 The medium intentionally makes its limits and faults explicit:
 

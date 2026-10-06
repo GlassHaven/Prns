@@ -180,11 +180,7 @@ impl<S: StorageLayout> EngineState<S> {
                     if !eligible {
                         continue;
                     }
-                    match descriptor
-                        .id
-                        .kind()
-                        .and_then(InterfaceKind::supervisor_kind)
-                    {
+                    match descriptor.id.kind().and_then(InterfaceKind::fanout_kind) {
                         Some(supervisor) => {
                             let bit = 1u128 << (supervisor as u8);
                             if fleets_emitted & bit == 0 {

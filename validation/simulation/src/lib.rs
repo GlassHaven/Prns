@@ -15,6 +15,7 @@ mod topology;
 mod trace;
 
 pub mod ble;
+pub mod halow;
 
 pub use config::{CapacityField, VirtualMediumConfig, VirtualMediumConfigError};
 pub use fault::{
