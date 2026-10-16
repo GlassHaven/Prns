@@ -81,6 +81,7 @@ jobs:
       - run: ./tools/prns run repo.host-contract.check
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: 1.96.0
           components: clippy,rustfmt
       - run: cargo fmt --manifest-path prns-host/abi/c/Cargo.toml -- --check
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
@@ -115,6 +116,7 @@ jobs:
           submodules: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: 1.96.0
           components: clippy
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
@@ -169,6 +171,7 @@ jobs:
           submodules: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: 1.96.0
           targets: ${{ matrix.settings.target }}
       - uses: ./.github/actions/reproducible-rust
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
@@ -323,6 +326,7 @@ jobs:
           submodules: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: 1.96.0
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
@@ -456,6 +460,7 @@ jobs:
           bun-version: 1.3.14
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: 1.96.0
           targets: wasm32-unknown-unknown
       - uses: ./.github/actions/reproducible-rust
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
@@ -545,6 +550,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: 1.96.0
           targets: wasm32-unknown-unknown
       - uses: ./.github/actions/reproducible-rust
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
