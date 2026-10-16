@@ -829,7 +829,7 @@ expires = "2099-01-01"
 
     def test_nightly_toolchain_is_exact_and_resolves_every_suite_command(self) -> None:
         nightly = runner.named_toolchain(self.manifest, "nightly")
-        self.assertEqual(nightly, "nightly-2025-11-21")
+        self.assertEqual(nightly, "nightly-2026-06-02")
         parser = runner.build_parser()
         arguments = parser.parse_args(["toolchain", "nightly"])
         self.assertEqual(arguments.name, "nightly")

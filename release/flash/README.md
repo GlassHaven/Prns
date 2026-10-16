@@ -98,7 +98,7 @@ Before signing any candidate:
 - review the exact default-branch workflow revisions. Do not dispatch a signing workflow from a
   feature branch.
 - require the stable **Release critical** CI check in default-branch protection. It includes the
-  Rust 1.90 MSRV, Rust/CLI contracts, fake serial tests, Chromium/axe browser tests, production
+  Rust 1.96 MSRV, Rust/CLI contracts, fake serial tests, Chromium/axe browser tests, production
   fixture exclusion, release-script tests, and dependency/notices gates.
 
 These are operator-controlled GitHub settings. Repository workflows fail closed when the public

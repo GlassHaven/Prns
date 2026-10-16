@@ -448,12 +448,12 @@ jobs:
 
   msrv:
     # The declared MSRV (workspace `rust-version`) must actually build. Pinned to the
-    # declared workspace floor (1.90); catches a feature or a dependency bump that
+    # declared workspace floor (1.96); catches a feature or a dependency bump that
     # quietly requires a newer compiler than we advertise.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      RUSTUP_TOOLCHAIN: 1.90.0
+      RUSTUP_TOOLCHAIN: 1.96.0
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -462,7 +462,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
-          toolchain: 1.90.0
+          toolchain: 1.96.0
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
           key: standalone-workspaces-v2
@@ -473,9 +473,9 @@ jobs:
             prnsd
       - name: Prove and check the advertised MSRV
         run: |
-          rustc --version | grep -E '^rustc 1\.90\.0 '
+          rustc --version | grep -E '^rustc 1\.96\.0 '
           cargo check --workspace --locked
-      # The root-excluded workspaces declare the same 1.90 floor; hold them to it too.
+      # The root-excluded workspaces declare the same 1.96 floor; hold them to it too.
       - run: cargo check --locked
         working-directory: prns-config
       - run: cargo check --locked

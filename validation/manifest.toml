@@ -10,7 +10,7 @@ cargo_mutants = "27.1.0"
 kani = "0.67.0"
 
 [toolchains]
-nightly = "nightly-2025-11-21"
+nightly = "nightly-2026-06-02"
 
 [interpreters.smoke]
 environment = "SMOKE_PYTHON"
