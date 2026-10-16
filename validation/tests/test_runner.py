@@ -602,13 +602,13 @@ expires = "yesterday"
         baseline.pop("release_qualification")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for version in ("0.3.8", "0.3.8-hotfix.1", "0.3.9", "1.0.0"):
+            for version in ("0.3.8", "0.3.8-hotfix.1", "0.3.8-hotfix.2", "0.3.9", "1.0.0"):
                 (root / "VERSION").write_text(version + "\n")
                 with self.subTest(version=version), mock.patch.object(runner, "ROOT", root):
                     for tier in ("pr", "release", "scheduled", None):
                         before = runner.selected_suites(baseline, [], None, tier)
                         expected = [suite for suite in before if not (
-                            version == "0.3.8" and tier == "release" and suite["domain"] == "kani"
+                            version in {"0.3.8", "0.3.8-hotfix.1"} and tier == "release" and suite["domain"] == "kani"
                         )]
                         actual = runner.selected_suites(self.manifest, [], None, tier)
                         self.assertEqual([suite["id"] for suite in actual], [suite["id"] for suite in expected])
@@ -618,7 +618,10 @@ expires = "yesterday"
                         )
                     proof = "kani-" + self.manifest["kani"][0]["name"]
                     self.assertEqual(len(runner.selected_suites(self.manifest, [proof], None, None)), 1)
-                    self.assertEqual(bool(runner.active_release_deferrals(self.manifest)), version == "0.3.8")
+                    deferrals = runner.active_release_deferrals(self.manifest)
+                    self.assertEqual(bool(deferrals), version in {"0.3.8", "0.3.8-hotfix.1"})
+                    if deferrals:
+                        self.assertEqual(deferrals[0]["version"], version)
         self.assertEqual(self.manifest["kani"], baseline["kani"])
 
     def test_kani_deferral_rejects_invalid_or_missing_policy_inputs(self) -> None:
