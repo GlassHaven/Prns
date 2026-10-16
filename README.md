@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/KenAKAFrosty/Prns/actions/workflows/ci.yml/badge.svg)](https://github.com/KenAKAFrosty/Prns/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![MSRV](https://img.shields.io/badge/MSRV-1.90-orange.svg)](#minimum-supported-rust-version)
+[![MSRV](https://img.shields.io/badge/MSRV-1.96-orange.svg)](#minimum-supported-rust-version)
 ![no_std](https://img.shields.io/badge/no__std-core-success.svg)
 
 ## What *is* Prns?
@@ -167,7 +167,7 @@ Among what you gain: brand-new interfaces, a built-in operator CLI, observabilit
 
 ## Minimum supported Rust version
 
-The workspace's declared and CI-tested MSRV is Rust **1.90**. Development builds use the stable channel configured in [rust-toolchain.toml](rust-toolchain.toml).
+Host builds require Rust **1.96**, matching the release compiler pinned in [rust-toolchain.toml](rust-toolchain.toml). CI checks that exact version. ESP firmware uses the separately pinned Espressif Rust **1.95.0.0** fork; crates shared with that firmware declare Rust 1.95 compatibility and are checked by the real-target firmware matrix.
 
 ## Contributing
 

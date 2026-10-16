@@ -56,7 +56,7 @@ and the README, migration guide, and NomadNet copy whenever those pointers chang
 cargo benchmark --smoke
 ```
 
-The doctor checks Rust 1.90+, Python 3.11+, `uv`, and the platform C compiler
+The doctor checks Rust 1.96+, Python 3.11+, `uv`, and the platform C compiler
 (on Windows that is MSVC's `cl`, from the Visual Studio Build Tools C++
 workload; run the doctor as `.\tools\prns.cmd doctor benchmarks`).
 It reports setup guidance and installs nothing. The smoke run exercises

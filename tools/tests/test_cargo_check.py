@@ -152,9 +152,9 @@ tiers = ["release"]
         )[0]
         toolchain = (ROOT / "rust-toolchain.toml").read_text(encoding="utf-8")
 
-        self.assertIn('channel = "stable"', toolchain)
+        self.assertIn('channel = "1.96.0"', toolchain)
         self.assertIn("components: llvm-tools-preview", esp_job)
-        self.assertNotIn("toolchain: 1.96.0", esp_job)
+        self.assertIn("toolchain: 1.96.0", esp_job)
 
 
 if __name__ == "__main__":

@@ -97,6 +97,7 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
+    "https://github.com/esp-rs/espflash",
     "https://github.com/embassy-rs/bt-hci",
     "https://github.com/embassy-rs/nrf-softdevice",
 ]

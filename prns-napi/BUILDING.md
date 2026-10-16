@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Rust via [rustup](https://rustup.rs) (stable; the repo floor is 1.90)
+- Rust via [rustup](https://rustup.rs) (stable; the repo floor is 1.96)
 - Node.js >= 20 with npm
 - macOS only: Xcode Command Line Tools (`xcode-select --install`)
 

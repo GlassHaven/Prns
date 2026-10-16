@@ -25,6 +25,10 @@ dependencies, and checks advisories, licenses, sources, and bans with cargo-deny
 
 ## Resolved release blockers
 
+- RUSTSEC-2026-0346 through RUSTSEC-2026-0349 are resolved by `rustls 0.23.46` across every affected locked workspace.
+- RUSTSEC-2026-0344 is resolved by the exact upstream `espflash` revision `9fa642b22af64e8a80bb5982524a95eb7e861732` ([esp-rs/espflash#1090](https://github.com/esp-rs/espflash/pull/1090)). It removes unused object compression support and the vulnerable `ruzstd` dependency. The shared pin lives in the root Cargo manifest; published `espflash 4.6.0` predates the fix. Replace the Git pin when an upstream registry release includes this change.
+- GHSA-pqg4-j6r4-53mv is resolved by `shell-quote 1.12.0` in the JavaScript development graph.
+- Host manifests, contributor checks, and MSRV CI require Rust 1.96, matching the release compiler. Shared ESP crates retain an explicit Rust 1.95 floor for the qualified Espressif fork; firmware CI checks that exception. The Miri lane uses the exact `nightly-2026-06-02` toolchain so its compiler supports the updated manifests.
 - RUSTSEC-2026-0204 is resolved by `crossbeam-epoch 0.9.20`.
 - RUSTSEC-2026-0194 and RUSTSEC-2026-0195 are resolved by `plist 1.10.0` and `quick-xml 0.41.0`.
 - `serialport` and `tokio-serial` were removed from the engine/application graphs. The macOS and

@@ -13,7 +13,7 @@ description = "Interactive flashing helper for Personal Hopspot boards."
 clap = { version = "4.5", features = ["derive"] }
 ctrlc = "3.5"
 dialoguer = "0.11"
-espflash = { version = "=4.5.0", default-features = false, features = ["serialport"] }
+espflash = { workspace = true, features = ["serialport"] }
 nusb = "=0.2.4"
 personal-hopspot-builder = { path = "../builder" }
 prns-flash-manifest = { path = "../../prns-flash-manifest" }
