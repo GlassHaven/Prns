@@ -197,7 +197,7 @@ class TaskRegistryTests(unittest.TestCase):
             },
         )
         self.assertEqual(profiles["docs"]["exact_versions"]["dx"], "0.7.5")
-        self.assertEqual(profiles["rust"]["minimum_versions"]["rustc"], "1.90")
+        self.assertEqual(profiles["rust"]["minimum_versions"]["rustc"], "1.96")
         self.assertEqual(
             profiles["embedded-assurance"]["probe"],
             ["python", "-m", "validation.hardening.embedded_readiness.run"],

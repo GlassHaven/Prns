@@ -500,7 +500,7 @@ def validate() -> list[str]:
             )
 
     manifest = (ROOT / "validation" / "manifest.toml").read_text(encoding="utf-8")
-    if 'nightly = "nightly-2025-11-21"' not in manifest:
+    if 'nightly = "nightly-2026-06-02"' not in manifest:
         errors.append("validation/manifest.toml does not own the exact nightly pin")
     for workflow_name in (
         "hardening.yml",
@@ -553,8 +553,8 @@ def validate() -> list[str]:
     ):
         if field not in esp_verifier:
             errors.append(f"ESP toolchain verifier does not check {field}")
-    if "RUSTUP_TOOLCHAIN: 1.90.0" not in ci or "toolchain: 1.90.0" not in ci:
-        errors.append("ci.yml does not explicitly force and install the Rust 1.90.0 MSRV")
+    if "RUSTUP_TOOLCHAIN: 1.96.0" not in ci or "toolchain: 1.96.0" not in ci:
+        errors.append("ci.yml does not explicitly force and install the Rust 1.96.0 MSRV")
     for product_matrix_gate in (
         "validation/hygiene/embedded_assurance_selection.py",
         "run --suite embedded-builds",
