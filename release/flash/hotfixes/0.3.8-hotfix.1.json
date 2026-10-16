@@ -1,0 +1,18 @@
+{
+  "changed_boards": [
+    "heltec-v3"
+  ],
+  "qualification": {
+    "mode": "automated"
+  },
+  "release": {
+    "base_manifest_sha256": "42b67b94b263fc5b3a66af2bcfba7d83d222928efe6d3109c086807a26643cef",
+    "base_release_record_sha256": "93055dae19067f1e2e73b6f134a6c7fa4ca6c741af999b1f163297b28e448b37",
+    "base_signed_candidate_sha256": "c5ec687efeaa8c52db165991fa76a4c0537bb1358ababc1ea92c73c08677d2fa",
+    "base_source_commit": "f4d5dcb8ffaaa0b87e96974c4cd8676b11c7a82a",
+    "base_version": "0.3.8",
+    "version": "0.3.8-hotfix.1"
+  },
+  "schema": 1,
+  "summary": "Restore Heltec WiFi LoRa 32 V3 boot on its 8 MiB flash, no-PSRAM hardware by selecting the SRAM-only runtime with V3 pins, OLED, button, battery sensing, and LoRa front-end; retain all other boards from the signed 0.3.8 release."
+}

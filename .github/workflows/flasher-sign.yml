@@ -211,11 +211,12 @@ jobs:
         id: prerelease
         env:
           CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PRNS_RELEASE_PUBLISH_TOKEN }}
           SIGNED_BUNDLE: ${{ steps.signed.outputs.bundle }}
           SIGNED_BUNDLE_SHA256: ${{ steps.signed.outputs.sha256 }}
           SOURCE_COMMIT: ${{ steps.candidate.outputs.source_commit }}
         run: |
+          test "$(gh api user --jq .login)" = "$GITHUB_REPOSITORY_OWNER"
           version="$CANDIDATE_VERSION"
           tag="v${version}"
           title="Prns ${version} release candidate"

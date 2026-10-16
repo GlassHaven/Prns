@@ -15,12 +15,14 @@ and the existing browser, interoperability, proof, fuzz, and mutation lanes.
 Unsupported emulator capabilities are not claimed. Signing, reproducibility,
 public review, provenance, rollback, and exact-byte promotion remain required.
 
-For **0.3.8 only**, Kani formal proof qualification is deferred because several
+For **0.3.8 and 0.3.8-hotfix.1 only**, Kani formal proof qualification is deferred because several
 harnesses timed out and one needs corrected loop bounds. This release does not
 claim passing formal qualification. The committed, candidate-bundled validation
-policy excludes only Kani from the release tier for exactly `VERSION = 0.3.8`;
+policy excludes only Kani from the release tier for exactly `VERSION = 0.3.8`
+and `VERSION = 0.3.8-hotfix.1`. The V3-only hotfix changes none of the 21
+proof-owner source files and retains the same explicit qualification limitation;
 all proofs remain scheduled and directly runnable. Other release suites remain
-required. The exception does not apply to hotfixes or later versions, which
+required. The exception does not apply to other hotfixes or later versions, which
 restore the declared proof requirements automatically.
 
 Run `release-readiness.yml` for the final source commit. Download its

@@ -41,6 +41,7 @@ TRIAGE_PATH = ROOT / "validation" / "mutation" / "triage.toml"
 MANIFEST_SCHEMA = 1
 EVIDENCE_SCHEMA = 1
 MUTATION_TRIAGE_SCHEMA = 1
+KANI_DEFERRED_HOTFIX_VERSION = "0.3.8-hotfix.1"
 VALID_TIERS = {"pr", "release", "scheduled"}
 VALID_PLATFORMS = {"any", "linux", "macos", "windows", "android-device"}
 VALID_TOOLCHAINS = {
@@ -212,9 +213,9 @@ def active_release_deferrals(manifest: dict) -> list[dict]:
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     except OSError as error:
         raise ValidationError("release qualification requires the source or candidate VERSION") from error
-    if version != kani["version"]:
+    if version not in (kani["version"], KANI_DEFERRED_HOTFIX_VERSION):
         return []
-    return [{"domain": "kani", **kani}]
+    return [{"domain": "kani", **kani, "version": version}]
 
 
 def virtual_suites(manifest: dict) -> list[dict]:

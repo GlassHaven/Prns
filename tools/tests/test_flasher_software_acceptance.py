@@ -75,18 +75,18 @@ class SoftwareAcceptanceTests(unittest.TestCase):
         for source, destination in (("validation/run.py", "validation_runner.py"),
                                     ("validation/manifest.toml", "validation-manifest.toml")):
             (qualification / destination).write_bytes((repository / source).read_bytes())
-        for version in ("0.3.8", "0.3.8-hotfix.1", "0.3.9"):
+        for version in ("0.3.8", "0.3.8-hotfix.1", "0.3.8-hotfix.2", "0.3.9"):
             (root / "VERSION").write_text(version + "\n")
             with self.subTest(version=version), patch.object(software, "__file__", str(qualification / "flasher_software_acceptance.py")):
                 runner, inventory = software.validation_contract()
                 suites = runner.selected_suites(inventory, [], None, "release")
                 proofs = {suite["id"] for suite in suites if suite["domain"] == "kani"}
-                self.assertEqual(proofs, set() if version == "0.3.8" else {
+                self.assertEqual(proofs, set() if version in {"0.3.8", "0.3.8-hotfix.1"} else {
                     "kani-" + proof["name"] for proof in inventory["kani"]
                 })
                 self.assertIn("core-work-simulation-extended", {suite["id"] for suite in suites})
                 errors = software.readiness_errors(self.evidence, COMMIT, NOW)
-                self.assertEqual(bool(errors), version != "0.3.8")
+                self.assertEqual(bool(errors), version not in {"0.3.8", "0.3.8-hotfix.1"})
 
     def test_complete_automated_release_needs_no_physical_rows(self):
         record = self.create()

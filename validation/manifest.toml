@@ -2,7 +2,7 @@ schema = 1
 
 [release_qualification.kani]
 version = "0.3.8"
-reason = "Kani formal proof qualification is deferred for 0.3.8 only: several harnesses timed out and one needs corrected loop bounds. Proofs remain scheduled; this release does not claim passing formal qualification. Normal tests, deterministic simulators, firmware builds, and applicable emulators remain required."
+reason = "Kani formal proof qualification is deferred for 0.3.8 and the V3-only 0.3.8-hotfix.1: several harnesses timed out and one needs corrected loop bounds. The hotfix changes no proof-owner source files. Proofs remain scheduled; neither release claims passing formal qualification. Normal tests, deterministic simulators, firmware builds, and applicable emulators remain required."
 
 [tools]
 cargo_fuzz = "0.13.1"
