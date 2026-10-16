@@ -1,0 +1,101 @@
+name: publish signed website to Cloudflare
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact promoted stable flasher version
+        required: true
+        type: string
+      release_record_sha256:
+        description: SHA-256 of the signed flasher release record
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prns-site-preview
+  cancel-in-progress: false
+
+env:
+  RELEASE_VERSION: ${{ inputs.version }}
+  RELEASE_RECORD_SHA256: ${{ inputs.release_record_sha256 }}
+  WRANGLER_VERSION: 4.118.0
+  CLOUDFLARE_PAGES_PROJECT: prns-site-preview
+
+jobs:
+  deploy:
+    name: Deploy the exact promoted website to prns.dev
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.18.0"
+      - name: Download the exact promoted stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')"
+          test "$GITHUB_REF" = "refs/heads/${default_branch}"
+          [[ "$RELEASE_VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]*$ ]]
+          test "${RELEASE_VERSION,,}" != next
+          [[ "$RELEASE_RECORD_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          mkdir -p target/cloudflare-release
+          gh release view "v${RELEASE_VERSION}" --json isDraft,isPrerelease,tagName \
+            > target/cloudflare-release/release.json
+          jq -e --arg tag "v${RELEASE_VERSION}" \
+            '.isDraft == false and .isPrerelease == false and .tagName == $tag' \
+            target/cloudflare-release/release.json
+          gh release download "v${RELEASE_VERSION}" --dir target/cloudflare-release \
+            --pattern "flasher-release-record-v${RELEASE_VERSION}.json" \
+            --pattern "flasher-release-record-v${RELEASE_VERSION}.json.minisig" \
+            --pattern "prns-flasher-candidate-v${RELEASE_VERSION}-signed.tar.gz"
+      - name: Verify signed custody and stage the complete website
+        run: |
+          ./tools/prns release toolchain minisign install -- "${RUNNER_TEMP}/prns-release-bin"
+          record="target/cloudflare-release/flasher-release-record-v${RELEASE_VERSION}.json"
+          bundle="target/cloudflare-release/prns-flasher-candidate-v${RELEASE_VERSION}-signed.tar.gz"
+          test "$(sha256sum "$record" | awk '{print $1}')" = "$RELEASE_RECORD_SHA256"
+          "${RUNNER_TEMP}/prns-release-bin/minisign" -Vm "$record" \
+            -x "$record.minisig" -p release/keys/minisign.pub
+          test "$(jq -r '.candidate.archive.name' "$record")" = "$(basename "$bundle")"
+          test "$(sha256sum "$bundle" | awk '{print $1}')" = \
+            "$(jq -r '.candidate.archive.sha256' "$record")"
+          ./tools/prns release candidate extract -- "$bundle" target/cloudflare-candidate
+          ./tools/prns release rollback -- stage \
+            --candidate target/cloudflare-candidate \
+            --release-record "$record" \
+            --release-record-sha256 "$RELEASE_RECORD_SHA256" \
+            --version "$RELEASE_VERSION" \
+            --output target/cloudflare-website \
+            --identity-output target/cloudflare-stage.json
+          for asset in stable.json stable.json.minisig; do
+            curl --fail --location --retry 5 --retry-all-errors \
+              --header 'Cache-Control: no-cache' \
+              --output "target/cloudflare-release/$asset" \
+              "https://reticulum.rs/releases/channels/$asset?cloudflare=${GITHUB_RUN_ID}"
+            cmp "target/cloudflare-release/$asset" \
+              "target/cloudflare-website/releases/channels/$asset"
+          done
+      - name: Deploy the signed website using the existing Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          record="target/cloudflare-release/flasher-release-record-v${RELEASE_VERSION}.json"
+          npx --yes "wrangler@${WRANGLER_VERSION}" pages deploy target/cloudflare-website \
+            --project-name "$CLOUDFLARE_PAGES_PROJECT" \
+            --branch main \
+            --commit-hash "$(jq -r '.release.source_commit' "$record")" \
+            --commit-dirty=false
+      - name: Verify the complete deployed website
+        run: |
+          ./tools/prns release rollback -- verify-live-website \
+            --stage-identity target/cloudflare-stage.json \
+            --site-url https://prns.dev
